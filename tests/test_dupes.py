@@ -14,9 +14,14 @@ def test_duplicate_block_found_across_files(make_repo):
     ]
 
 
+def test_blocks_under_twelve_lines_are_ignored(make_repo):
+    short = "\n".join(BODY.split("\n")[:11])
+    assert find(make_repo({"a.py": short, "b.py": short}))["blocks"] == []
+
+
 def test_import_only_and_bracket_only_blocks_ignored(make_repo):
-    imports = "\n".join(f"import mod{i}" for i in range(10))
-    brackets = "\n".join("}" for _ in range(10))
+    imports = "\n".join(f"import mod{i}" for i in range(12))
+    brackets = "\n".join("}" for _ in range(12))
     assert (
         find(make_repo({"a.py": imports, "b.py": imports, "c.js": brackets, "d.js": brackets}))[
             "blocks"
@@ -35,11 +40,11 @@ def test_block_does_not_overlap_itself(make_repo):
 
 
 def test_c_preprocessor_lines_are_not_comments(make_repo):
-    defines = "\n".join(f"#define LIMIT_{i} ({i} * 4)" for i in range(10))
+    defines = "\n".join(f"#define LIMIT_{i} ({i} * 4)" for i in range(12))
     blocks = find(make_repo({"a.c": defines, "b.c": defines}))["blocks"]
-    assert [b["lines"] for b in blocks] == [10]
+    assert [b["lines"] for b in blocks] == [12]
 
 
 def test_c_include_lines_are_noise(make_repo):
-    includes = "\n".join(f"#include <lib{i}.h>" for i in range(10))
+    includes = "\n".join(f"#include <lib{i}.h>" for i in range(12))
     assert find(make_repo({"a.c": includes, "b.c": includes}))["blocks"] == []

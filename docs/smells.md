@@ -4,8 +4,12 @@ foreman reports two families. Diagram smells are judged by the agent for one cha
 must carry evidence. Audit smells are computed by `python3 scripts/run.py map` from the
 import graph, git history, file sizes and duplicate scan. Audit thresholds are relative to
 the repo's own spread (percentiles) with a fixed floor, so a small repo isn't flagged for
-being small. Each audit kind lists at most 20 smells, ranked by severity then size; `map` reports how many
-more each kind had under `dropped`, and `counts` gives every smell by kind and severity.
+being small. Each audit kind except `cycle` and `layering` lists at most 20 smells, ranked by
+severity then size; `map` reports how many more each kind had under `dropped`, and `counts`
+gives every smell by kind and severity. Test files (the paths `cochange` treats as tests,
+below) are never `hub`, `hotspot`, `oversize` or `duplicate` smells and don't count as hub
+neighbours. Files with a config, data or infra extension (`.tf`, `.tfvars`, `.yml`, `.json`
+and the like) are never in any smell, even when a `[graph.*]` rule covers them.
 
 ## Diagram smells
 
@@ -32,8 +36,10 @@ test, load or change alone.
 importing `src/db/**`), unless its target matches the pair's `except` globs. Always
 `high`: it breaks a boundary the team chose.
 
-**hub** — a module whose neighbours (importers plus imports) number at least
-`max(hub_floor = 8, repo p95)`. `medium`, or `low` for an entry point (see deadcode). Tests,
+**hub** — a module that imports at least `max(hub_fanout_floor = 5, repo p95)` others and
+whose neighbours (importers plus imports) number at least `max(hub_floor = 8, repo p95)`,
+counting non-test modules only. A module many import that depends on little (a stable
+definitions module) is never a hub. `medium`, or `low` for an entry point (see deadcode).
 `conftest.py` and a package `__init__.py` that only re-exports (imports, `__all__`) are never
 hubs. A change to a hub reaches everything around it, so it is the riskiest place to edit.
 
@@ -43,7 +49,10 @@ least `cochange_min_conf = 0.6`; `medium` from `cochange_medium_conf = 0.8`, els
 test and the file it tests (`tests/…/test_x.py`, `x_test.go`, `x.test.ts`, `x.spec.ts`,
 `__tests__/x.ts` against `x.<ext>` anywhere) are ignored, and so are two tests. Only source
 files take part: config and infra files (`.yml`, `.tf`) don't. A Python import through a
-package that re-exports a name counts as importing the submodule it comes from.
+package that re-exports a name counts as importing the submodule it comes from. A commit
+touching more files than the larger of `bulk_commit_min_files = 10` and
+`bulk_commit_share = 0.2` of the repo's source files (a format or rename sweep) counts for
+neither `cochange` nor `hotspot`.
 
 **hotspot** — a large file that changes often. Changed in at least
 `max(hotspot_min_churn = 5, repo p90)` commits and at least the repo's p75 in lines. Always
@@ -54,13 +63,19 @@ the repo p95 and be at least `oversize_file_median_ratio = 3` times the median a
 `oversize_file_floor = 300` lines. A function must exceed the repo p95 and be at least
 `oversize_function_floor = 60` lines (function sizes are measured for Python only).
 
-**duplicate** — near-identical blocks in different places. `medium` when a block is at least
-`duplicate_medium_lines = 20` lines or repeated in at least `duplicate_medium_locations = 3`
-places, else `low`. Duplicates get fixed in one copy and not the others.
+**duplicate** — near-identical blocks of at least `duplicate_min_lines = 12` lines (blank and
+comment lines don't count) in different places. All blocks shared by the same files are one
+smell, sized by their total lines. `medium` when that total is at least
+`duplicate_medium_lines = 20` lines or a block is repeated in at least
+`duplicate_medium_locations = 3` places, else `low`. Duplicates get fixed in one copy and not
+the others.
 
 **deadcode** — a module nothing imports that isn't a test, a known entry point (manifest
 scripts, `main`, `cli`, a shebang, an `if __name__ == "__main__"` block, `package main`), a
-file a framework loads by path (migrations, `[audit] entry_points`) or a config file. Always `low`, and only a candidate: dynamic loading can hide its users.
+file a framework loads by path (migrations, `[audit] entry_points`) or a config file, and
+whose name (`widget.js` or `widget`) appears in no other tracked file: a template's
+`<script src>`, a config, a manifest or a doc that names it counts as a user. Always `low`,
+and only a candidate: dynamic loading can hide its users.
 
 ## Known limits
 

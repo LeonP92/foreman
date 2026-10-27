@@ -1,3 +1,4 @@
+import posixpath
 import shutil
 import subprocess
 from collections import Counter
@@ -5,10 +6,10 @@ from collections.abc import Sequence
 from itertools import combinations
 from pathlib import Path
 
-from .files import is_ignored
+from .files import NON_SOURCE_EXTENSIONS, is_ignored, list_files
+from .smells import THRESHOLDS
 
 HISTORY_COMMITS = 500
-BULK_COMMIT_FILES = 30
 
 
 def _empty(note: str) -> dict:
@@ -54,10 +55,18 @@ def analyse(root: Path, ignore: Sequence[str] = ()) -> dict:
     commits, note = _commits(root)
     if not commits:
         return _empty(note or "no commits")
+    sources = sum(
+        1
+        for p in list_files(root, ignore)
+        if posixpath.splitext(p)[1] not in ("", *NON_SOURCE_EXTENSIONS)
+    )
+    # a sweep (format, rename, licence header) touches a big share of the repo and says nothing
+    # about coupling
+    bulk = max(THRESHOLDS["bulk_commit_min_files"], THRESHOLDS["bulk_commit_share"] * sources)
     churn: Counter[str] = Counter()
     both: Counter[tuple[str, str]] = Counter()
     for _, paths in commits:
-        if len(paths) > BULK_COMMIT_FILES:
+        if len(paths) > bulk:
             continue
         kept = sorted({p for p in paths if not is_ignored(p, ignore)})
         churn.update(kept)

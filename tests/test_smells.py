@@ -16,6 +16,7 @@ def _detect(
     layers=(),
     entry_points=(),
     facades=(),
+    mentioned=(),
 ):
     ids = sorted({*nodes, *(n for e in edges for n in e), *(n for c in cycles for n in c)})
     graph = {
@@ -40,6 +41,7 @@ def _detect(
         list(layers),
         frozenset(entry_points),
         frozenset(facades),
+        frozenset(mentioned),
     )
 
 
@@ -78,7 +80,7 @@ def test_layering_skips_targets_the_rule_excepts():
 def test_hub_at_floor_and_just_under():
     found = _kinds(_detect(edges=[("h.py", f"n{i}.py") for i in range(8)]), "hub")
     assert [s["nodes"] for s in found] == [["h.py"]]
-    assert found[0]["evidence"] == "8 neighbours; repo p95 is 8, floor 8"
+    assert found[0]["evidence"] == "imports 8 modules (threshold 8); 8 neighbours (threshold 8)"
     assert _kinds(_detect(edges=[("h.py", f"n{i}.py") for i in range(7)]), "hub") == []
 
 
@@ -140,28 +142,59 @@ def _block(lines, *paths):
     return {"lines": lines, "locations": [{"path": p, "start": 1, "end": lines} for p in paths]}
 
 
+def _block_nodes(blocks):
+    return sorted({loc["path"] for b in blocks for loc in b["locations"]})
+
+
 def test_duplicate_severity_and_order():
     blocks = [
         _block(19, "a.py", "b.py"),
-        _block(8, "a.py", "b.py", "c.py"),
-        _block(20, "a.py", "b.py"),
+        _block(12, "a.py", "b.py", "c.py"),
+        _block(19, "d.py", "e.py"),
+        _block(20, "f.py", "g.py"),
     ]
-    found = _kinds(_detect(["a.py", "b.py", "c.py"], blocks=blocks), "duplicate")
-    assert [(s["severity"], len(s["nodes"])) for s in found] == [
-        ("medium", 2),
-        ("medium", 3),
-        ("low", 2),
+    found = _kinds(_detect(_block_nodes(blocks), blocks=blocks), "duplicate")
+    assert [(s["severity"], s["nodes"]) for s in found] == [
+        ("medium", ["f.py", "g.py"]),
+        ("medium", ["a.py", "b.py", "c.py"]),
+        ("low", ["a.py", "b.py"]),
+        ("low", ["d.py", "e.py"]),
     ]
 
 
-def test_each_kind_is_capped_and_the_rest_counted():
-    blocks = [_block(10 + i, "a.py", "b.py") for i in range(25)]
-    found = _detect(["a.py", "b.py"], blocks=blocks, cycles=[["a.py", "b.py"]])
+def test_duplicate_blocks_between_the_same_files_are_one_smell():
+    blocks = [_block(12, "a.py", "b.py"), _block(12, "b.py", "a.py"), _block(12, "a.py", "c.py")]
+    found = _kinds(_detect(_block_nodes(blocks), blocks=blocks), "duplicate")
+    assert [(s["nodes"], s["severity"]) for s in found] == [
+        (["a.py", "b.py"], "medium"),
+        (["a.py", "c.py"], "low"),
+    ]
+    assert found[0]["evidence"].startswith("24 lines in 2 block(s)")
+
+
+def test_test_files_are_not_duplicates_oversize_or_hotspots():
+    blocks = [_block(12, "a.py", "tests/test_a.py"), _block(12, "b.py", "c.py")]
+    found = _kinds(_detect(_block_nodes(blocks), blocks=blocks), "duplicate")
+    assert [s["nodes"] for s in found] == [["b.py", "c.py"]]
+    files = [(f"f{i}.py", 100) for i in range(60)]
+    big = [("big.py", 400), ("tests/test_big.py", 400), ("web/cart.test.ts", 400)]
+    churn = {p: 9 for p, _ in big}
+    found = _detect(files=[*files, *big], churn=churn)
+    assert {(s["kind"], s["nodes"][0]) for s in found} == {
+        ("oversize", "big.py"),
+        ("hotspot", "big.py"),
+    }
+
+
+def test_each_kind_is_capped_except_cycles_and_layering():
+    blocks = [_block(12 + i, f"a{i}.py", f"b{i}.py") for i in range(25)]
+    cycles = [[f"c{i}.py", f"d{i}.py"] for i in range(25)]
+    found = _detect(_block_nodes(blocks), blocks=blocks, cycles=cycles)
     shown, dropped = smells.cap(found)
     assert len(_kinds(shown, "duplicate")) == smells.MAX_PER_KIND
-    assert _kinds(shown, "duplicate")[0]["evidence"].startswith("34 lines")
-    assert len(_kinds(shown, "cycle")) == 1
-    assert dropped == {"duplicate": 5}
+    assert _kinds(shown, "duplicate")[0]["evidence"].startswith("36 lines")
+    assert len(_kinds(shown, "cycle")) == 25
+    assert dropped["duplicate"] == 5 and "cycle" not in dropped
 
 
 def test_dead_code_skips_tests_and_entry_points():
@@ -179,6 +212,67 @@ def test_dead_code_skips_tests_and_entry_points():
         _detect(nodes, edges=[("main.py", "used.py")], entry_points=["tool.py"]), "deadcode"
     )
     assert [s["nodes"] for s in found] == [["lonely.py"]]
+    assert (
+        _kinds(
+            _detect(
+                nodes,
+                edges=[("main.py", "used.py")],
+                entry_points=["tool.py"],
+                mentioned=["lonely.py"],
+            ),
+            "deadcode",
+        )
+        == []
+    )
+
+
+def test_files_named_in_other_files_are_mentioned(make_repo):
+    files = {
+        "templates/page.html": '<script src="/static/js/widget.js"></script>\n',
+        "static/js/widget.js": "",
+        "config/jobs.yml": "job: tasks.nightly.run\n",
+        "tasks/nightly.py": "",
+        "README.md": "Run `helper` to see the help.\n",
+        "bin/helper.rb": "",
+        "lonely.py": "# lonely.py talks only about itself\n",
+        "logo.png": b"\x89PNG\0lonely.py",
+    }
+    root = make_repo(files)
+    assert smells.mentioned(root, sorted(files)) == frozenset(
+        ["static/js/widget.js", "tasks/nightly.py", "bin/helper.rb"]
+    )
+
+
+def test_hub_needs_fan_out_so_a_definitions_module_is_not_one():
+    importers = [(f"m{i}.py", "defs.py") for i in range(20)]
+    assert _kinds(_detect(edges=importers), "hub") == []
+    found = _kinds(
+        _detect(edges=[*importers, ("h.py", "defs.py")] + [("h.py", f"n{i}.py") for i in range(7)]),
+        "hub",
+    )
+    assert [s["nodes"] for s in found] == [["h.py"]]
+
+
+def test_hub_neighbours_skip_tests():
+    edges = [("h.py", f"n{i}.py") for i in range(5)] + [
+        (f"tests/test_{i}.py", "h.py") for i in range(5)
+    ]
+    assert _kinds(_detect(edges=edges), "hub") == []
+    edges = [("h.py", f"n{i}.py") for i in range(5)] + [(f"m{i}.py", "h.py") for i in range(3)]
+    assert [s["nodes"] for s in _kinds(_detect(edges=edges), "hub")] == [["h.py"]]
+
+
+def test_non_source_files_are_never_smells():
+    found = _detect(
+        nodes=["infra/main.tf", "infra/prod.tfvars", "lonely.py", "a.py"],
+        pairs=[_pair(9, 1.0, "infra/main.tf", "a.py"), _pair(9, 1.0, "lonely.py", "a.py")],
+        cycles=[["infra/net.tf", "infra/main.tf"]],
+    )
+    assert {s["kind"]: s["nodes"] for s in found if "tf" in str(s["nodes"])} == {}
+    assert {(s["kind"], tuple(s["nodes"])) for s in found} >= {
+        ("deadcode", ("lonely.py",)),
+        ("cochange", ("a.py", "lonely.py")),
+    }
 
 
 def test_entry_points_are_not_dead_code(make_repo):

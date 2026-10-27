@@ -17,6 +17,7 @@ from foreman.metrics import percentiles
 
 THRESHOLDS: dict[str, int | float] = {
     "hub_floor": 8,
+    "hub_fanout_floor": 5,
     "cochange_min_both": 5,
     "cochange_min_conf": 0.6,
     "cochange_medium_conf": 0.8,
@@ -26,8 +27,13 @@ THRESHOLDS: dict[str, int | float] = {
     "oversize_function_floor": 60,
     "duplicate_medium_lines": 20,
     "duplicate_medium_locations": 3,
+    "duplicate_min_lines": 12,
+    "bulk_commit_min_files": 10,
+    "bulk_commit_share": 0.2,
 }
 MAX_PER_KIND = 20
+# A team chose these boundaries, so every break is listed.
+UNCAPPED = frozenset(["cycle", "layering"])
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 # __init__.py is imported implicitly with its package, so no edge ever points at it
 ENTRY_NAMES = frozenset(
@@ -95,14 +101,16 @@ def _ranked(kind: str, found: list[Found]) -> list[Smell]:
 
 
 def cap(found: list[Smell]) -> tuple[list[Smell], dict[str, int]]:
-    """The first MAX_PER_KIND smells of each kind, and how many of each kind were dropped."""
+    """The first MAX_PER_KIND smells of each capped kind, and how many of each were dropped."""
     seen: Counter[str] = Counter()
     shown = []
     for s in found:
         seen[s["kind"]] += 1
-        if seen[s["kind"]] <= MAX_PER_KIND:
+        if s["kind"] in UNCAPPED or seen[s["kind"]] <= MAX_PER_KIND:
             shown.append(s)
-    return shown, {k: n - MAX_PER_KIND for k, n in seen.items() if n > MAX_PER_KIND}
+    return shown, {
+        k: n - MAX_PER_KIND for k, n in seen.items() if n > MAX_PER_KIND and k not in UNCAPPED
+    }
 
 
 def _cycles(graph: dict) -> list[Found]:
@@ -151,23 +159,32 @@ def _layering(graph: dict, layers: Sequence[dict]) -> list[Found]:
 
 
 def _hubs(graph: dict, entry_points: frozenset[str], facades: frozenset[str]) -> list[Found]:
-    near: dict[str, set[str]] = {n["id"]: set() for n in graph["nodes"]}
+    out: dict[str, set[str]] = {n["id"]: set() for n in graph["nodes"] if not _is_test(n["id"])}
+    near: dict[str, set[str]] = {n: set() for n in out}
     for e in graph["edges"]:
-        near[e["from"]].add(e["to"])
-        near[e["to"]].add(e["from"])
-    p95 = percentiles([len(v) for v in near.values()])["p95"]
-    floor = THRESHOLDS["hub_floor"]
+        if e["from"] in out and e["to"] in out:
+            out[e["from"]].add(e["to"])
+            near[e["from"]].add(e["to"])
+            near[e["to"]].add(e["from"])
+    # fan-out keeps a stable definitions module that everything imports from being a hub
+    min_out = max(
+        THRESHOLDS["hub_fanout_floor"], percentiles([len(v) for v in out.values()])["p95"]
+    )
+    min_near = max(THRESHOLDS["hub_floor"], percentiles([len(v) for v in near.values()])["p95"])
     return [
         (
-            len(v),
+            len(near[n]),
             "low" if n in entry_points or _is_entry(n) else "medium",
             [n],
             f"Hub: {n}",
-            f"{len(v)} neighbours; repo p95 is {p95}, floor {floor}",
+            (
+                f"imports {len(out[n])} modules (threshold {min_out}); "
+                f"{len(near[n])} neighbours (threshold {min_near})"
+            ),
         )
-        for n, v in near.items()
-        if len(v) >= max(floor, p95)
-        and not _is_test(n)
+        for n in out
+        if len(out[n]) >= min_out
+        and len(near[n]) >= min_near
         and posixpath.basename(n) != "conftest.py"
         and n not in facades
     ]
@@ -202,7 +219,7 @@ def _cochange(ids: Collection[str], graph: dict, history: dict) -> list[Found]:
 
 def _hotspots(ids: Collection[str], history: dict, metrics: dict) -> list[Found]:
     churn = history["churn"]
-    measured = [f for f in metrics["files"] if f["path"] in churn]
+    measured = [f for f in metrics["files"] if f["path"] in churn and not _is_test(f["path"])]
     min_churn = max(
         THRESHOLDS["hotspot_min_churn"], percentiles([churn[f["path"]] for f in measured])["p90"]
     )
@@ -228,6 +245,7 @@ def _oversize(ids: Collection[str], metrics: dict) -> list[Found]:
         node, n = _node_of(f["path"], ids), f["lines"]
         if (
             node
+            and not _is_test(f["path"])
             and n > fs["p95"]
             and n >= THRESHOLDS["oversize_file_median_ratio"] * fs["median"]
             and n >= THRESHOLDS["oversize_file_floor"]
@@ -236,7 +254,12 @@ def _oversize(ids: Collection[str], metrics: dict) -> list[Found]:
             found.append((n, "low", [node], f"Large file: {f['path']}", evidence))
     for f in metrics["functions"]:
         node, n = _node_of(f["path"], ids), f["lines"]
-        if node and n > fn["p95"] and n >= THRESHOLDS["oversize_function_floor"]:
+        if (
+            node
+            and not _is_test(f["path"])
+            and n > fn["p95"]
+            and n >= THRESHOLDS["oversize_function_floor"]
+        ):
             title = f"Long function: `{f['name']}` in {f['path']}"
             evidence = f"{n} lines; repo p95 is {fn['p95']} (function sizes: Python only)"
             found.append((n, "low", [node], title, evidence))
@@ -244,20 +267,28 @@ def _oversize(ids: Collection[str], metrics: dict) -> list[Found]:
 
 
 def _duplicates(ids: Collection[str], dupes: dict) -> list[Found]:
-    found = []
+    """One smell per set of files sharing duplicate blocks, so a long copy isn't several smells."""
+    by_nodes: dict[tuple[str, ...], list[tuple[int, list[dict]]]] = {}
     for b in dupes["blocks"]:
-        locs = b["locations"]
-        nodes = sorted({n for loc in locs if (n := _node_of(loc["path"], ids))})
-        if not nodes:
-            continue
+        locs = [loc for loc in b["locations"] if not _is_test(loc["path"])]
+        nodes = tuple(sorted({n for loc in locs if (n := _node_of(loc["path"], ids))}))
+        if len(locs) > 1 and nodes:
+            by_nodes.setdefault(nodes, []).append((b["lines"], locs))
+    found = []
+    for nodes, blocks in by_nodes.items():
+        lines = sum(n for n, _ in blocks)
+        places = max(len(locs) for _, locs in blocks)
         medium = (
-            b["lines"] >= THRESHOLDS["duplicate_medium_lines"]
-            or len(locs) >= THRESHOLDS["duplicate_medium_locations"]
+            lines >= THRESHOLDS["duplicate_medium_lines"]
+            or places >= THRESHOLDS["duplicate_medium_locations"]
         )
-        where = ", ".join(f"{loc['path']}:{loc['start']}-{loc['end']}" for loc in locs)
-        evidence = f"{b['lines']} lines repeated in {len(locs)} places: {where}"
-        title = f"Duplicate block of {b['lines']} lines"
-        found.append((b["lines"], "medium" if medium else "low", nodes, title, evidence))
+        where = "; ".join(
+            ", ".join(f"{loc['path']}:{loc['start']}-{loc['end']}" for loc in locs)
+            for _, locs in blocks
+        )
+        evidence = f"{lines} lines in {len(blocks)} block(s), each in {places} places: {where}"
+        title = f"Duplicate code: {lines} lines"
+        found.append((lines, "medium" if medium else "low", list(nodes), title, evidence))
     return found
 
 
@@ -266,14 +297,15 @@ def _is_entry(node: str) -> bool:
     return name in ENTRY_NAMES or any(fnmatch.fnmatchcase(name, g) for g in ENTRY_GLOBS)
 
 
-def _deadcode(graph: dict, entry_points: frozenset[str]) -> list[Found]:
+def _deadcode(graph: dict, entry_points: frozenset[str], mentioned: frozenset[str]) -> list[Found]:
     imported = {e["to"] for e in graph["edges"]}
-    evidence = "imported by 0 modules; not a test or a known entry point"
+    evidence = "imported by 0 modules and named in no other file; not a test or a known entry point"
     return [
         (0, "low", [n["id"]], f"Possibly unused: {n['id']}", evidence)
         for n in graph["nodes"]
         if n["id"] not in imported
         and n["id"] not in entry_points
+        and n["id"] not in mentioned
         and not _is_test(n["id"])
         and not _is_entry(n["id"])
     ]
@@ -287,9 +319,10 @@ def detect(
     layers: Sequence[dict],
     entry_points: frozenset[str] = frozenset(),
     facades: frozenset[str] = frozenset(),
+    mentioned: frozenset[str] = frozenset(),
 ) -> list[Smell]:
     ids = map_nodes(graph, metrics).keys()
-    return [
+    found = [
         *_ranked("cycle", _cycles(graph)),
         *_ranked("layering", _layering(graph, layers)),
         *_ranked("hub", _hubs(graph, entry_points, facades)),
@@ -297,8 +330,35 @@ def detect(
         *_ranked("hotspot", _hotspots(ids, history, metrics)),
         *_ranked("oversize", _oversize(ids, metrics)),
         *_ranked("duplicate", _duplicates(ids, dupes)),
-        *_ranked("deadcode", _deadcode(graph, entry_points)),
+        *_ranked("deadcode", _deadcode(graph, entry_points, mentioned)),
     ]
+    # a [graph.*] rule may cover config or infra files; those are still never smells
+    return [
+        s
+        for s in found
+        if not any(posixpath.splitext(n)[1].lower() in NON_SOURCE_EXTENSIONS for n in s["nodes"])
+    ]
+
+
+_NAME = re.compile(r"[\w-]+(?:\.[\w-]+)*")
+
+
+def mentioned(root: Path, files: Sequence[str]) -> frozenset[str]:
+    """Files whose basename, with or without extension, appears in another tracked text file."""
+    # One pass: each name remembers the one file it came from, or "" once a second file has it.
+    seen: dict[str, str] = {}
+    for path in files:
+        tokens = set(_NAME.findall(read_text(root / path) or ""))
+        for token in tokens | {part for t in tokens for part in t.split(".")}:
+            seen[token] = path if seen.get(token, path) == path else ""
+    return frozenset(
+        f
+        for f in files
+        if any(
+            seen.get(name, f) != f
+            for name in (posixpath.basename(f), posixpath.splitext(posixpath.basename(f))[0])
+        )
+    )
 
 
 def _load(path: Path, parse) -> dict:

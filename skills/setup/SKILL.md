@@ -70,7 +70,10 @@ Fill each table from what you read:
 - `[audit]` `entry_points`: globs for files a framework loads by path, so nothing imports
   them: plugin folders, scripts or handlers a tool config names by path (`alembic.ini`
   `script_location`, task or CI configs). Migrations are covered already. Propose each glob
-  beside the loader that uses it.
+  beside the loader that uses it. For a library, add its public surface too: the files
+  directly under the package root that its main file (`__init__.py`, `index.*`,
+  `lib/<name>.rb`, the manifest's `main`) re-exports or requires, and files the README
+  documents; users outside the repo import them.
 - `[rules]` the docs that state design rules, and `layers`: translate every layering rule
   the docs state ("the UI never imports the database layer") into
   `{from = "<glob>", to = "<glob>"}` pairs. A stated exception ("X must not import Y

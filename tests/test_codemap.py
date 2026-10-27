@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from foreman import codemap, render
@@ -111,7 +112,7 @@ def test_malformed_map_is_problems_not_exceptions():
 
 
 def test_ungraphed_sources_are_map_nodes(make_repo):
-    body = "\n".join(f"total += price * {i}" for i in range(10))
+    body = "\n".join(f"total += price * {i}" for i in range(12))
     root = make_repo({"a.rb": body, "lib/b.rb": body, "c.py": "", "LICENSE": "x\n"})
     data = codemap.build(root, _config())
     nodes = {n["id"]: n["lang"] for n in data["nodes"]}
@@ -285,3 +286,20 @@ def test_map_counts_every_smell_and_what_the_cap_dropped(make_repo, tmp_path, ca
         assert result["dropped"] == {"deadcode": 3}
         assert result["counts"] == {"deadcode": {"low": 23}}
         assert len(result["smells"]) == 20
+
+
+def test_large_repo_maps_quickly(make_repo):
+    files = {
+        f"pkg{i % 30}/mod{i}.py": f"import pkg{(i + 1) % 30}.mod{i + 1}\n"
+        + "\n".join(f"value_{i}_{j} = {j} * {i}  # see mod{i - 1}.py" for j in range(40))
+        for i in range(3000)
+    }
+    files.update(
+        {f"docs/page{i}.md": f"See `mod{i}` and pkg{i % 30}/mod{i}.py.\n" for i in range(200)}
+    )
+    root = make_repo(files)
+    start = time.perf_counter()
+    data = codemap.build(root, _config())
+    # measured 3.0 s (mention scan 0.3 s) on a laptop; the bound catches a per-file scan
+    assert time.perf_counter() - start < 10
+    assert len(data["nodes"]) == 3000

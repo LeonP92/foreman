@@ -39,6 +39,17 @@ def test_bulk_commits_excluded(make_repo):
     assert h["churn"] == {"f0.py": 1, "x": 1} and h["pairs"] == []
 
 
+def test_bulk_cutoff_scales_with_tracked_sources(make_repo):
+    files = {f"src/f{i}.py": "" for i in range(100)}
+    commits = [
+        {f"src/f{i}.py": "1" for i in range(20)},
+        {f"src/f{i}.py": "2" for i in range(21)},
+    ]
+    churn = analyse(make_repo({**files, "README.md": ""}, commits=commits))["churn"]
+    # 100 sources: the cutoff is 20 files, so the 20-file commit counts and the 21-file one doesn't
+    assert churn["src/f0.py"] == 1 and "src/f20.py" not in churn
+
+
 def test_ignore_filters_paths(make_repo):
     c = [{"a.py": "1", "g.lock": "1"}, {"a.py": "2", "g.lock": "2"}]
     h = analyse(make_repo({"x": ""}, commits=c), ["*.lock"])

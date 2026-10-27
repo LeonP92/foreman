@@ -83,6 +83,7 @@ def build(root: Path, config: dict) -> dict:
         layers,
         smells.entry_points(root, files, config["audit"]["entry_points"]),
         smells.facades(root, files),
+        smells.mentioned(root, files),
     )
     shown, dropped = smells.cap(found)
     counts: dict[str, Counter[str]] = {}

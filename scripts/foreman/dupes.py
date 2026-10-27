@@ -4,8 +4,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from foreman.files import source_texts
+from foreman.smells import THRESHOLDS
 
-DUPE_WINDOW = 8
+DUPE_WINDOW = int(THRESHOLDS["duplicate_min_lines"])
 # Languages where `#` starts a comment; elsewhere (C/C++ preprocessor) `#` lines are code.
 _HASH_COMMENT_EXTENSIONS = frozenset(
     [".py", ".pyi", ".rb", ".sh", ".bash", ".zsh", ".fish", ".pl", ".r", ".tf", ".yaml", ".yml"]
