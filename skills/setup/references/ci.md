@@ -28,8 +28,9 @@ works. When the app refuses to start without one and the user has none, offer a 
    `<temp>/throwaway.py`: `python3 -I <temp>/throwaway.py <file> SHOP_SECRET_KEY ...`.
    It creates the file readable by the user only (mode 0600), appends one line per name
    and prints the names, never the values.
-3. Reference each one as `${NAME}` in `[env]`, and tell the user to load the file into
-   the shell they run foreman from (`set -a; . <file>; set +a` on POSIX shells).
+3. Reference each one as `${NAME}` in `[env]`. Keep the file's path out of the config
+   (it is a machine path): tell the user where it is; verify passes it to its launcher
+   with `--env-file <file>`.
 
 Never write a generated value into the config, the repo or the transcript, and never use
 one for anything but a local copy of the app.

@@ -78,13 +78,28 @@ the command's status. Start a server with a log file instead of `-`, and `[serve
 with `{port}` filled in: it prints the server's PID and returns while the server keeps
 running in its own process group, so the whole tree can be stopped later.
 
+Put `--env-file <path>` (repeatable) before `<settings>` to load a file of `NAME=value`
+lines, such as the throwaway secrets file setup made outside the repo, into the
+environment before `${NAME}` is filled in. It never prints values, and a file that sets
+a removed database location is rejected with a one-line error naming the variable.
+
 ```python
 import json, os, re, subprocess, sys
 
-SETTINGS, CWD, LOG, COMMAND = sys.argv[1:5]
+args, env_files = sys.argv[1:], []
+while args[0] == "--env-file":
+    env_files.append(args[1])
+    args = args[2:]
+SETTINGS, CWD, LOG, COMMAND = args
 settings = json.load(open(SETTINGS, encoding="utf-8"))
 values = settings["command" if LOG == "-" else "server"]
 base = {k: v for k, v in os.environ.items() if k not in settings["remove"]}
+for path in env_files:
+    text = open(path, encoding="utf-8").read()
+    for name, value in re.findall(r"^(?:export\s+)?([A-Za-z_]\w*)=([^\r\n]*)", text, re.M):
+        if name in settings["remove"]:
+            sys.exit(f"launch: {path} sets {name}, a removed database location")
+        base[name] = value
 
 
 def lookup(m):
@@ -118,7 +133,7 @@ print(proc.pid)
 
 `shell=True` is deliberate: the commands are shell commands written by the repo. If a
 `${NAME}` isn't set, the launcher stops with a one-line message naming it; ask the user
-to export it rather than inventing a value.
+to export it or name the env file holding it rather than inventing a value.
 
 ## Stopping
 

@@ -171,3 +171,35 @@ def test_verdict_counts_only_must_fix():
 def test_known_console_noise_is_explained_where_it_is_offered():
     assert "ignore_console" in skill_text("setup")
     assert "ignored_console_errors" in skill_text("verify")
+
+
+def test_launcher_loads_env_files_but_never_a_database_location(tmp_path):
+    launcher = _snippet(tmp_path, "launch")
+    settings = tmp_path / "s.json"
+    settings.write_text(
+        json.dumps({"remove": ["DATABASE_URL"], "command": {"A": "${SHOP_KEY}"}, "server": {}}),
+        encoding="utf-8",
+    )
+    secrets_file = tmp_path / "shop.env"
+    secrets_file.write_text("SHOP_KEY=from-file\r\n", encoding="utf-8")
+    show = f'"{sys.executable}" -c "import os; print(os.environ.get(\'A\'))"'
+    env = {k: v for k, v in os.environ.items() if k != "SHOP_KEY"}
+    ran = _py(launcher, "--env-file", secrets_file, settings, tmp_path, "-", show, env=env)
+    assert ran.stdout.split() == ["from-file"]
+    secrets_file.write_text("SHOP_KEY=k\nDATABASE_URL=sqlite:///real.db\n", encoding="utf-8")
+    failed = _py(launcher, "--env-file", secrets_file, settings, tmp_path, "-", show, env=env)
+    assert failed.returncode == 1
+    assert failed.stderr.strip().splitlines() == [
+        f"launch: {secrets_file} sets DATABASE_URL, a removed database location"
+    ]
+    assert "real.db" not in failed.stderr
+
+
+def test_diagram_decides_hubs_before_grouping():
+    text = " ".join(skill_text("diagram").split())
+    for phrase in [
+        "on the ungrouped graph",
+        "never group a hub's direct neighbours",
+        "ungrouped neighbour count",
+    ]:
+        assert phrase in text, phrase

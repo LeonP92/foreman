@@ -53,7 +53,9 @@ has each `/` replaced by `-`.
    doc it comes from in `notes`. No rule, no forbidden edge.
 5. **Nodes.** Every changed module, class or interface, plus unchanged ones exactly one hop
    from a changed node. Drop everything else, including tests. Every node needs an edge.
-   If there are more than 20 unchanged one-hop neighbours, group them: one `affected`
+   Decide `hub` smells (below) on the ungrouped graph first. If more than 20 unchanged
+   one-hop neighbours remain, group them, but never group a hub's direct neighbours: they
+   stay individual nodes, so `render` still sees them. Group the rest: one `affected`
    node per package directory, id the directory (`core/`), label `core/ — 12 modules`,
    and one `affected` summary line naming them ("12 modules: a.py, b.py, …"). Edges
    into a group's members become one edge per changed node and kind, labelled with the
@@ -118,7 +120,7 @@ it), no smell; an empty list is a fine answer.
 |---|---|---|---|
 | `scatter` | 3 or more | One concept (a field, a rule, a flag) had to change in many modules. | which concept, and whether the spread is inherent or avoidable |
 | `twin` | exactly 2 | Two implementations of one rule must change together (server and client validation, code and a SQL filter). | both implementations, and whether a parity test guards them |
-| `hub` | exactly 1 | A changed node with many neighbours; `render` requires 5 or more in the graph. | the neighbour count and why it matters here |
+| `hub` | exactly 1 | A changed node with many neighbours; `render` requires 5 or more in the graph. | the ungrouped neighbour count and why it matters here |
 
 Severity: `high` when it already caused or will likely cause a bug (twins with no parity
 test, a hub crossing layers); `medium` when the next change here will pay for it; `low`

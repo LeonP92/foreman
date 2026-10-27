@@ -52,7 +52,8 @@ finding that foreman's isolation failed (what ran just before, the old and new v
 Do not continue the run.
 
 Every command runs through the launcher in `references/servers.md`, with an explicit
-environment that can't reach the real database.
+environment that can't reach the real database. If the user has a secrets file from setup
+(outside the repo), pass it to every launch with `--env-file`.
 
 ## 3. Worktrees and data
 
