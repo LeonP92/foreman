@@ -59,15 +59,15 @@ def _walk_files(root: Path) -> list[str]:
     return found
 
 
+def is_ignored(path: str, ignore: Sequence[str]) -> bool:
+    return any(fnmatch.fnmatchcase(path, g) or fnmatch.fnmatchcase("/" + path, g) for g in ignore)
+
+
 def list_files(root: Path, ignore: Sequence[str] = ()) -> list[str]:
     paths = _git_files(root)
     if paths is None:
         paths = _walk_files(root)
-    return sorted(
-        p
-        for p in paths
-        if not any(fnmatch.fnmatchcase(p, g) or fnmatch.fnmatchcase("/" + p, g) for g in ignore)
-    )
+    return sorted(p for p in paths if not is_ignored(p, ignore))
 
 
 def language(path: str) -> str | None:
