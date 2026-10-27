@@ -119,3 +119,16 @@ def test_ungraphed_sources_are_map_nodes(make_repo):
     assert [s["nodes"] for s in data["smells"] if s["kind"] == "deadcode"] == [["c.py"]]
     assert data["unsupported"] == {".rb": 2}
     assert render.validate(data) == []
+
+
+def test_go_package_layering(make_repo):
+    root = make_repo(
+        {
+            "go.mod": "module example.com/shop\n\ngo 1.22\n",
+            "core/core.go": 'package core\n\nimport "example.com/shop/app"\n\nvar _ = app.Name\n',
+            "app/app.go": "package app\n\nconst Name = 1\n",
+        }
+    )
+    data = codemap.build(root, _config(layers=[{"from": "core/**", "to": "app/**"}]))
+    assert data["edges"] == [{"from": "core", "to": "app", "kind": "forbidden"}]
+    assert [s["nodes"] for s in data["smells"] if s["kind"] == "layering"] == [["core", "app"]]

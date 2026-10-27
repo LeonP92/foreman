@@ -38,3 +38,8 @@ def test_c_preprocessor_lines_are_not_comments(make_repo):
     defines = "\n".join(f"#define LIMIT_{i} ({i} * 4)" for i in range(10))
     blocks = find(make_repo({"a.c": defines, "b.c": defines}))["blocks"]
     assert [b["lines"] for b in blocks] == [10]
+
+
+def test_c_include_lines_are_noise(make_repo):
+    includes = "\n".join(f"#include <lib{i}.h>" for i in range(10))
+    assert find(make_repo({"a.c": includes, "b.c": includes}))["blocks"] == []

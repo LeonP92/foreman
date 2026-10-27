@@ -191,3 +191,13 @@ def test_file_smells_cover_ungraphed_sources():
     files = [("a.rb", 10), ("b.rb", 10)]
     found = _detect(files=files, blocks=[_block(8, "a.rb", "b.rb")], churn={"a.rb": 1})
     assert [(s["kind"], s["nodes"]) for s in found] == [("duplicate", ["a.rb", "b.rb"])]
+
+
+def test_same_name_modules_are_cochange():
+    found = _kinds(
+        _detect(
+            pairs=[_pair(9, 1.0, "a/index.ts", "b/index.ts")], nodes=["a/index.ts", "b/index.ts"]
+        ),
+        "cochange",
+    )
+    assert [s["nodes"] for s in found] == [["a/index.ts", "b/index.ts"]]

@@ -10,7 +10,7 @@ DUPE_WINDOW = 8
 _HASH_COMMENT_EXTENSIONS = frozenset(
     [".py", ".pyi", ".rb", ".sh", ".bash", ".zsh", ".fish", ".pl", ".r", ".tf", ".yaml", ".yml"]
 )
-_NOISE = re.compile(r"^([\s{}()\[\];,]*|(import|from|using|package)\b.*)$")
+_NOISE = re.compile(r"^([\s{}()\[\];,]*|(import|from|using|package|#\s*include|#\s*import)\b.*)$")
 
 
 def _normalised(path: str, text: str) -> list[tuple[int, str]]:

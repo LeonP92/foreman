@@ -109,8 +109,13 @@ def _cycles(graph: dict) -> list[Found]:
 
 def forbidden_by(edge: dict, layers: Sequence[dict]) -> dict | None:
     """The first `[rules] layers` entry this edge crosses."""
+
+    # `id + "/"` lets `core/**` cover a Go package whose id is the directory `core`
+    def under(node: str, glob: str) -> bool:
+        return is_ignored(node, [glob]) or is_ignored(node + "/", [glob])
+
     for r in layers:
-        if is_ignored(edge["from"], [r["from"]]) and is_ignored(edge["to"], [r["to"]]):
+        if under(edge["from"], r["from"]) and under(edge["to"], r["to"]):
             return r
     return None
 
@@ -160,7 +165,7 @@ def _cochange(ids: Collection[str], graph: dict, history: dict) -> list[Found]:
             or p["conf"] < THRESHOLDS["cochange_min_conf"]
             or (a, b) in linked
             or (b, a) in linked
-            or _subject(p["a"]) == _subject(p["b"])
+            or (_subject(p["a"]) == _subject(p["b"]) and _is_test(p["a"]) != _is_test(p["b"]))
         ):
             continue
         severity = "medium" if p["conf"] >= THRESHOLDS["cochange_medium_conf"] else "low"
