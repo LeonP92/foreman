@@ -77,6 +77,6 @@ def read_text(path: Path) -> str | None:
     if b"\0" in data:
         return None
     try:
-        return data.decode("utf-8").replace("\r\n", "\n")
+        return data.decode("utf-8-sig").replace("\r\n", "\n")
     except UnicodeDecodeError:
         return None

@@ -15,7 +15,12 @@ GIT_ENV = {
 
 @pytest.fixture
 def make_repo(tmp_path):
-    env = {**os.environ, **GIT_ENV}
+    env = {
+        **os.environ,
+        **GIT_ENV,
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_SYSTEM": os.devnull,
+    }
 
     def git(*args):
         subprocess.run(

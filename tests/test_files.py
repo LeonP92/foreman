@@ -22,9 +22,11 @@ def test_read_text_normalises_crlf_and_rejects_binary(tmp_path):
     (tmp_path / "a.txt").write_bytes(b"a\r\nb\r\n")
     (tmp_path / "nul.bin").write_bytes(b"a\x00b")
     (tmp_path / "bad.txt").write_bytes(b"\xff\xfe\xfa")
+    (tmp_path / "bom.py").write_bytes(b"\xef\xbb\xbfx = 1\n")
     assert read_text(tmp_path / "a.txt") == "a\nb\n"
     assert read_text(tmp_path / "nul.bin") is None
     assert read_text(tmp_path / "bad.txt") is None
+    assert read_text(tmp_path / "bom.py") == "x = 1\n"
 
 
 def test_language_by_extension():
