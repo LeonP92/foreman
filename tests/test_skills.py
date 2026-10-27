@@ -66,7 +66,17 @@ def test_review_flags_gone_or_squash_merged_branches():
     report = " ".join(
         (SKILLS_DIR / "review" / "references" / "report.md").read_text(encoding="utf-8").split()
     )
-    for phrase in ["git ls-remote --heads", "git cherry", "continues on the given tip"]:
+    for phrase in [
+        "git ls-remote --heads",
+        "`git rev-parse --abbrev-ref <branch>@{upstream}` succeeds",
+        "`refs/remotes/<remote>/<branch>` exists",
+        "never pushed gets no header",
+        "every line of `git cherry <repo.base> <branch>` starts with `-`",
+        "`git log --format='%h %s' BASE..<repo.base>`",
+        "`#N` PR number",
+        "never fetch",
+        "continues on the given tip",
+    ]:
         assert phrase in text, phrase
     for phrase in ["branch deleted on remote", "appears squash-merged as <sha>"]:
         assert phrase in text, phrase

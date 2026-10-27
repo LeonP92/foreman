@@ -184,6 +184,10 @@ def test_file_database_may_have_a_per_server_url(tmp_path):
     pair = 'env_override = "APP_DB"\nurl_template = "sqlite:///{dir}/app.db"\n'
     assert check_toml(tmp_path, file_db + pair) == []
     for half in pair.splitlines():
-        assert check_toml(tmp_path, file_db + half) == [
-            "database.env_override and database.url_template go together"
-        ]
+        assert "database.env_override and database.url_template go together" in check_toml(
+            tmp_path, file_db + half
+        )
+    fixed = 'env_override = "APP_DB"\nurl_template = "sqlite:///data/app.db"\n'
+    assert check_toml(tmp_path, file_db + fixed) == [
+        "database.url_template must contain {dir} or {name} for a file database"
+    ]

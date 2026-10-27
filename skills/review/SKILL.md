@@ -28,12 +28,19 @@ itself. If `BASE` equals the branch tip, check `git rev-list --first-parent <rep
 if the tip is on it, the branch has no commits of its own and there is nothing to review
 (say so and stop); otherwise it was already merged (say so in the report and use `BASE^`,
 the merge-base's first parent, as `BASE`). Then check whether the branch is gone or
-already landed: `git ls-remote --heads <remote> <branch>` (the branch's remote, usually
-`origin`) prints nothing if it was deleted there; search `git log BASE..<repo.base>` for
-a commit whose subject or PR number (`#12`) matches the branch's; and in
-`git cherry <repo.base> <branch>`, a line starting `-` has a patch-equivalent commit on the
-base. If so, the report header says "branch deleted on remote" or "appears squash-merged
-as <sha>", and the review continues on the given tip. Diff with
+already landed, using only refs already present (never fetch: a `--prune` deletes
+remote-tracking refs):
+- "branch deleted on remote" only when the branch had a remote counterpart
+  (`git rev-parse --abbrev-ref <branch>@{upstream}` succeeds, or
+  `refs/remotes/<remote>/<branch>` exists) and `git ls-remote --heads <remote> <branch>`
+  prints nothing. A branch that was never pushed gets no header.
+- "appears squash-merged as <sha>" only when every line of
+  `git cherry <repo.base> <branch>` starts with `-`, or
+  `git log --format='%h %s' BASE..<repo.base>` contains one of the branch's commit
+  subjects or its `#N` PR number (`<sha>` is that base commit; without one, say "appears
+  squash-merged").
+
+Either way the review continues on the given tip. Diff with
 `git diff BASE <branch>`; anything run on the base (tests in step 4, verify, the diagram)
 uses a worktree at `BASE`. The report names both SHAs. If the branch isn't checked out,
 or the working tree has uncommitted changes, work in a temporary worktree of the branch

@@ -129,6 +129,15 @@ def _semantic_problems(data: dict) -> list[str]:
     url_keys = (_get(data, "database", "env_override"), _get(data, "database", "url_template"))
     if kind == "file" and bool(url_keys[0]) != bool(url_keys[1]):
         problems.append("database.env_override and database.url_template go together")
+    # without a per-server placeholder the URL could point at the real file
+    template = url_keys[1]
+    if (
+        kind == "file"
+        and isinstance(template, str)
+        and template
+        and not re.search(r"\{(dir|name)\}", template)
+    ):
+        problems.append("database.url_template must contain {dir} or {name} for a file database")
     patterns = _get(data, "verify", "ignore_console", [])
     # wrong types are already reported by check()
     for pattern in [] if _type_problem("", patterns, []) else patterns:
