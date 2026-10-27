@@ -6,33 +6,14 @@ from pathlib import Path
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
 
+# a node's status, and the sections its summary may have
 STATUSES = {"added", "changed", "removed", "affected"}
 EDGE_KINDS = {"import", "call", "impl", "cycle", "forbidden"}
-SUMMARY_KEYS = {"added", "removed", "changed", "affected"}
 SMELL_SEVERITIES = {"low", "medium", "high"}
 # Structural smells only; line-level findings belong in the review report.
 # kind -> (min nodes, max nodes)
 DIAGRAM_SMELLS = {"scatter": (3, None), "twin": (2, 2), "hub": (1, 1)}
 HUB_MIN_NEIGHBOURS = 5
-_MAP_STRING_FIELDS = {
-    "groups": ("id", "label"),
-    "nodes": ("id", "label", "group", "lang"),
-    "edges": ("from", "to", "kind"),
-    "packages": ("from", "to", "kind", "dir"),
-    "smells": ("kind", "severity", "title", "evidence"),
-}
-MAP_EDGE_KINDS = {"import", "cycle", "forbidden"}
-MAP_EDGE_DIRS = {"down", "up"}
-MAP_SMELLS = {
-    "cycle",
-    "layering",
-    "hub",
-    "cochange",
-    "hotspot",
-    "oversize",
-    "duplicate",
-    "deadcode",
-}
 # Item fields that must be strings when present; type errors stop validation before the rules.
 _STRING_FIELDS = {
     "nodes": ("id", "label", "sub", "lane", "status"),
@@ -100,7 +81,7 @@ def _diagram(data: dict) -> list[str]:
             errs.append(f"node {nid}: status must be one of {sorted(STATUSES)}")
         if not n.get("label"):
             errs.append(f"node {nid}: missing label")
-        extra = set(n.get("summary", {})) - SUMMARY_KEYS
+        extra = set(n.get("summary", {})) - STATUSES
         if extra:
             errs.append(f"node {nid}: unknown summary keys {sorted(extra)}")
         if n.get("status") != "affected" and not n.get("summary"):
@@ -167,88 +148,12 @@ def _smell_problems(smells: list, ids: set, edges: list) -> list[str]:
     return errs
 
 
-def _map(data: dict) -> list[str]:
-    errs = [] if isinstance(data.get("title"), str) else ["'title' must be a string"]
-    unsupported = data.get("unsupported")
-    if not isinstance(unsupported, dict) or not all(
-        isinstance(k, str) and isinstance(v, int) for k, v in unsupported.items()
-    ):
-        errs.append("'unsupported' must map extensions to file counts")
-    for key, fields in _MAP_STRING_FIELDS.items():
-        items = data.get(key)
-        if not isinstance(items, list):
-            errs.append(f"'{key}' must be a list")
-            continue
-        for i, item in enumerate(items):
-            if not isinstance(item, dict) or not all(isinstance(item.get(f), str) for f in fields):
-                errs.append(f"{key} #{i}: must be an object with string {', '.join(fields)}")
-            elif key in ("groups", "smells") and not _is_str_list(item.get("nodes")):
-                errs.append(f"{key} #{i}: 'nodes' must be a list of node ids")
-    if errs:
-        return errs
-    if not data["nodes"]:
-        errs.append("nodes must not be empty")
-    ids: set[str] = set()
-    for n in data["nodes"]:
-        if not n["id"] or n["id"] in ids:
-            errs.append(f"node id missing or duplicated: {n['id']!r}")
-        ids.add(n["id"])
-        if not isinstance(n.get("lines"), int):
-            errs.append(f"node {n['id']}: lines must be an integer")
-    grouped = {(n, g["id"]) for g in data["groups"] for n in g["nodes"]}
-    errs += [
-        f"node {n['id']}: group {n['group']!r} does not list it"
-        for n in data["nodes"]
-        if (n["id"], n["group"]) not in grouped
-    ]
-    errs += [
-        f"group {g['id']!r}: nodes must be a non-empty list of node ids"
-        for g in data["groups"]
-        if not g["nodes"] or not set(g["nodes"]) <= ids
-    ]
-    errs += [
-        f"group {g['id']!r}: layer must be an integer >= 0"
-        for g in data["groups"]
-        if type(g.get("layer")) is not int or g["layer"] < 0
-    ]
-    for e in data["edges"]:
-        name = f"edge {e['from']}->{e['to']}"
-        if e["from"] not in ids or e["to"] not in ids:
-            errs.append(f"{name}: unknown node")
-        if e["kind"] not in MAP_EDGE_KINDS:
-            errs.append(f"{name}: kind must be one of {sorted(MAP_EDGE_KINDS)}")
-    group_ids = {g["id"] for g in data["groups"]}
-    for pk in data["packages"]:
-        name = f"package {pk['from']}->{pk['to']}"
-        if pk["from"] not in group_ids or pk["to"] not in group_ids or pk["from"] == pk["to"]:
-            errs.append(f"{name}: unknown group")
-        if type(pk.get("imports")) is not int or pk["imports"] < 1:
-            errs.append(f"{name}: imports must be a positive integer")
-        if pk["kind"] not in MAP_EDGE_KINDS:
-            errs.append(f"{name}: kind must be one of {sorted(MAP_EDGE_KINDS)}")
-        if pk["dir"] not in MAP_EDGE_DIRS:
-            errs.append(f"{name}: dir must be one of {sorted(MAP_EDGE_DIRS)}")
-    for i, sm in enumerate(data["smells"]):
-        name = f"smell #{i} ({sm['title']!r})"
-        if sm["kind"] not in MAP_SMELLS:
-            errs.append(f"{name}: kind must be one of {sorted(MAP_SMELLS)}")
-        if sm["severity"] not in SMELL_SEVERITIES:
-            errs.append(f"{name}: severity must be one of {sorted(SMELL_SEVERITIES)}")
-        if not sm["title"].strip() or not sm["evidence"].strip():
-            errs.append(f"{name}: missing title or evidence (no evidence, no smell)")
-        if not sm["nodes"] or not set(sm["nodes"]) <= ids:
-            errs.append(f"{name}: nodes must be a non-empty list of node ids")
-    return errs
-
-
-_VALIDATORS = {"diagram": _diagram, "map": _map}
-
-
 def validate(data: dict) -> list[str]:
+    """Problems in diagram data; a map comes from `map` itself and is not re-checked."""
     kind = data.get("kind", "diagram")
-    if not isinstance(kind, str) or kind not in _VALIDATORS:
-        return [f"kind must be one of {sorted(_VALIDATORS)}, got {kind!r}"]
-    return _VALIDATORS[kind](data)
+    if kind not in ("diagram", "map"):
+        return [f"kind must be one of ['diagram', 'map'], got {kind!r}"]
+    return _diagram(data) if kind == "diagram" else []
 
 
 def write(data: dict, out: Path) -> Path:

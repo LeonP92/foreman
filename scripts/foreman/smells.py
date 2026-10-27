@@ -137,6 +137,7 @@ def cap(found: list[Smell]) -> tuple[list[Smell], dict[str, dict[str, int]]]:
     return shown, {k: dict(c) for k, c in dropped.items()}
 
 
+KINDS = ("cycle", "layering", "hub", "cochange", "hotspot", "oversize", "duplicate", "deadcode")
 # kinds whose smell is one import edge, so `nodes` is [from, to]
 EDGE_KINDS = frozenset(["layering"])
 

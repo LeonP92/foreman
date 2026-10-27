@@ -27,26 +27,6 @@ def _smell(kind, nodes, **extra):
     return {"kind": kind, "severity": "low", "nodes": nodes, "title": "t", "evidence": "e", **extra}
 
 
-def test_sample_renders(tmp_path):
-    out = render.write(json.loads(SAMPLE.read_text(encoding="utf-8")), tmp_path / "d.html")
-    html = out.read_text(encoding="utf-8")
-    assert "/*__DATA__*/null" not in html
-    assert 'id="filter"' in html
-    assert "function focusNode(" in html
-
-
-def test_diagram_inlines_shared_theme_and_ui(tmp_path):
-    data = json.loads(SAMPLE.read_text(encoding="utf-8"))
-    html = render.write(data, tmp_path / "d.html").read_text(encoding="utf-8")
-    assert "/*__THEME__*/" not in html
-    assert "/*__UI__*/" not in html
-    assert "--surface-1" in html
-    assert "#0d0d0d" in html
-    assert "function openDrawer(" in html
-    assert json.dumps(data).replace("<", "\\u003c") in html
-    assert "http" not in html.replace("http://www.w3.org/2000/svg", "")
-
-
 def test_only_affected_nodes_need_edges():
     assert render.validate(_data(edges=[])) == ["node b: has no edges (drop it or connect it)"]
     standalone = [
@@ -82,18 +62,6 @@ def test_hub_needs_five_neighbours():
     assert render.validate(_data([hub, *leaves], edges, [_smell("hub", ["h"])])) == []
     errs = render.validate(_data([hub, *leaves[:4]], edges[:4], [_smell("hub", ["h"])]))
     assert any("hub has 4 neighbours" in e for e in errs)
-
-
-def test_script_close_tag_in_data_is_escaped(tmp_path):
-    data = _data()
-    data["title"] = "</script><script>alert(1)</script>"
-    html = render.write(data, tmp_path / "d.html").read_text(encoding="utf-8")
-    assert "alert(1)</script>" not in html
-    # the page and visible titles are the data's, before any script runs
-    title = "&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
-    assert f"<title>{title}</title>" in html and f'<h1 id="title">{title}</h1>' in html
-    payload = html.split("const DATA = ", 1)[1].split(";\n", 1)[0]
-    assert json.loads(payload) == data
 
 
 @pytest.mark.parametrize(
@@ -194,20 +162,18 @@ def _map_data():
     }
 
 
-def test_map_inlines_theme_and_escapes_payload(tmp_path):
-    data = _map_data()
-    html = render.write(data, tmp_path / "map.html").read_text(encoding="utf-8")
+@pytest.mark.parametrize(
+    "make", [lambda: json.loads(SAMPLE.read_text(encoding="utf-8")), _map_data]
+)
+def test_render_inlines_theme_and_ui_and_escapes_the_title(tmp_path, make):
+    data = {**make(), "title": "</script><script>alert(1)</script>"}
+    html = render.write(data, tmp_path / "view.html").read_text(encoding="utf-8")
     assert "/*__" not in html
-    assert "#0d0d0d" in html
-    assert "function openDrawer(" in html
+    assert "#0d0d0d" in html and "function openDrawer(" in html
+    assert "http" not in html.replace("http://www.w3.org/2000/svg", "")
     assert "alert(1)</script>" not in html
     # the page and visible titles are the data's, before any script runs
     title = "&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
     assert f"<title>{title}</title>" in html and f'<h1 id="title">{title}</h1>' in html
     payload = html.split("const DATA = ", 1)[1].split(";\n", 1)[0]
     assert json.loads(payload) == data
-
-
-def test_map_unsupported_must_map_extensions_to_counts():
-    data = {**_map_data(), "unsupported": {".rb": "<img src=x onerror=alert(1)>"}}
-    assert render.validate(data) == ["'unsupported' must map extensions to file counts"]

@@ -63,15 +63,12 @@ def test_map_groups_descend_from_single_src_dir(make_repo):
     }
 
 
-def test_map_validates_and_renders(make_repo, tmp_path):
+def test_map_renders(make_repo, tmp_path):
     root = make_repo({"pkg/a.py": "import pkg.b\n", "pkg/b.py": "x = 1\n", "lib.rb": "puts 1\n"})
     data = codemap.build(root, _config())
     assert data["unsupported"] == {".rb": 1}
-    assert render.validate(data) == []
     html = render.write(data, tmp_path / "map.html").read_text(encoding="utf-8")
     assert "/*__DATA__*/null" not in html
-    bad = {**data, "edges": [{"from": "pkg/a.py", "to": "nope", "kind": "call"}]}
-    assert len(render.validate(bad)) == 2
 
 
 def test_map_output_identical_across_hash_seeds(make_repo, tmp_path):
@@ -93,23 +90,6 @@ def test_map_output_identical_across_hash_seeds(make_repo, tmp_path):
         outs.append((printed, (out / "map.json").read_text(encoding="utf-8")))
     assert outs[0] == outs[1]
     assert outs[0][0]["smells"]
-
-
-def test_malformed_map_is_problems_not_exceptions():
-    bad = {
-        "kind": "map",
-        "title": "t",
-        "groups": [],
-        "nodes": [{"id": ["x"]}],
-        "edges": {},
-        "packages": [],
-        "smells": [],
-        "unsupported": {},
-    }
-    assert render.validate(bad) == [
-        "nodes #0: must be an object with string id, label, group, lang",
-        "'edges' must be a list",
-    ]
 
 
 def test_ungraphed_sources_are_map_nodes(make_repo):
@@ -236,36 +216,6 @@ def test_excepted_target_is_a_plain_import(make_repo):
         "app/api.py": "import",
         "app/b.py": "forbidden",
     }
-
-
-def test_map_rejects_bad_layer_and_packages():
-    data = {
-        "kind": "map",
-        "title": "t",
-        "groups": [
-            {"id": "a", "label": "a", "nodes": ["a/x.py"], "layer": -1},
-            {"id": "b", "label": "b", "nodes": ["b/y.py"], "layer": True},
-        ],
-        "nodes": [
-            {"id": "a/x.py", "label": "x.py", "group": "a", "lang": "python", "lines": 1},
-            {"id": "b/y.py", "label": "y.py", "group": "b", "lang": "python", "lines": 1},
-        ],
-        "edges": [{"from": "a/x.py", "to": "b/y.py", "kind": "import"}],
-        "packages": [
-            {"from": "a", "to": "b", "imports": 1, "kind": "import", "dir": "sideways"},
-            {"from": "a", "to": "zz", "imports": 0, "kind": "call", "dir": "down"},
-        ],
-        "smells": [],
-        "unsupported": {},
-    }
-    assert render.validate(data) == [
-        "group 'a': layer must be an integer >= 0",
-        "group 'b': layer must be an integer >= 0",
-        "package a->b: dir must be one of ['down', 'up']",
-        "package a->zz: unknown group",
-        "package a->zz: imports must be a positive integer",
-        "package a->zz: kind must be one of ['cycle', 'forbidden', 'import']",
-    ]
 
 
 def test_configured_entry_points_and_infra_files(make_repo):

@@ -8,7 +8,7 @@ from collections import Counter
 from graphlib import TopologicalSorter
 from pathlib import Path
 
-from foreman import dupes, graph, history, metrics, render, smells
+from foreman import dupes, graph, history, metrics, smells
 from foreman.files import list_files
 from foreman.langs import go_package
 
@@ -208,7 +208,7 @@ def dismiss(data: dict, triage: dict) -> dict:
                 f"triage dismissed #{i}: needs a string kind, a list of nodes and a reason"
                 " (title optional)"
             )
-        if e["kind"] not in render.MAP_SMELLS:
+        if e["kind"] not in smells.KINDS:
             raise ValueError(f"triage dismissed #{i}: unknown kind {e['kind']!r}")
         found = _matching(data["smells"], e)
         where = f"triage dismissed #{i}"
