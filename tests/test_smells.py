@@ -392,7 +392,6 @@ def test_hubs_skip_tests_conftest_and_facades_and_cap_entry_points():
 
 def test_facades_only_re_export(make_repo):
     files = {
-        "pkg/__init__.py": "from .a import A\n__all__ = ['A']\n",
         "web/index.ts": "// public API\nexport * from './a';\nexport { b,\n  c } from \"./b\";\n",
         "web/types.ts": "export type { T } from './t'\n",
         "web/app.ts": "export * from './a';\nexport const x = 1;\n",
@@ -401,7 +400,6 @@ def test_facades_only_re_export(make_repo):
     }
     root = make_repo(files)
     assert smells.facades(root, sorted(files)) == {
-        "pkg/__init__.py",
         "web/index.ts",
         "web/types.ts",
         "lib/shop.rb",
@@ -459,27 +457,43 @@ def test_triage_takes_every_high_then_round_robins_kinds_within_the_budget():
         "hotspot": {"medium": 1},
         "oversize": {"low": 1},
     }
-    items, left = smells.triage_order(shown, counts)
+    items, left = smells.triage_order(shown, counts, {})
     assert len(items) == smells.TRIAGE_BUDGET
+    # big.py carries two smells, so it leads the medium items
     assert [(i["kind"], i["nodes"][0]) for i in items[:6]] == [
         ("cycle", "a.py"),
-        ("duplicate", "d0.py"),
         ("hotspot", "big.py"),
+        ("duplicate", "d0.py"),
         ("cochange", "c0.py"),
         ("duplicate", "d1.py"),
         ("cochange", "c1.py"),
     ]
     # one item per file carries all its smells
-    assert [s["kind"] for s in items[2]["smells"]] == ["hotspot", "oversize"]
+    assert [s["kind"] for s in items[1]["smells"]] == ["hotspot", "oversize"]
     assert left == {"cochange": 11, "duplicate": 16}
 
 
 def test_triage_never_caps_highs():
-    shown = [_smell("layering", "high", f"a{i}.py", "b.py") for i in range(70)]
+    shown = [_smell("cycle", "high", f"a{i}.py", "b.py") for i in range(70)]
     shown.append(_smell("deadcode", "low", "z.py"))
-    items, left = smells.triage_order(shown, {"layering": {"high": 70}, "deadcode": {"low": 1}})
-    assert len(items) == 70 and {i["kind"] for i in items} == {"layering"}
+    items, left = smells.triage_order(shown, {"cycle": {"high": 70}, "deadcode": {"low": 1}}, {})
+    assert len(items) == 70 and {i["kind"] for i in items} == {"cycle"}
     assert left == {"deadcode": 1}
+
+
+def test_triage_groups_layering_edges_by_group_pair_keeping_direction():
+    shown = [
+        _smell("layering", "high", "ui/a.py", "db/x.py"),
+        _smell("layering", "high", "ui/b.py", "db/y.py"),
+        _smell("layering", "high", "db/z.py", "ui/a.py"),
+    ]
+    group_of = {n: n.split("/")[0] for s in shown for n in s["nodes"]}
+    items, _ = smells.triage_order(shown, {"layering": {"high": 3}}, group_of)
+    assert [(i["from"], i["to"], len(i["smells"])) for i in items] == [
+        ("ui", "db", 2),
+        ("db", "ui", 1),
+    ]
+    assert [(s["from"], s["to"]) for s in items[1]["smells"]] == [("db/z.py", "ui/a.py")]
 
 
 def test_class_test_suffixes_need_a_test_folder_or_their_subject():

@@ -71,7 +71,7 @@ def _map(args) -> tuple[dict, int]:
     summary = {"groups": len(data["groups"]), "nodes": len(data["nodes"])}
     if not args.dismiss:
         summary["triage"], summary["not_triaged"] = smells.triage_order(
-            data["smells"], data["counts"]
+            data["smells"], data["counts"], {n["id"]: n["group"] for n in data["nodes"]}
         )
     return {
         "html": html.as_posix(),

@@ -137,23 +137,35 @@ def cap(found: list[Smell]) -> tuple[list[Smell], dict[str, dict[str, int]]]:
     return shown, {k: dict(c) for k, c in dropped.items()}
 
 
+# kinds whose smell is one import edge, so `nodes` is [from, to]
+EDGE_KINDS = frozenset(["layering"])
+
+
 def triage_order(
-    shown: list[Smell], counts: dict[str, dict[str, int]]
+    shown: list[Smell], counts: dict[str, dict[str, int]], group_of: dict[str, str]
 ) -> tuple[list[dict], dict[str, int]]:
     """Triage items within the budget, in order, and per kind how many smells are left untriaged.
 
-    An item is one node set with all its smells. Every high item comes first; then the rest
-    round-robin across kinds so one big kind can't starve the others.
+    An item is one node set with all its smells, or for an edge kind every edge from one group
+    to another. Every high item comes first; then the rest round-robin across kinds, items with
+    more smells first within a severity, so one big kind can't starve the others.
     """
     items: dict[tuple[str, ...], dict] = {}
     for position, s in enumerate(shown):
-        key = tuple(sorted(s["nodes"]))
-        item = items.setdefault(key, {"nodes": list(key), "smells": [], "rank": (3, 0)})
-        item["smells"].append({k: s[k] for k in ("kind", "severity", "title")})
+        entry = {k: s[k] for k in ("kind", "severity", "title")}
+        if s["kind"] in EDGE_KINDS:
+            start, end = s["nodes"]
+            ends = {"from": group_of[start], "to": group_of[end]}
+            item = items.setdefault((s["kind"], ends["from"], ends["to"]), {**ends, "smells": []})
+            entry.update({"from": start, "to": end})
+        else:
+            key = tuple(sorted(s["nodes"]))
+            item = items.setdefault(key, {"nodes": list(key), "smells": []})
+        item["smells"].append(entry)
         # the map lists each kind worst and biggest first, so the first worst smell leads
-        if (rank := (SEVERITY_RANK[s["severity"]], position)) < item["rank"]:
+        if (rank := (SEVERITY_RANK[s["severity"]], position)) < item.get("rank", (3, 0)):
             item.update(rank=rank, kind=s["kind"], severity=s["severity"])
-    ordered = sorted(items.values(), key=lambda i: i["rank"])
+    ordered = sorted(items.values(), key=lambda i: (i["rank"][0], -len(i["smells"]), i["rank"]))
     picked = [i for i in ordered if i["severity"] == "high"]
     queues: dict[str, list[dict]] = {}
     for i in ordered:

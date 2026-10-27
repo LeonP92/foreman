@@ -41,20 +41,24 @@ run the UI pass).
    smell by kind and severity, before that cap), `unsupported` (file extensions that need
    an import rule), `triage` and `not_triaged`.
 3. **Triage the candidates.** The map's smells are candidates, not findings. `triage` is
-   the order to read them in: one item per file (or file pair/set) carrying all its smells;
-   every high item first (never capped), then medium and low items round-robin across kinds,
-   biggest first within a kind, up to 60 items in all (more only if the user asks).
+   the order to read them in: one item per file (or file pair/set) carrying all its smells,
+   and for `layering` one item per group pair (`from` → `to`) carrying each forbidden import
+   with its own `from` and `to` files; every high item first (never capped), then medium and
+   low items round-robin across kinds, items with more smells first, up to 60 items in all
+   (more only if the user asks).
    `not_triaged` counts by kind what is left. For each item read the files involved and
    apply the checklist in [`references/triage.md`](references/triage.md): mark each smell
    CONFIRMED or DISMISSED with a one-line reason and evidence (`file:line`). Burden of
    proof: CONFIRM only when you can state a concrete cost — who is hurt and how (a change
    that must touch N places, a bug class, a layer rule the repo states). Otherwise DISMISS
    with the reason, including "no checklist type fits, and no concrete cost found". No case,
-   no finding. Write a suggested next step for each confirmed one. Thresholds are relative
-   to this repo's own spread, not fixed numbers.
+   no finding. An item with several confirmed smells is ONE finding that lists them. Write a
+   suggested next step for each finding. Thresholds are relative to this repo's own spread,
+   not fixed numbers.
 4. **Re-render without the dismissed.** Write `<run>/triage.json` as
    `{"dismissed": [{"kind": …, "nodes": […], "title": …, "reason": …}]}`, with `kind`,
-   `nodes` and `title` as the map lists them, then run
+   `nodes` and `title` as the map lists them (a `layering` smell's nodes are its `from` and
+   `to` files), then run
    `python3 -I <root>/scripts/run.py map --out <run> --dismiss <run>/triage.json`. It
    rewrites the map without them and counts them per kind under `dismissed`; fix any
    entry it rejects and re-run.
@@ -92,9 +96,9 @@ counts confirmed smells only.
 1. **Glance:** the verdict, the line
    "N candidates · C confirmed · D dismissed · U not triaged (budget)", a table of confirmed
    smells by kind × severity, the map path, and languages with no import rule.
-2. **Confirmed smells**, ranked by severity then the map's order and numbered: the modules,
-   the evidence (`file:line`), and a suggested next step (split a file, move an import
-   behind an interface, delete it).
+2. **Findings**, ranked by severity then the map's order and numbered, one per triage item:
+   the modules, its confirmed smells (kind and severity each), the evidence (`file:line`),
+   and a suggested next step (split a file, move an import behind an interface, delete it).
 3. **Appendix:** every dismissal (kind, modules, reason, evidence), and per kind how many
    were not triaged (`not_triaged`).
 
