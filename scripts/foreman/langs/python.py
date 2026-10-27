@@ -23,7 +23,12 @@ def _module_file(base: str, index: RepoIndex) -> str | None:
 def _bases(path: str, level: int, module: str | None, index: RepoIndex) -> list[str]:
     parts = module.split(".") if module else []
     if level == 0:
-        return [posixpath.join(root, *parts) for root in index.python_roots]
+        # in a monorepo several roots can hold the same package: the importer's own root wins
+        mine = [r for r in index.python_roots if not r or path.startswith(r + "/")]
+        roots = sorted(mine, key=len, reverse=True) + [
+            r for r in index.python_roots if r not in mine
+        ]
+        return [posixpath.join(root, *parts) for root in roots]
     package = posixpath.dirname(path)
     for _ in range(level - 1):
         package = posixpath.dirname(package)

@@ -146,6 +146,16 @@ def test_python_inferred_source_roots(make_repo):
     } <= edge_set(build(root))
 
 
+def test_python_prefers_the_importers_own_source_root(make_repo):
+    files = {f"services/{s}/app/{m}": "" for s in "ab" for m in ("__init__.py", "db.py")}
+    files["services/a/app/main.py"] = "from app import db\n"
+    files["services/b/app/main.py"] = "from app import db\n"
+    assert {
+        ("services/a/app/main.py", "services/a/app/db.py", False),
+        ("services/b/app/main.py", "services/b/app/db.py", False),
+    } <= edge_set(build(make_repo(files)))
+
+
 def test_js_specifier_maps_to_ts_source(make_repo):
     root = make_repo({"a.ts": "import x from './c.js'\n", "c.ts": ""})
     assert edge_set(build(root)) == {("a.ts", "c.ts", False)}
