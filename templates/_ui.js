@@ -39,6 +39,72 @@ function markEdges(list, state) {
   }
 }
 
+// Floating tooltip for things a native title can't serve (keyboard focus): showTip(element, text) / hideTip().
+const tipEl = Object.assign(document.createElement("div"), {className: "tip", role: "tooltip"});
+document.body.appendChild(tipEl);
+function showTip(target, text) {
+  const r = target.getBoundingClientRect();
+  tipEl.textContent = text;
+  tipEl.style.left = r.left + r.width / 2 + "px";
+  tipEl.style.top = r.top - 6 + "px";
+  tipEl.classList.add("on");
+}
+const hideTip = () => tipEl.classList.remove("on");
+
+// Top-bar "Edges · k of n" menu over the kinds in `counts` ({kind: n}). An unchecked kind sets `hide-<kind>` on
+// <body>, which the theme turns into hidden edges and dimmed matrix cells. Remembered per page.
+const EDGE_MENU = {import: "Imports", call: "Calls", impl: "Implements", cycle: "Cycles", forbidden: "Forbidden", twin: "Twin"};
+const PROBLEM_KINDS = ["cycle", "forbidden", "twin"];
+function edgeMenu(counts) {
+  const kinds = Object.keys(EDGE_MENU).filter(k => counts[k]), key = "foreman-edges:" + location.pathname;
+  const hidden = new Set(JSON.parse(localStorage.getItem(key) || "[]").filter(k => kinds.includes(k)));
+  const wrap = Object.assign(document.createElement("div"), {className: "menu-wrap"});
+  wrap.innerHTML = `<button class="icon-btn" type="button" id="edges" aria-haspopup="menu" aria-expanded="false">Edges · <b></b> ▾</button>`
+    + `<div class="menu" id="edges-menu" role="menu" aria-label="Edge kinds" hidden>`
+    + kinds.map(k => `<div class="menu-item" role="menuitemcheckbox" tabindex="-1" data-kind="${k}"><span class="check"></span>`
+      + `<svg width="22" height="8" class="sev-medium" aria-hidden="true"><line class="edge ${k}" x1="1" y1="4" x2="22" y2="4"/></svg>`
+      + `<span>${EDGE_MENU[k]}</span><span class="n">${counts[k].toLocaleString()}</span></div>`).join("")
+    + `<div class="menu-actions"><div class="menu-item" role="menuitem" tabindex="-1" data-set="all">Select all</div>`
+    + `<div class="menu-item" role="menuitem" tabindex="-1" data-set="problems">Problems only</div></div></div>`;
+  document.querySelector("[popovertarget=legend]").before(wrap);
+  const button = wrap.querySelector("#edges"), menu = wrap.querySelector("#edges-menu");
+  const entries = [...menu.querySelectorAll(".menu-item")];
+  const apply = () => {
+    kinds.forEach(k => {
+      document.body.classList.toggle("hide-" + k, hidden.has(k));
+      menu.querySelector(`[data-kind="${k}"]`).setAttribute("aria-checked", !hidden.has(k));
+    });
+    button.querySelector("b").textContent = `${kinds.length - hidden.size} of ${kinds.length}`;
+    localStorage.setItem(key, JSON.stringify([...hidden]));
+  };
+  const toggleMenu = open => {
+    menu.hidden = !open;
+    button.setAttribute("aria-expanded", open);
+    (open ? entries[0] : button).focus();
+  };
+  const activate = item => {
+    const k = item.dataset.kind, set = item.dataset.set;
+    if (k) hidden.has(k) ? hidden.delete(k) : hidden.add(k);
+    else { hidden.clear(); if (set === "problems") kinds.filter(x => !PROBLEM_KINDS.includes(x)).forEach(x => hidden.add(x)); }
+    apply();
+  };
+  button.addEventListener("click", ev => { ev.stopPropagation(); toggleMenu(menu.hidden); });
+  menu.addEventListener("click", ev => { ev.stopPropagation(); const item = ev.target.closest(".menu-item"); if (item) activate(item); });
+  menu.addEventListener("keydown", ev => {
+    const i = entries.indexOf(document.activeElement), move = {ArrowDown: 1, ArrowUp: -1}[ev.key];
+    if (move) entries[(i + move + entries.length) % entries.length].focus();
+    else if (ev.key === "Home" || ev.key === "End") entries.at(ev.key === "Home" ? 0 : -1).focus();
+    else if ((ev.key === " " || ev.key === "Enter") && i >= 0) activate(entries[i]);
+    else if (ev.key === "Escape") toggleMenu(false);
+    else if (ev.key === "Tab") { menu.hidden = true; button.setAttribute("aria-expanded", false); return; }
+    else return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  });
+  document.addEventListener("click", () => { if (!menu.hidden) { menu.hidden = true; button.setAttribute("aria-expanded", false); } });
+  apply();
+}
+
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)");
 const THEME_KEY = "foreman-theme";
 

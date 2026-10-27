@@ -273,6 +273,9 @@ initUI({
   },
   onFilterEnter: q => { const found = q && matches(q); if (found && found.length) focusNode(found[0]); },
 });
+const kindCounts = {twin: twinEls.length};
+DATA.edges.forEach(e => kindCounts[e.kind] = (kindCounts[e.kind] || 0) + 1);
+edgeMenu(kindCounts);
 layout();
 // The whole pane, not just the SVG, so a click below a short graph also clears.
 canvas.addEventListener("click", clearHighlight);
