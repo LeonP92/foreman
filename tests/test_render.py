@@ -35,6 +35,18 @@ def test_sample_renders(tmp_path):
     assert "function focusNode(" in html
 
 
+def test_diagram_inlines_shared_theme_and_ui(tmp_path):
+    data = json.loads(SAMPLE.read_text(encoding="utf-8"))
+    html = render.write(data, tmp_path / "d.html").read_text(encoding="utf-8")
+    assert "/*__THEME__*/" not in html
+    assert "/*__UI__*/" not in html
+    assert "--surface-1" in html
+    assert "#0d0d0d" in html
+    assert "function openDrawer(" in html
+    assert json.dumps(data).replace("<", "\\u003c") in html
+    assert "http" not in html.replace("http://www.w3.org/2000/svg", "")
+
+
 def test_rejects_node_without_edges():
     assert "node b: has no edges (drop it or connect it)" in render.validate(_data(edges=[]))
 

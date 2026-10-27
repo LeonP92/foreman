@@ -231,7 +231,12 @@ def write(data: dict, out: Path) -> Path:
     errs = validate(data)
     if errs:
         raise ValueError(f"invalid {kind}: {len(errs)} problems\n" + "\n".join(errs))
-    template = (TEMPLATES / f"{kind}.html").read_text(encoding="utf-8")
+    template = (
+        (TEMPLATES / f"{kind}.html")
+        .read_text(encoding="utf-8")
+        .replace("/*__THEME__*/", (TEMPLATES / "_theme.css").read_text(encoding="utf-8"))
+        .replace("/*__UI__*/", (TEMPLATES / "_ui.js").read_text(encoding="utf-8"))
+    )
     # `<` only occurs inside JSON strings, so < keeps `</script>` and `<!--` inert.
     payload = json.dumps(data).replace("<", "\\u003c")
     out.write_text(template.replace("/*__DATA__*/null", payload), encoding="utf-8")
