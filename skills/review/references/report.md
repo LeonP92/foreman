@@ -37,7 +37,7 @@ Design findings add **Rule:** the rule and where it is written.
 2. **Browser:** the test list and where it came from, the data set up, a table of
    item → base / branch, and the output folder.
 3. **Diagram:** the path, and the smells with their evidence.
-4. **Not checked:** one line per gap and why.
+4. **Not checked:** each gap, with the reason.
 
 ## Example (invented)
 

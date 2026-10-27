@@ -5,9 +5,10 @@ looks for lines the change could have done without.
 
 ## Look past the changed lines
 
-Judge new code against its surroundings, not on its own. Open the functions it calls and
-the places that call it. A new helper can look reasonable and still repeat one that lives
-elsewhere in the repo; a check that seems to be missing may already run one level up.
+Judge new code against its surroundings, not on its own. Open whatever the new code
+depends on and everything that depends on it. A new helper can look reasonable and still
+repeat one that lives elsewhere in the repo; a check that seems to be missing may already
+run one level up.
 
 ## Three questions, in this order
 
@@ -16,8 +17,9 @@ For each thing the change adds (a function, a class, an option, a branch, a file
 1. **Is anything using it?** Look for a setting no caller changes, a branch for input that
    can't arrive, a wrapper whose only job is to forward a call, code parked for a future
    feature. Suggest removing it.
-2. **Is it already in the repo?** Search for a helper, component or query doing the same
-   job. Suggest switching to that one and removing the new copy.
+2. **Is it already in the repo?** Search for existing code that already does this job:
+   a utility, a UI piece, a database query. Suggest switching to that one and removing
+   the new copy.
 3. **Is it already in the language or a dependency the repo installs?** Date arithmetic,
    retries, parsing, form validation the framework handles. Suggest calling that instead.
 

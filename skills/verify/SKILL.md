@@ -79,8 +79,9 @@ Record what data you created; the report says what changed.
 For each worktree: pick a free port (for example, bind a socket to port 0 and read the
 port back) and start `[server] start` with `{port}` filled in, using the launcher in
 `references/servers.md`: it gives the server its own process group and the explicit
-environment, so the whole tree can be stopped later. Poll `http://127.0.0.1:<port><ready_path>` until it answers; if it never
-does, report the server's last output lines and stop.
+environment, so the whole tree can be stopped later. Poll
+`http://127.0.0.1:<port><ready_path>` until it answers; if it never does, report the
+server's last output lines and stop.
 
 ## 5. One Playwright spec
 

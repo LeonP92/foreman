@@ -29,10 +29,10 @@ uncommitted changes, work in a temporary worktree of the branch (`git worktree a
 
 ## Steps
 
-1. **Understand.** Read the diff, then the code it touches: callers of changed functions,
-   their tests, the interfaces they implement. Read the repo's instructions (`AGENTS.md`,
-   `CLAUDE.md`, `CONTRIBUTING*`) and every doc they or `[rules] docs` say applies to the
-   touched areas. Write 2–3 sentences on what the change does.
+1. **Understand.** Start from the diff, then open what it reaches: whoever calls the
+   changed functions, the tests that exercise them, the interfaces they implement. Read
+   the repo's instructions (`AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING*`) and every doc they
+   or `[rules] docs` say applies to the touched areas. Write 2–3 sentences on what the change does.
 2. **Simplicity.** Apply `references/simplicity.md`.
 3. **Design.** Check the change against the repo's stated rules: layering, what a package
    may export, compliance rules (audit logging, data retention), security rules (CSRF,
@@ -63,10 +63,11 @@ pick them out by number. Do not fix anything.
 - The smallest fix, and what happens if it's skipped.
 
 Severity:
-- **Must fix**: a bug, a security hole, data loss, or something that breaks at the load
-  the repo expects.
-- **Should fix**: risky code with no test, real slowness, duplication, code that shouldn't
-  exist, a browser regression.
+- **Must fix**: wrong results, an opening for an attacker, lost or corrupted data, or a
+  failure under the traffic the repo is built for.
+- **Should fix**: a page that works on base and breaks on the branch, untested logic that
+  can break, logic repeated in two places, code nothing needs, a slowdown someone will
+  notice.
 - **Nice to have**: everything else worth a sentence.
 
 Leave out personal preference, worries you can't back with a case, and anything the
