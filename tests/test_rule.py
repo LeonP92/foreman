@@ -36,11 +36,44 @@ def test_java_rule_maps_packages_and_skips_external(make_repo):
 
 
 def test_check_reports_resolution_rate(make_repo):
-    root = make_repo({"a.rb": "require_relative 'b'\nrequire_relative 'missing'\n", "b.rb": ""})
+    root = make_repo(
+        {
+            "a.rb": "require_relative 'b'\nrequire_relative 'lib/missing'\nrequire_relative 'set'\n",
+            "b.rb": "",
+        }
+    )
     result = rule.check(root, RUBY)
-    assert (result["files"], result["matches"], result["resolved"]) == (2, 2, 1)
+    assert (result["files"], result["matches"], result["resolved"]) == (2, 3, 1)
+    assert result["external"] == 1
     assert result["ok"] is True
-    assert result["unresolved_examples"] == [{"import": "missing", "path": "a.rb"}]
+    assert result["unresolved_examples"] == [{"import": "lib/missing", "path": "a.rb"}]
+
+
+def test_check_counts_only_unknown_bare_names_as_external(make_repo):
+    # `pricing` names a repo file the templates can't reach, so it is a miss, not external
+    root = make_repo(
+        {"a.rb": "require_relative 'pricing'\nrequire_relative 'json'\n", "lib/pricing.rb": ""}
+    )
+    result = rule.check(root, RUBY)
+    assert (result["matches"], result["resolved"], result["external"]) == (2, 0, 1)
+    assert result["unresolved_examples"] == [{"import": "pricing", "path": "a.rb"}]
+    assert result["ok"] is False
+
+
+def test_check_shows_import_lines_the_pattern_missed(make_repo):
+    root = make_repo(
+        {
+            "a.rb": "require_relative 'b'\nrequire_relative File.join(__dir__, 'c')\n",
+            "b.rb": "# require_relative_helper is not the keyword\n",
+            "Cart.java": "import shop.Money;\nimport static shop.Util.round;\n",
+        }
+    )
+    assert rule.check(root, RUBY)["unmatched_examples"] == [
+        {"line": "require_relative File.join(__dir__, 'c')", "path": "a.rb"}
+    ]
+    assert rule.check(root, JAVA)["unmatched_examples"] == [
+        {"line": "import static shop.Util.round;", "path": "Cart.java"}
+    ]
 
 
 def test_check_fails_when_nothing_matches(make_repo):

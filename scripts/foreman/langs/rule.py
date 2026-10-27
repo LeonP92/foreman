@@ -65,24 +65,53 @@ def imports(path: str, text: str, index: RepoIndex, rule: Rule) -> list[tuple[st
     return [(target, False) for target in found if target]
 
 
+# The first literal word of a pattern (`require_relative`, `import`); `\s`, `\w` are skipped.
+# shortcut: a named group `(?P<x>...)` before the keyword yields the group name; fine for the
+# import patterns setup writes.
+_KEYWORD = re.compile(r"(?<![\\\w])[A-Za-z_]\w+")
+
+
+def _unmatched(text: str, rule: Rule) -> list[str]:
+    """Lines holding the pattern's keyword as a word that the pattern doesn't match."""
+    keyword = _KEYWORD.search(rule["pattern"])
+    if keyword is None:
+        return []
+    word = re.compile(rf"\b{keyword[0]}\b")
+    return [
+        line.strip()
+        for line in text.split("\n")
+        if word.search(line) and not re.search(rule["pattern"], line, re.MULTILINE)
+    ]
+
+
 def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
     files = list_files(root, ignore)
     index = make_index(root, files)
+    stems = {posixpath.splitext(posixpath.basename(p))[0] for p in files}
     covered = [p for p in files if posixpath.splitext(p)[1] in rule["extensions"]]
-    matches = resolved = 0
+    matches = resolved = external = 0
     examples = []
+    unmatched = []
     for path in covered:
-        for capture in _captures(read_text(root / path) or "", rule):
+        text = read_text(root / path) or ""
+        for capture in _captures(text, rule):
             matches += 1
             if _resolve(path, capture, index, rule):
                 resolved += 1
+            # a bare name no repo file has (`json`, `java.util.List`) is a library import
+            elif "/" not in capture and posixpath.splitext(capture)[0] not in stems:
+                external += 1
             elif len(examples) < 5:
                 examples.append({"import": capture, "path": path})
+        unmatched += [{"line": line, "path": path} for line in _unmatched(text, rule)]
+    internal = matches - external
     return {
         "files": len(covered),
         "matches": matches,
         "resolved": resolved,
+        "external": external,
         # below half resolved, the graph is so sparse most files would look dead
-        "ok": bool(covered) and matches > 0 and resolved / matches >= 0.5,
+        "ok": bool(covered) and internal > 0 and resolved / internal >= 0.5,
         "unresolved_examples": examples,
+        "unmatched_examples": unmatched[:5],
     }

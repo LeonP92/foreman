@@ -124,7 +124,10 @@ an import rule; write one at a time:
    (regex; group 1 is the imported name) and `resolve` (candidate paths using `{dir}`,
    `{1}`, `{1|path}`).
 3. Run `python3 -I <root>/scripts/run.py graph-rule-check --name <language>`. It reports how
-   many imports matched and resolved, with examples that didn't. Adjust and re-run.
+   many imports matched and resolved, with examples that didn't (`unresolved_examples`),
+   lines with the pattern's keyword that it missed (`unmatched_examples`), and how many
+   captures look `external` (no `/` and no repo file by that name), which don't count
+   against the rate. Adjust and re-run.
 4. After 3 tries without a rule that resolves most imports, remove it and tell the user
    these files need an import rule; the map will list them under "No import rule yet".
    If the files hold no import statements to match at all (shell scripts sourced by a
