@@ -37,7 +37,15 @@
            "contentType": "application/json",
            "body": "Ii9vdXQvdG90YWwtc2hvd3MtMy1iYXNlLnBuZyI="
           }
-         ]
+         ],
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('#total')\nExpected: \u001b[32m\"3\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  1000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" locator('#total') with timeout 1000ms\u001b[22m\n\u001b[2m  - waiting for locator('#total')\u001b[22m\n\u001b[2m    11 \u00d7 locator resolved to <p id=\"total\">2</p>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n",
+          "location": {
+           "file": "/cache/runs/20260101T000000Z-1-abcd/total.spec.mjs",
+           "column": 40,
+           "line": 5
+          }
+         }
         }
        ],
        "status": "unexpected"

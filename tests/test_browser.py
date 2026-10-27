@@ -25,6 +25,12 @@ def test_parse_results_maps_projects_errors_and_screenshots():
             ],
             "bad_responses": ["404 http://127.0.0.1:50001/missing.js"],
             "screenshots": ["/out/total-shows-3-base.png"],
+            "error": "Error: expect(locator).toHaveText(expected) failed\n"
+            "Locator:  locator('#total')\n"
+            'Expected: "3"\n'
+            'Received: "2"\n'
+            "Timeout:  1000ms",
+            "location": "total.spec.mjs:5:40",
         },
         {
             "title": "total shows 3",

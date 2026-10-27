@@ -37,6 +37,9 @@ has each `/` replaced by `-`.
    `--root <worktree> --config <repo>/.foreman/config.toml`). It returns the changed files
    plus everything one import away, the edges between them, cycles through them, and
    `unsupported` extensions. Never add an import edge from memory.
+   - Check `missing`: paths it couldn't find. Deleted or ignored files belong there;
+     anything else is a typo or several paths passed as one argument (pass each
+     separately). Fix and re-run until only those are left.
    - Run the same command on a worktree at `BASE`. A cycle in both is pre-existing; say
      so in `notes`. Say in `notes` which cycles are type-only (`type_only` edges).
    - Files of a language with no import rule: read their imports directly and say so in

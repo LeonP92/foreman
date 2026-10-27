@@ -185,3 +185,12 @@ def test_cli_files_scope_is_normalised(make_repo, capsys):
         assert cli.main(["graph", "--root", str(root), "--files", given]) == 0
         edges = json.loads(capsys.readouterr().out)["edges"]
         assert edges == [{"from": "a.py", "to": "sub/b.py", "type_only": False}]
+
+
+def test_files_not_in_the_listing_are_reported_missing(make_repo, capsys):
+    root = make_repo({"a.py": "import b\n", "b.py": ""})
+    assert cli.main(["graph", "--root", str(root), "--files", "b.py", "gone.py", "a.py c.py"]) == 0
+    graph = json.loads(capsys.readouterr().out)
+    assert graph["missing"] == ["a.py c.py", "gone.py"]
+    assert [n["id"] for n in graph["nodes"]] == ["a.py", "b.py"]
+    assert build(root)["missing"] == []

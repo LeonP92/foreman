@@ -17,6 +17,7 @@ class Graph(TypedDict):
     cycles: list[list[str]]
     skipped: list[dict]
     unsupported: dict[str, int]
+    missing: list[str]
 
 
 def cycles(edges: Sequence[Mapping]) -> list[list[str]]:
@@ -121,4 +122,6 @@ def build(
         "cycles": [c for c in cycles(all_edges) if scope_nodes.intersection(c)],
         "skipped": skipped,
         "unsupported": dict(unsupported),
+        # deleted, ignored or misspelt paths; silently dropping them looks like an empty change
+        "missing": sorted(set(paths or ()) - set(files)),
     }

@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import time
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from foreman.render import TEMPLATES
 
@@ -27,6 +27,8 @@ _DIRECT_IMPORT = re.compile(
     r"""|require\(['"]@playwright/test['"]\)""",
     re.MULTILINE,
 )
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+ERROR_LINES = 5
 
 
 def cache_dir() -> Path:
@@ -119,6 +121,15 @@ def _attachments(result: dict, name: str) -> list:
     ]
 
 
+def _failure(error: dict) -> dict:
+    lines = [line for line in _ANSI.sub("", error.get("message", "")).splitlines() if line.strip()]
+    failure = {"error": "\n".join(lines[:ERROR_LINES])}
+    if loc := error.get("location"):
+        # the run dir is temporary; the spec is kept in --out under the same name
+        failure["location"] = f"{PureWindowsPath(loc['file']).name}:{loc['line']}:{loc['column']}"
+    return failure
+
+
 def parse_results(report: dict) -> list[dict]:
     if report.get("errors"):
         raise ValueError(f"spec failed to load: {report['errors'][0]['message'].splitlines()[0]}")
@@ -141,6 +152,7 @@ def parse_results(report: dict) -> list[dict]:
                         "screenshots": [
                             Path(p).as_posix() for p in _attachments(result, "foreman-screenshot")
                         ],
+                        **(_failure(result["error"]) if "error" in result else {}),
                     }
                 )
     if not tests:
