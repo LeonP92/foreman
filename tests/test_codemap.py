@@ -303,3 +303,42 @@ def test_large_repo_maps_quickly(make_repo):
     # measured 3.0 s (mention scan 0.3 s) on a laptop; the bound catches a per-file scan
     assert time.perf_counter() - start < 10
     assert len(data["nodes"]) == 3000
+
+
+def _write_json(path, data):
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+def test_map_dismiss_drops_triaged_smells_and_keeps_counts(make_repo, tmp_path, capsys):
+    root = make_repo({f"m{i:02}.py": "" for i in range(23)})
+    out = tmp_path / "out"
+    assert main(["map", "--root", str(root), "--out", str(out)]) == 0
+    capsys.readouterr()
+    triage = {"dismissed": [{"kind": "deadcode", "nodes": ["m00.py"], "reason": "loaded by name"}]}
+    path = _write_json(tmp_path / "triage.json", triage)
+    assert main(["map", "--out", str(out), "--dismiss", path]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    data = json.loads((out / "map.json").read_text(encoding="utf-8"))
+    for result in (printed, data):
+        assert result["dismissed"] == {"deadcode": 1}
+        assert result["dropped"] == {"deadcode": 3}
+        assert result["counts"] == {"deadcode": {"low": 23}}
+        assert ["m00.py"] not in [s["nodes"] for s in result["smells"]]
+        assert len(result["smells"]) == 19
+    assert '"dismissed": {"deadcode": 1}' in (out / "map.html").read_text(encoding="utf-8")
+
+
+def test_map_dismiss_rejects_unknown_kind_or_nodes(make_repo, tmp_path, capsys):
+    out = tmp_path / "out"
+    assert main(["map", "--root", str(make_repo({"a.py": ""})), "--out", str(out)]) == 0
+    for entry, error in [
+        ({"kind": "smelly", "nodes": ["a.py"], "reason": "x"}, "unknown kind 'smelly'"),
+        ({"kind": "deadcode", "nodes": ["b.py"], "reason": "x"}, "no listed deadcode smell"),
+        ({"kind": "deadcode", "nodes": ["a.py"]}, "needs a string kind, a list of nodes"),
+    ]:
+        capsys.readouterr()
+        path = _write_json(tmp_path / "triage.json", {"dismissed": [entry]})
+        assert main(["map", "--out", str(out), "--dismiss", path]) == 1
+        err = capsys.readouterr().err
+        assert error in err and err.count("\n") == 1

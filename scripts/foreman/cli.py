@@ -57,7 +57,14 @@ def _render(args) -> tuple[dict, int]:
 
 
 def _map(args) -> tuple[dict, int]:
-    data = codemap.build(args.root, _load(args))
+    if args.dismiss:
+        # re-render the last map from --out, so triage never re-runs the scan
+        data = codemap.dismiss(
+            json.loads((args.out / "map.json").read_text(encoding="utf-8")),
+            json.loads(args.dismiss.read_text(encoding="utf-8")),
+        )
+    else:
+        data = codemap.build(args.root, _load(args))
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "map.json").write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
     html = render.write(data, args.out / "map.html")
@@ -68,6 +75,7 @@ def _map(args) -> tuple[dict, int]:
         "smells": data["smells"],
         "dropped": data["dropped"],
         "counts": data["counts"],
+        "dismissed": data.get("dismissed", {}),
         "unsupported": data["unsupported"],
     }, 0
 
@@ -93,7 +101,9 @@ _PARSER = _Parser(prog="foreman")
 _SUBPARSERS = _PARSER.add_subparsers(dest="command", required=True)
 _command("graph", _graph).add_argument("--files", nargs="+")
 _command("graph-rule-check", _graph_rule_check).add_argument("--name", required=True)
-_command("map", _map).add_argument("--out", type=Path, required=True)
+_map_parser = _command("map", _map)
+_map_parser.add_argument("--out", type=Path, required=True)
+_map_parser.add_argument("--dismiss", type=Path)
 _config_parser = _SUBPARSERS.add_parser("config-check")
 _config_parser.set_defaults(func=_config_check)
 _config_parser.add_argument("--path", type=Path, default=Path(".foreman/config.toml"))

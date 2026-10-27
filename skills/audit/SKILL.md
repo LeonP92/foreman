@@ -25,7 +25,7 @@ Each run writes to its own folder, `<run> = .foreman/reports/audit/<stamp>/`, wh
 `<stamp>` is the UTC start time as `%Y%m%dT%H%M%SZ`. Never write into an earlier run's
 folder; when done, write the stamp alone to `.foreman/reports/audit/latest`.
 
-Output: `<run>` (`map.html`, `map.json`, `audit.md`, and `smoke/` if you
+Output: `<run>` (`map.html`, `map.json`, `triage.json`, `audit.md`, and `smoke/` if you
 run the UI pass).
 
 ## Steps
@@ -40,12 +40,20 @@ run the UI pass).
    smells (at most 20 per kind), `dropped` (how many more each kind had), `counts` (every
    smell by kind and severity, before that cap), and `unsupported`: file extensions that
    need an import rule.
-3. **Read the top smells.** For the highest-ranked ones, open the files named in the
-   evidence and confirm the smell is real. Drop any that aren't (say why under
-   "Not checked" or in a line below the list), and write a suggested next step for each
-   one you keep. Thresholds are relative to this repo's own spread, not fixed numbers.
-4. **UI smoke (optional).** If the repo has a UI and `[server]` is set, see below.
-5. **Write the report** and remove the worktree.
+3. **Triage the candidates.** The map's smells are candidates, not findings. Take every
+   `high` one, then `medium` and `low` in the map's order, up to a budget of 60 in all
+   (more only if the user asks). For each, read the files involved and apply the checklist
+   in [`references/triage.md`](references/triage.md): mark it CONFIRMED or DISMISSED with a
+   one-line reason and evidence (`file:line`). Write a suggested next step for each
+   confirmed one. Thresholds are relative to this repo's own spread, not fixed numbers.
+4. **Re-render without the dismissed.** Write `<run>/triage.json` as
+   `{"dismissed": [{"kind": …, "nodes": […], "reason": …}]}`, with `kind` and `nodes` as the
+   map lists them, then run
+   `python3 -I <root>/scripts/run.py map --out <run> --dismiss <run>/triage.json`. It
+   rewrites the map without them and counts them per kind under `dismissed`; fix any
+   entry it rejects and re-run.
+5. **UI smoke (optional).** If the repo has a UI and `[server]` is set, see below.
+6. **Write the report** and remove the worktree.
 
 ## Smells the map finds
 
@@ -71,26 +79,29 @@ with no `--branch`. Each problem is a finding with steps, expected, actual and s
 
 ## Report
 
-Write `<run>/audit.md` in three parts. Totals come from `counts`, so they include smells
-past the per-kind cap.
+Write `<run>/audit.md` in three parts. Candidates come from `counts`, so they include
+smells past the per-kind cap; those and any past the budget are "not triaged". The verdict
+counts confirmed smells only.
 
-1. **Glance:** the verdict, a table of kinds × severity, the map path, and languages with
-   no import rule.
-2. **Top items per kind:** for each kind, up to 5, high first, numbered across kinds: the
-   modules, the evidence, and a suggested next step (split a file, move an import behind
-   an interface, confirm and delete). List the ones you checked and dropped, with why.
-3. **Appendix:** a table of every listed smell (kind, severity, modules, title), and per
-   kind the `dropped` count the map didn't list.
+1. **Glance:** the verdict, the line
+   "N candidates · C confirmed · D dismissed · U not triaged (budget)", a table of confirmed
+   smells by kind × severity, the map path, and languages with no import rule.
+2. **Confirmed smells**, ranked by severity then the map's order and numbered: the modules,
+   the evidence (`file:line`), and a suggested next step (split a file, move an import
+   behind an interface, delete it).
+3. **Appendix:** every dismissal (kind, modules, reason, evidence), and per kind how many
+   were not triaged.
 
 ```
 ## Audit: main @ 3f2a9c1
 
-Verdict: 3 high-severity smells to look at first · 61 smells · UI smoke 5/6 pages clean
+Verdict: 2 high-severity smells to look at first · UI smoke 5/6 pages clean
+84 candidates · 21 confirmed · 39 dismissed · 24 not triaged (budget)
 | kind     | high | medium | low |
 |----------|------|--------|-----|
-| layering | 3    | 0      | 0   |
-| cochange | 0    | 12     | 23  |
-| deadcode | 0    | 0      | 23  |
+| layering | 2    | 0      | 0   |
+| cochange | 0    | 6      | 4   |
+| deadcode | 0    | 0      | 9   |
 map: .foreman/reports/audit/20261027T091500Z/map.html
 No import rule yet: .rb (14 files) — run setup to add one.
 ```
@@ -111,7 +122,7 @@ Then tell the reader how to use the map:
   and what imports it. Double-click or Enter opens a package.
 
 End with "Not checked:" (for example: languages that need an import rule, pages left out
-of the smoke pass, smells you didn't open).
+of the smoke pass, candidates past the budget).
 
 ## Clean up
 

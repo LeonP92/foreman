@@ -454,6 +454,7 @@ function showSmells(kind, list, button) {
   const more = dropped(kind);
   openDrawer(`<h2 class="sans">${esc(kind)} · ${list.length}</h2><p>${esc(SMELL_TEXT[kind])}</p>`
     + (more ? `<p class="quiet">+${more} more not listed here; the audit report counts them all.</p>` : "")
+    + (dismissed(kind) ? `<p class="quiet">+${dismissed(kind)} dismissed by triage; the audit report says why.</p>` : "")
     + list.map(s => `<h3>${sevWord(s)}</h3><p>${fmt(s.title)}<span class="evidence">${fmt(s.evidence)}</span></p>`
       + `<ul>${s.nodes.map(id => `<li>${moduleLink(id)}</li>`).join("")}</ul>`).join(""), button);
 }
@@ -461,14 +462,18 @@ function showSmells(kind, list, button) {
 const chips = document.getElementById("chips");
 // Smells past the per-kind cap: counted by codemap, not listed.
 const dropped = kind => (DATA.dropped || {})[kind] || 0;
-const smellTotal = DATA.smells.length + Object.values(DATA.dropped || {}).reduce((a, n) => a + n, 0);
+// Smells triage read and dismissed as false positives: counted, not listed.
+const dismissed = kind => (DATA.dismissed || {})[kind] || 0;
+const sum = counts => Object.values(counts || {}).reduce((a, n) => a + n, 0);
+const smellTotal = DATA.smells.length + sum(DATA.dropped);
+const dismissedNote = n => n ? `<span class="quiet">(+${n} dismissed)</span>` : "";
 const forbidden = DATA.edges.filter(e => e.kind === "forbidden").length;
 const unsupported = Object.entries(DATA.unsupported).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1));
 const NO_RULE_TEXT = "Files in these languages are still on the map and checked for size, duplication and churn; they have no import edges until a rule exists.";
 chips.insertAdjacentHTML("beforeend", `<span class="chip"><b>${DATA.groups.length}</b> groups</span>`
   + `<span class="chip"><b>${DATA.nodes.length.toLocaleString()}</b> modules</span>`
   + `<span class="chip"><b>${DATA.edges.length.toLocaleString()}</b> imports</span>`
-  + (smellTotal ? `<span class="chip"><b>${smellTotal}</b> smells</span>` : "")
+  + (smellTotal || sum(DATA.dismissed) ? `<span class="chip"><b>${smellTotal}</b> smells${dismissedNote(sum(DATA.dismissed))}</span>` : "")
   + forbiddenChip(forbidden)
   + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${esc(n)})`).join(", ")} — run setup to graph them</span>` : "")
   + `<span class="sep"></span>` + (DATA.smells.length ? "" : NO_SMELLS));
@@ -481,9 +486,10 @@ Object.entries(kinds).map(([k, list]) => [k, list.sort(bySeverity)])
     b.className = `chip sev-${list[0].severity}`;
     const more = dropped(kind);
     b.title = `${list.length + more} ${kind} smell${list.length + more > 1 ? "s" : ""}, worst ${list[0].severity}`
-      + (more ? `; ${more} past the cap are not listed` : "");
+      + (more ? `; ${more} past the cap are not listed` : "")
+      + (dismissed(kind) ? `; ${dismissed(kind)} dismissed by triage` : "");
     b.innerHTML = `<span class="dot"></span><span class="ellipsis">${esc(list[0].severity)} · ${esc(kind)}</span><b>${list.length}</b>`
-      + (more ? `<span class="quiet">(+${more} more)</span>` : "");
+      + (more ? `<span class="quiet">(+${more} more)</span>` : "") + dismissedNote(dismissed(kind));
     b.addEventListener("click", ev => { ev.stopPropagation(); showSmells(kind, list, b); });
     chips.appendChild(b);
   });

@@ -440,3 +440,36 @@ def test_audit_smoke_never_copies_real_data():
     text = " ".join(skill_text("audit").split())
     for phrase in ["never copy the real database", "skip `seed`", '`kind = "none"`']:
         assert phrase in text, phrase
+
+
+def test_audit_triages_candidates_before_reporting():
+    text = " ".join(skill_text("audit").split())
+    for phrase in [
+        "references/triage.md",
+        "60",
+        "CONFIRMED",
+        "DISMISSED",
+        "map --out <run> --dismiss <run>/triage.json",
+        "candidates · C confirmed · D dismissed · U not triaged (budget)",
+        "counts confirmed smells only",
+    ]:
+        assert phrase in text, phrase
+    triage = " ".join(
+        (SKILLS_DIR / "audit" / "references" / "triage.md")
+        .read_text(encoding="utf-8")
+        .lower()
+        .split()
+    )
+    for phrase in [
+        "sweep",
+        "generated",
+        "vendored",
+        "fixtures",
+        "definitions",
+        "public",
+        "reflection",
+        "migrations",
+        "per-locale",
+        "file:line",
+    ]:
+        assert phrase in triage, phrase

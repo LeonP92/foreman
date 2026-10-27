@@ -5,7 +5,7 @@ from collections import Counter
 from graphlib import TopologicalSorter
 from pathlib import Path
 
-from foreman import dupes, graph, history, metrics, smells
+from foreman import dupes, graph, history, metrics, render, smells
 from foreman.files import list_files
 from foreman.langs import go_package
 
@@ -148,3 +148,39 @@ def build(root: Path, config: dict) -> dict:
         "counts": {k: dict(c) for k, c in counts.items()},
         "unsupported": g["unsupported"],
     }
+
+
+def _key(smell: dict) -> tuple[str, tuple[str, ...]]:
+    return smell["kind"], tuple(sorted(smell["nodes"]))
+
+
+def dismiss(data: dict, triage: dict) -> dict:
+    """The map without the smells triage dismissed; `dismissed` counts them per kind."""
+    entries = triage.get("dismissed") if isinstance(triage, dict) else None
+    if not isinstance(entries, list):
+        raise ValueError("triage: 'dismissed' must be a list")  # noqa: TRY004 - CLI maps bad input to ValueError
+    listed = {_key(s) for s in data["smells"]}
+    drop = set()
+    for i, e in enumerate(entries):
+        if not (
+            isinstance(e, dict)
+            and isinstance(e.get("kind"), str)
+            and isinstance(e.get("nodes"), list)
+            and all(isinstance(n, str) for n in e["nodes"])
+            and isinstance(e.get("reason"), str)
+            and e["reason"].strip()
+        ):
+            raise ValueError(
+                f"triage dismissed #{i}: needs a string kind, a list of nodes and a reason"
+            )
+        if e["kind"] not in render.MAP_SMELLS:
+            raise ValueError(f"triage dismissed #{i}: unknown kind {e['kind']!r}")
+        if _key(e) not in listed:
+            raise ValueError(
+                f"triage dismissed #{i}: no listed {e['kind']} smell with nodes {sorted(e['nodes'])}"
+            )
+        drop.add(_key(e))
+    kept = [s for s in data["smells"] if _key(s) not in drop]
+    dismissed = Counter(data.get("dismissed", {}))
+    dismissed.update(s["kind"] for s in data["smells"] if _key(s) in drop)
+    return {**data, "smells": kept, "dismissed": dict(sorted(dismissed.items()))}

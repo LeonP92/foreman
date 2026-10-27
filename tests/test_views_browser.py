@@ -77,7 +77,7 @@ DENSE_DIAGRAM = {
     "smells": [],
 }
 
-# One listed layering smell and three more past the cap.
+# One listed layering smell, three more past the cap and two dismissed by triage.
 CAPPED = {
     **MAP,
     "smells": [
@@ -90,6 +90,7 @@ CAPPED = {
         }
     ],
     "dropped": {"layering": 3},
+    "dismissed": {"layering": 2},
 }
 
 # One layer of three: with the drawer open it wraps, sending z -> x round the gutter.
@@ -121,7 +122,7 @@ def test_views_in_a_browser(tmp_path, serve):
         ("map label follows its arc after the drawer closes", "passed"),
         ("map neighbourhood puts dependents left and dependencies right", "passed"),
         ("map renders when storage is unavailable", "passed"),
-        ("map smell chip counts what the cap dropped", "passed"),
+        ("map smell chip counts what the cap dropped and triage dismissed", "passed"),
         ("map with few package edges opens as a graph", "passed"),
         ("map with more than 30 package edges opens as a matrix", "passed"),
         ("problems only hides import edges", "passed"),

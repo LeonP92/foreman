@@ -11,6 +11,11 @@ below) are never `hub`, `hotspot`, `oversize` or `duplicate` smells and don't co
 neighbours. Files with a config, data or infra extension (`.tf`, `.tfvars`, `.yml`, `.json`
 and the like) are never in any smell, even when a `[graph.*]` rule covers them.
 
+These smells are candidates. The audit skill reads the files behind each one, confirms or
+dismisses it against a checklist of known false positives
+(`skills/audit/references/triage.md`), and runs `map --out <run> --dismiss <triage.json>`
+to re-render the map without the dismissed ones; `dismissed` counts them per kind.
+
 ## Diagram smells
 
 Severity is the agent's call: `high` when it already caused or will likely cause a bug,
