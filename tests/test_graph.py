@@ -156,6 +156,37 @@ def test_python_prefers_the_importers_own_source_root(make_repo):
     } <= edge_set(build(make_repo(files)))
 
 
+def test_js_path_aliases_from_tsconfig_with_comments(make_repo):
+    tsconfig = """{
+  "$schema": "https://json.schemastore.org/tsconfig", // comments are allowed
+  /* block comment */
+  "compilerOptions": {"baseUrl": "web", "paths": {"@/*": ["src/*"], "settings": ["src/conf.ts"]}}
+}"""
+    root = make_repo(
+        {
+            "tsconfig.json": tsconfig,
+            "web/src/app.ts": "import a from '@/ui/button'\nimport s from 'settings'\nimport r from 'react'\n",
+            "web/src/ui/button.tsx": "",
+            "web/src/conf.ts": "",
+        }
+    )
+    assert edge_set(build(root)) == {
+        ("web/src/app.ts", "web/src/ui/button.tsx", False),
+        ("web/src/app.ts", "web/src/conf.ts", False),
+    }
+
+
+def test_js_path_aliases_from_jsconfig(make_repo):
+    root = make_repo(
+        {
+            "jsconfig.json": '{"compilerOptions": {"paths": {"~lib/*": ["./lib/*"]}}}',
+            "main.js": "const x = require('~lib/util')\n",
+            "lib/util/index.js": "",
+        }
+    )
+    assert edge_set(build(root)) == {("main.js", "lib/util/index.js", False)}
+
+
 def test_js_specifier_maps_to_ts_source(make_repo):
     root = make_repo({"a.ts": "import x from './c.js'\n", "c.ts": ""})
     assert edge_set(build(root)) == {("a.ts", "c.ts", False)}

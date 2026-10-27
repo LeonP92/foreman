@@ -1,3 +1,4 @@
+import json
 import posixpath
 import re
 from dataclasses import dataclass, field
@@ -13,6 +14,8 @@ class RepoIndex:
     go_module: str | None
     go_packages: frozenset[str]
     python_roots: tuple[str, ...]
+    # tsconfig/jsconfig `paths`: alias pattern -> repo paths, in the config's order
+    js_paths: tuple[tuple[str, tuple[str, ...]], ...] = ()
     # per-build cache of package `__init__.py` re-exports, filled by the Python language
     python_reexports: dict[str, dict[str, str]] = field(default_factory=dict, compare=False)
 
@@ -29,7 +32,30 @@ def make_index(root: Path, files: list[str]) -> RepoIndex:
         go_module=match.group(1) if match else None,
         go_packages=frozenset(go_package(f) for f in files if f.endswith(".go")),
         python_roots=_python_roots(files),
+        js_paths=_js_paths(root),
     )
+
+
+# a string (kept), or a comment / trailing comma (dropped): tsconfig is JSON with both
+_JSONC_NOISE = re.compile(r'("(?:\\.|[^"\\])*")|//[^\n]*|/\*.*?\*/|,(?=\s*[}\]])', re.DOTALL)
+
+
+def _js_paths(root: Path) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    # shortcut: only the root tsconfig.json / jsconfig.json, without `extends`; read nested
+    # or extended configs if monorepo aliases go unresolved
+    for name in ("tsconfig.json", "jsconfig.json"):
+        if (root / name).is_file():
+            text = _JSONC_NOISE.sub(lambda m: m[1] or "", read_text(root / name) or "")
+            try:
+                options = json.loads(text).get("compilerOptions") or {}
+                base = posixpath.normpath(options.get("baseUrl") or ".")
+                return tuple(
+                    (alias, tuple(posixpath.normpath(posixpath.join(base, t)) for t in targets))
+                    for alias, targets in (options.get("paths") or {}).items()
+                )
+            except (ValueError, AttributeError, TypeError):
+                return ()  # a config foreman can't read: no aliases
+    return ()
 
 
 def _python_roots(files: list[str]) -> tuple[str, ...]:
