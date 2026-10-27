@@ -164,6 +164,7 @@ def write(data: dict, out: Path) -> Path:
     template = (
         (TEMPLATES / f"{kind}.html")
         .read_text(encoding="utf-8")
+        .replace("/*__FRAME__*/", (TEMPLATES / "_frame.html").read_text(encoding="utf-8"))
         .replace("/*__THEME__*/", (TEMPLATES / "_theme.css").read_text(encoding="utf-8"))
         .replace("/*__UI__*/", (TEMPLATES / "_ui.js").read_text(encoding="utf-8"))
         .replace("/*__TITLE__*/", html.escape(data["title"]))

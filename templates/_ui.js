@@ -1,7 +1,7 @@
 // Shared foreman UI: escaping, theme toggle, filter keys, drawer, focus animation.
 // Text from DATA is escaped; `backticks` become <code>.
-// Requires: .view, #canvas, #g (the edge <svg>), #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme;
-// #seg for viewSwitch.
+// Requires the elements _frame.html provides: .view, #canvas, #g (the edge <svg>), #drawer, #filter, #filter-key,
+// #theme, #seg.
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 const SEV_RANK = {low: 1, medium: 2, high: 3};
@@ -86,6 +86,23 @@ const flowPath = (p, [pw, ph], q, [, qh]) => {
   const x1 = p.x + pw, y1 = p.y + ph / 2, x2 = q.x, y2 = q.y + qh / 2, mid = (x1 + x2) / 2;
   return `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
 };
+// Card-to-card edge; `pairs` counts edges per node pair so repeats fan out. Same row: an arc under it, so
+// the edge doesn't run behind the cards in between. Same column: a loop out to the right.
+function edgePath(a, b, sizeOf, pairs) {
+  const p = pos[a], q = pos[b], [pw, ph] = sizeOf(a), [qw, qh] = sizeOf(b);
+  const key = [a, b].sort().join("\n"), k = pairs[key] = (pairs[key] || 0) + 1;
+  const bend = (k - 1) * 18 * (a < b ? 1 : -1), y1 = p.y + ph / 2, y2 = q.y + qh / 2;
+  if (Math.abs(p.x - q.x) < 1) {
+    const x = p.x + pw;
+    return `M${x},${y1} C${x + 40 + bend},${y1} ${x + 40 + bend},${y2} ${x},${y2}`;
+  }
+  if (Math.abs(p.y - q.y) < 1) {
+    const x1 = p.x + pw / 2, x2 = q.x + qw / 2, y = p.y + ph, dip = 40 + bend;
+    return `M${x1},${y} C${x1},${y + dip} ${x2},${y + dip} ${x2},${q.y + qh}`;
+  }
+  const [x1, x2] = p.x < q.x ? [p.x + pw, q.x] : [p.x, q.x + qw], mid = (x1 + x2) / 2;
+  return `M${x1},${y1} C${mid},${y1 + bend} ${mid},${y2 + bend} ${x2},${y2}`;
+}
 const EGO_BUTTON = `<div class="actions"><button type="button" class="icon-btn" data-ego>Neighbourhood</button><kbd>N</kbd></div>`;
 
 // The neighbourhood bar over the canvas: a way back (the breadcrumb) and the +1 hop toggle.
@@ -324,8 +341,10 @@ function closeDrawer() {
 // neighbourhood: switches to the neighbourhood view (key N, the drawer's Neighbourhood button).
 // layout(instant): re-places the view in availableWidth(); animated when the drawer opens or closes,
 // snapped on resize (debounced, then one frame).
-function initUI({dismiss, onFilter, onFilterEnter, layout, neighbourhood}) {
+function initUI({noun, dismiss, onFilter, onFilterEnter, layout, neighbourhood}) {
   const root = document.documentElement, filter = document.getElementById("filter");
+  filter.placeholder = `Filter ${noun}`;
+  filter.setAttribute("aria-label", `Filter ${noun} (Enter focuses the first match)`);
   const saved = store.get(THEME_KEY);
   if (saved === "light" || saved === "dark") root.dataset.theme = saved;
   document.getElementById("theme").addEventListener("click", () => {

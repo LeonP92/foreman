@@ -24,24 +24,7 @@
 </style>
 </head>
 <body>
-<header class="topbar">
-  <div class="bar-row">
-    <div class="bar-title"><h1 id="title">/*__TITLE__*/</h1><p id="notes"></p></div>
-    <div class="seg" id="seg" role="group" aria-label="Package view">
-      <button type="button" data-mode="graph">Graph</button><button type="button" data-mode="matrix">Matrix</button>
-    </div>
-    <label class="filter">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.75"/><path d="m10.5 10.5 3.5 3.5"/></svg>
-      <input id="filter" type="text" autocomplete="off" spellcheck="false" placeholder="Filter modules" aria-label="Filter modules (Enter focuses the first match)">
-      <kbd id="filter-key"></kbd>
-    </label>
-    <button class="icon-btn" type="button" popovertarget="legend">Legend</button>
-    <button class="icon-btn" type="button" id="theme" aria-label="Toggle light and dark theme" title="Toggle theme">
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"/></svg>
-    </button>
-  </div>
-  <div class="bar-row bar-chips" id="chips"><nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav><span class="sep"></span></div>
-</header>
+/*__FRAME__*/
 <div id="legend" class="legend" popover>
   <h4>Edges</h4>
   <ul>
@@ -64,19 +47,11 @@
   </ul>
   <p>Groups are ordered by dependency: a group sits above the groups it imports, so imports flow down. Anything flowing up breaks that order and is labelled. Click a box to focus it and its neighbours. While one is focused, what it imports is drawn in blue and what imports it in grey; cycles, forbidden crossings and twins keep their colour. Double-click or Enter opens a group; inside, dashed stubs stand for the other groups and open them. Esc or a click on empty space clears.</p>
 </div>
-<div class="view">
-  <main class="canvas" id="canvas"><div class="stage" id="stage"><svg id="g"></svg></div></main>
-  <aside id="drawer" class="drawer" aria-label="Details">
-    <button class="icon-btn drawer-close" type="button" aria-label="Close details">
-      <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
-    </button>
-    <div class="drawer-body"></div>
-  </aside>
-</div>
 
 <script>
 /*__UI__*/
 const DATA = /*__DATA__*/null;
+document.getElementById("chips").innerHTML = `<nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav><span class="sep"></span>`;
 
 // [min width, height] per card kind; group and module cards stretch to fill their row. Stubs (other
 // groups) sit in a fixed-width column left of the module grid.
@@ -286,7 +261,7 @@ function layout(instant = false) {
   setStage(width, height);
   slide(to, instant, () => {
     const pairs = {};
-    edges.forEach(e => e.path.setAttribute("d", view ? edgePath(e.a, e.b, pairs) : layerPath(e)));
+    edges.forEach(e => e.path.setAttribute("d", view ? edgePath(e.a, e.b, sizeOf, pairs) : layerPath(e)));
     edges.forEach(e => { if (!e.text) return;
       const at = e.labelAt || e.path.getPointAtLength(e.path.getTotalLength() / 2);
       e.text.setAttribute("x", at.x); e.text.setAttribute("y", at.y - 6); });
@@ -338,23 +313,6 @@ function exitEgo() {
   render(view);
   focusItem(id);
 }
-function edgePath(a, b, pairs) {
-  const p = pos[a], q = pos[b], [pw, ph] = sizeOf(a), [qw, qh] = sizeOf(b);
-  const key = [a, b].sort().join("\n"), k = pairs[key] = (pairs[key] || 0) + 1;
-  const bend = (k - 1) * 18 * (a < b ? 1 : -1), y1 = p.y + ph / 2, y2 = q.y + qh / 2;
-  // Same row: arc under it, so the edge doesn't run behind the cards in between.
-  if (Math.abs(p.y - q.y) < 1) {
-    const x1 = p.x + pw / 2, x2 = q.x + qw / 2, y = p.y + ph, dip = 40 + bend;
-    return `M${x1},${y} C${x1},${y + dip} ${x2},${y + dip} ${x2},${q.y + qh}`;
-  }
-  if (Math.abs(p.x - q.x) < 1) {
-    const x = p.x + pw;
-    return `M${x},${y1} C${x + 40 + bend},${y1} ${x + 40 + bend},${y2} ${x},${y2}`;
-  }
-  const [x1, x2] = p.x < q.x ? [p.x + pw, q.x] : [p.x, q.x + qw], mid = (x1 + x2) / 2;
-  return `M${x1},${y1} C${mid},${y1 + bend} ${mid},${y2 + bend} ${x2},${y2}`;
-}
-
 const countText = e => plural(e.count, "import") + (e.kind === "import" ? "" : " · " + KIND[e.kind]);
 const pairText = e => `${e.a} → ${e.b} · ${countText(e)}`;
 function focusPair(e, cell) {
@@ -509,6 +467,7 @@ const hit = (id, q) => id.toLowerCase().includes(q);
 const matches = (it, q) => it.kind === "module" ? hit(it.id, q)
   : it.kind === "group" && (hit(it.id, q) || groupById[it.id].nodes.some(id => hit(id, q)));
 initUI({
+  noun: "modules",
   layout,
   dismiss: () => ego ? exitEgo() : clearHighlight(),
   neighbourhood: () => { const id = focused || ego?.id; if (id) enterEgo(id, ego ? ego.hops : 1); },
