@@ -54,10 +54,11 @@ Never point a server at a database you didn't copy or create.
      (if the original doesn't exist, start empty). In the base worktree run `migrate`,
      `seed`, and create the records the test list needs. Then copy that file to the branch
      worktree with `db-copy` the same way.
-   - `command`: for each server pick a unique `{dir}` (for example
-     `foreman_<timestamp>_base`), fill it into `create` and `url_template`, and run
-     `create`, `migrate`, `seed` and your record set-up from the **base** worktree with
-     `env_override` set to that server's value.
+   - `command`: for each server make a fresh `{name}`, `foreman_<base|branch>_<6 lowercase
+     hex>` (letters, digits and underscores only), and a fresh empty folder for `{dir}`.
+     Fill both into `create`, `migrate`, `seed` and `url_template`. Run `create`,
+     `migrate`, `seed` and your record set-up from the **base** worktree with
+     `env_override` set to that server's `url_template`.
 3. Migrate the branch's database with the **branch** code: run `migrate` in the branch
    worktree (with its `env_override` for `command`).
 
@@ -127,9 +128,10 @@ paths. Look at the screenshots, not only the statuses: layout breaks don't fail 
 Stop both servers and their whole process trees (POSIX: signal the process group; Windows:
 `taskkill /T /F /PID <pid>`) before removing anything. Then
 `git worktree remove --force <worktree>` for each; on Windows, if a file is still locked,
-wait a few seconds and retry once. Remove temporary files and `{dir}` folders; list any
-`command` databases you created so the user can drop them. The user's real data must be
-untouched.
+wait a few seconds and retry once. Remove temporary files and `{dir}` folders. For each
+`command` database you created, run `drop` with its `{name}`; if `drop` is empty, list
+those names under "Not checked:" for the user to drop. Never drop a database you didn't
+create. The user's real data must be untouched.
 
 ## Finish
 

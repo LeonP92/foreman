@@ -21,6 +21,7 @@ DEFAULTS = {
         "create": "",
         "migrate": "",
         "seed": "",
+        "drop": "",
         "env_override": "",
         "url_template": "",
     },

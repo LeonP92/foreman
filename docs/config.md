@@ -20,11 +20,19 @@ is fine and means defaults). Unknown tables and keys are errors.
 | `database.path` | The database file. Required for `file`. |
 | `database.create` | Command that creates a database. Required for `command`. |
 | `database.migrate` / `seed` | Optional commands, either kind. |
+| `database.drop` | Optional command that deletes a database `create` made (`command` kind). Only ever run on databases foreman created. |
 | `database.env_override` | Env var that points the server at its database. Required for `command`. |
-| `database.url_template` | Value for that env var; `{dir}` is the per-server directory. Required for `command`. |
+| `database.url_template` | Value for that env var. Required for `command`. |
 | `rules.docs` | Repo docs that state design rules. |
 | `rules.layers` | Edges that must not exist: `[{from = "glob", to = "glob"}]`. |
 | `graph.<name>` | Import rule for a language without a built-in graph (needs an import rule; setup writes one): `extensions`, `pattern` (regex, group 1 is the import), `resolve` (candidate paths using `{dir}`, `{1}`, `{1\|path}`). |
+
+`create`, `migrate`, `seed`, `drop` and `url_template` may use two placeholders, filled in
+per server:
+
+- `{dir}`: the server's own directory, for file paths (`sqlite:///{dir}/app.db`).
+- `{name}`: a unique database name, `foreman_<base|branch>_<6 lowercase hex>` (letters,
+  digits and underscores only), for database servers (`postgresql:///{name}`).
 
 ## Example: web app with a file database
 
@@ -71,10 +79,11 @@ start = "uv run uvicorn app.main:app --port {port}"
 
 [database]
 kind = "command"
-create = "createdb app_{dir}"
+create = "createdb {name}"
 migrate = "uv run alembic upgrade head"
+drop = "dropdb {name}"
 env_override = "DATABASE_URL"
-url_template = "postgresql:///app_{dir}"
+url_template = "postgresql:///{name}"
 
 [graph.ruby]
 extensions = [".rb"]

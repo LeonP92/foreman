@@ -13,9 +13,10 @@ base = "develop"
 start = "run --port {port}"
 [database]
 kind = "command"
-create = "mkdb {dir}"
+create = "mkdb {name}"
+drop = "rmdb {name}"
 env_override = "DB_URL"
-url_template = "db://{dir}"
+url_template = "db://{name}"
 [[rules.layers]]
 from = "core/**"
 to = "apps/**"
@@ -105,6 +106,7 @@ WRONG_TYPES = [
     ("[login]\nsteps = 1", "login.steps must be a string"),
     ('[database]\nkind = ["a"]', "database.kind must be a string"),
     ("[database]\npath = 1", "database.path must be a string"),
+    ("[database]\ndrop = 1", "database.drop must be a string"),
     ("[rules]\ndocs = 1", "rules.docs must be a list of strings"),
     ("[rules]\nlayers = 1", "rules.layers must be a list of tables"),
     ("[rules]\nlayers = [1]", "rules.layers entry needs"),

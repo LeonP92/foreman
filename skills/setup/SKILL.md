@@ -63,10 +63,13 @@ Foreman only ever runs servers against databases it copied or created.
   that file, relative to the repo.
 - `kind = "command"` when the app uses a database server. It needs `create` (a command that
   makes a new, empty database), `env_override` (the variable the app reads its database
-  location from) and `url_template` (that variable's value; `{dir}` is filled with a name
-  unique to each server). Use it only if `{dir}` really gives each server its own database.
+  location from) and `url_template` (that variable's value). Write `{name}` where a
+  database name goes (`createdb {name}`, `postgresql:///{name}`) or `{dir}` where a
+  per-server folder goes (`sqlite:///{dir}/app.db`); foreman fills both in per server.
+  Use it only if they really give each server its own database.
 - `kind = "none"` when the app has no database.
-- Add `migrate` and `seed` when the repo has them.
+- Add `migrate` and `seed` when the repo has them, and for `command` a `drop` that deletes
+  a database `create` made (`dropdb {name}`).
 
 If the database can't be isolated this way (a shared remote database, a hard-coded path
 outside the repo), say so: verify will refuse to run until it can.
