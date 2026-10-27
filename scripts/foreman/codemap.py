@@ -51,14 +51,10 @@ def build(root: Path, config: dict) -> dict:
         for e in g["edges"]
         if not e["type_only"] and member.get(e["from"], -1) == member.get(e["to"], -2)
     }
-    unsupported = g["unsupported"]
-    notes = "Function sizes are measured for Python only."
-    if unsupported:
-        notes += f" Not graphed (no import rule): {', '.join(sorted(unsupported))}."
     return {
         "kind": "map",
         "title": f"Codebase map: {root.resolve().name}",
-        "notes": notes,
+        "notes": "Function sizes are measured for Python only.",
         "groups": [
             {"id": gid, "label": gid, "nodes": [i for i in sorted(group_of) if group_of[i] == gid]}
             for gid in sorted(set(group_of.values()))
@@ -78,5 +74,5 @@ def build(root: Path, config: dict) -> dict:
             for e in g["edges"]
         ],
         "smells": found,
-        "unsupported": unsupported,
+        "unsupported": g["unsupported"],
     }
