@@ -497,6 +497,15 @@ ordered.forEach(list => {
   b.addEventListener("click", ev => { ev.stopPropagation(); showSmells(list, b, more, gone); });
   chips.appendChild(b);
 });
+// A kind whose listed smells were all dismissed still gets a chip, with nothing to show.
+[...new Set([...Object.keys(DATA.dropped || {}), ...Object.keys(DATA.dismissed || {})])].sort()
+  .filter(kind => !lastOfKind[kind]).forEach(kind => {
+    const more = dropped(kind), gone = dismissed(kind);
+    chips.insertAdjacentHTML("beforeend", `<span class="chip" title="${esc(kind)}: none listed`
+      + (more ? `; ${more} past the cap` : "") + (gone ? `; ${gone} dismissed by triage` : "")
+      + `"><span class="ellipsis">${esc(kind)}</span><b>0</b>`
+      + (more ? `<span class="quiet">(+${more} more)</span>` : "") + dismissedNote(gone) + `</span>`);
+  });
 
 const hit = (id, q) => id.toLowerCase().includes(q);
 const matches = (it, q) => it.kind === "module" ? hit(it.id, q)

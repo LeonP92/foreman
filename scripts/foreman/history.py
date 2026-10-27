@@ -58,7 +58,7 @@ def analyse(root: Path, ignore: Sequence[str] = ()) -> dict:
     sources = sum(
         1
         for p in list_files(root, ignore)
-        if posixpath.splitext(p)[1] not in ("", *NON_SOURCE_EXTENSIONS)
+        if posixpath.splitext(p)[1].lower() not in ("", *NON_SOURCE_EXTENSIONS)
     )
     # a sweep (format, rename, licence header) touches a big share of the repo and says nothing
     # about coupling

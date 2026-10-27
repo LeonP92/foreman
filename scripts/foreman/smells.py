@@ -286,7 +286,7 @@ def _duplicates(ids: Collection[str], dupes: dict) -> list[Found]:
             ", ".join(f"{loc['path']}:{loc['start']}-{loc['end']}" for loc in locs)
             for _, locs in blocks
         )
-        evidence = f"{lines} lines in {len(blocks)} block(s), each in {places} places: {where}"
+        evidence = f"{lines} lines in {len(blocks)} block(s), in up to {places} places: {where}"
         title = f"Duplicate code: {lines} lines"
         found.append((lines, "medium" if medium else "low", list(nodes), title, evidence))
     return found
@@ -355,7 +355,7 @@ def mentioned(root: Path, files: Sequence[str]) -> frozenset[str]:
     stems = Counter(
         posixpath.splitext(posixpath.basename(f))[0]
         for f in files
-        if posixpath.splitext(f)[1] not in ("", *NON_SOURCE_EXTENSIONS)
+        if posixpath.splitext(f)[1].lower() not in ("", *NON_SOURCE_EXTENSIONS)
     )
 
     def names(f: str) -> list[str]:
@@ -446,7 +446,7 @@ def entry_points(root: Path, files: Sequence[str], globs: Sequence[str] = ()) ->
                     found.update(
                         posixpath.join(base, module + suffix) for suffix in (".py", "/__init__.py")
                     )
-        elif posixpath.splitext(name)[1] not in NON_SOURCE_EXTENSIONS:
+        elif posixpath.splitext(name)[1].lower() not in NON_SOURCE_EXTENSIONS:
             text = read_text(root / path) or ""
             if text.startswith("#!") or (name.endswith(".py") and _runs_as_main(text)):
                 found.add(path)

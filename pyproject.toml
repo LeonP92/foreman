@@ -9,8 +9,11 @@ dev = ["pytest", "ruff"]
 [tool.pytest.ini_options]
 pythonpath = ["scripts"]
 testpaths = ["tests"]
-addopts = "-m 'not browser'"
-markers = ["browser: needs a real browser (Node + Playwright)"]
+addopts = "-m 'not browser and not slow'"
+markers = [
+  "browser: needs a real browser (Node + Playwright)",
+  "slow: takes seconds; CI's test job runs it",
+]
 
 [tool.ruff]
 line-length = 100

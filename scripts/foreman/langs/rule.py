@@ -1,6 +1,7 @@
 import posixpath
 import re
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from itertools import islice
 from pathlib import Path
 from typing import TypedDict
 
@@ -71,17 +72,15 @@ def imports(path: str, text: str, index: RepoIndex, rule: Rule) -> list[tuple[st
 _KEYWORD = re.compile(r"(?<![\\\w])[A-Za-z_]\w+")
 
 
-def _unmatched(text: str, rule: Rule) -> list[str]:
+def _unmatched(text: str, rule: Rule) -> Iterator[str]:
     """Lines holding the pattern's keyword as a word that the pattern doesn't match."""
     keyword = _KEYWORD.search(rule["pattern"])
     if keyword is None:
-        return []
+        return
     word = re.compile(rf"\b{keyword[0]}\b")
-    return [
-        line.strip()
-        for line in text.split("\n")
-        if word.search(line) and not re.search(rule["pattern"], line, re.MULTILINE)
-    ]
+    for line in text.split("\n"):
+        if word.search(line) and not re.search(rule["pattern"], line, re.MULTILINE):
+            yield line.strip()
 
 
 def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
@@ -100,14 +99,19 @@ def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
             matches += 1
             if _resolve(path, capture, index, rule):
                 resolved += 1
-            # a bare name no repo file has (`json`, `java.util.List`) is a library import
+            # A bare name no part of which names a repo file (`json`, `java.util.List`) is a library
+            # import. Any repo path a capture spells (`{1|path}`) ends in a file stem, so checking
+            # segments covers paths too.
             elif (
-                not relative and "/" not in capture and posixpath.splitext(capture)[0] not in stems
+                not relative
+                and "/" not in capture
+                and stems.isdisjoint(re.split(r"[./:]+", capture))
             ):
                 external += 1
             elif len(examples) < 5:
                 examples.append({"import": capture, "path": path})
-        unmatched += [{"line": line, "path": path} for line in _unmatched(text, rule)]
+        lines = islice(_unmatched(text, rule), 5 - len(unmatched))
+        unmatched += [{"line": line, "path": path} for line in lines]
     internal = matches - external
     return {
         "files": len(covered),
@@ -117,5 +121,5 @@ def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
         # below half resolved, the graph is so sparse most files would look dead
         "ok": bool(covered) and internal > 0 and resolved / internal >= 0.5,
         "unresolved_examples": examples,
-        "unmatched_examples": unmatched[:5],
+        "unmatched_examples": unmatched,
     }

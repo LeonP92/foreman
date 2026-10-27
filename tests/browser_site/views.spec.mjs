@@ -139,7 +139,9 @@ test("map smell chips split severities and count dropped and dismissed", async (
     "medium · hub1",
     "low · hub1",
   ]);
-  await expect(page.locator(".chip", { hasText: "smells" })).toHaveText("6 smells(+2 dismissed)");
+  await expect(page.locator(".chip", { hasText: "smells" })).toHaveText("6 smells(+6 dismissed)");
+  // every deadcode smell was dismissed: a count-0 chip still says so
+  await expect(page.locator(".chip", { hasText: "deadcode" })).toHaveText("deadcode0(+4 dismissed)");
 });
 
 test("map double-click on a group drills in", async ({ page }) => {

@@ -50,6 +50,16 @@ def test_bulk_cutoff_scales_with_tracked_sources(make_repo):
     assert churn["src/f0.py"] == 1 and "src/f20.py" not in churn
 
 
+def test_bulk_cutoff_ignores_upper_case_config_extensions(make_repo):
+    files = {
+        **{f"src/f{i}.py": "" for i in range(60)},
+        **{f"conf/c{i}.YML": "" for i in range(100)},
+    }
+    commit = {f"src/f{i}.py": "1" for i in range(13)}
+    # 60 sources: cutoff 12, so the 13-file commit is bulk; counting the .YML files would make it 32
+    assert "src/f0.py" not in analyse(make_repo(files, commits=[commit]))["churn"]
+
+
 def test_ignore_filters_paths(make_repo):
     c = [{"a.py": "1", "g.lock": "1"}, {"a.py": "2", "g.lock": "2"}]
     h = analyse(make_repo({"x": ""}, commits=c), ["*.lock"])

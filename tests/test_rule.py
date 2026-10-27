@@ -66,6 +66,26 @@ def test_check_counts_only_unknown_bare_names_as_external(make_repo):
     assert result["ok"] is False
 
 
+def test_dotted_repo_imports_are_misses_not_external(make_repo):
+    root = make_repo(
+        {
+            "src/main/java/shop/Cart.java": "import shop.util.Money;\nimport java.util.List;\n",
+            "src/main/java/shop/util/Money.java": "",
+        }
+    )
+    wrong = {**JAVA, "resolve": ["src/{1|path}.java"]}
+    result = rule.check(root, wrong)
+    assert (result["matches"], result["resolved"], result["external"]) == (2, 0, 1)
+    assert result["unresolved_examples"] == [
+        {"import": "shop.util.Money", "path": "src/main/java/shop/Cart.java"}
+    ]
+
+
+def test_unmatched_examples_stop_at_five(make_repo):
+    lines = "".join(f"require_relative File.join('x{i}')\n" for i in range(9))
+    assert len(rule.check(make_repo({"a.rb": lines}), RUBY)["unmatched_examples"]) == 5
+
+
 def test_check_shows_import_lines_the_pattern_missed(make_repo):
     root = make_repo(
         {

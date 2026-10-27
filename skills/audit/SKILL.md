@@ -40,9 +40,10 @@ run the UI pass).
    smells (at most 20 per kind), `dropped` (how many more each kind had), `counts` (every
    smell by kind and severity, before that cap), and `unsupported`: file extensions that
    need an import rule.
-3. **Triage the candidates.** The map's smells are candidates, not findings. Take every
-   `high` one, then `medium` and `low` in the map's order, up to a budget of 60 in all
-   (more only if the user asks). For each, read the files involved and apply the checklist
+3. **Triage the candidates.** The map's smells are candidates, not findings. Take
+   all highs first (never capped), then every medium before any low, each in the map's
+   order, until the budget of 60 total including highs (more only if the user asks); if
+   highs alone exceed 60, triage all highs and report the rest as not triaged. For each, read the files involved and apply the checklist
    in [`references/triage.md`](references/triage.md): mark it CONFIRMED or DISMISSED with a
    one-line reason and evidence (`file:line`). Write a suggested next step for each
    confirmed one. Thresholds are relative to this repo's own spread, not fixed numbers.

@@ -170,12 +170,25 @@ def build(root: Path, config: dict) -> dict:
     }
 
 
+def _matching(smells: list[dict], entry: dict) -> list[int]:
+    return [
+        j
+        for j, s in enumerate(smells)
+        if s["kind"] == entry["kind"]
+        and sorted(s["nodes"]) == sorted(entry["nodes"])
+        and entry.get("title", s["title"]) == s["title"]
+    ]
+
+
 def dismiss(data: dict, triage: dict) -> dict:
-    """The map without the smells triage dismissed; `dismissed` counts them per kind."""
+    """The map without the smells triage dismissed; `dismissed` counts them per kind.
+
+    `dismissed_smells` keeps what was removed, so re-running the same triage is a no-op.
+    """
     entries = triage.get("dismissed") if isinstance(triage, dict) else None
     if not isinstance(entries, list):
         raise ValueError("triage: 'dismissed' must be a list")  # noqa: TRY004 - CLI maps bad input to ValueError
-    drop: set[int] = set()
+    drop: set[tuple[int, str]] = set()
     for i, e in enumerate(entries):
         if not (
             isinstance(e, dict)
@@ -192,14 +205,10 @@ def dismiss(data: dict, triage: dict) -> dict:
             )
         if e["kind"] not in render.MAP_SMELLS:
             raise ValueError(f"triage dismissed #{i}: unknown kind {e['kind']!r}")
-        found = [
-            j
-            for j, s in enumerate(data["smells"])
-            if s["kind"] == e["kind"]
-            and sorted(s["nodes"]) == sorted(e["nodes"])
-            and e.get("title", s["title"]) == s["title"]
-        ]
+        found = _matching(data["smells"], e)
         where = f"triage dismissed #{i}"
+        if not found and _matching(data.get("dismissed_smells", []), e):
+            continue
         if not found:
             raise ValueError(
                 f"{where}: no listed {e['kind']} smell with nodes {sorted(e['nodes'])}"
@@ -211,8 +220,15 @@ def dismiss(data: dict, triage: dict) -> dict:
             raise ValueError(
                 f"{where}: {len(found)} listed {e['kind']} smells match; add a title: {titles}"
             )
-        drop.update(found)
-    kept = [s for j, s in enumerate(data["smells"]) if j not in drop]
+        drop.update((j, e["reason"]) for j in found)
+    reasons = dict(drop)
+    kept = [s for j, s in enumerate(data["smells"]) if j not in reasons]
+    gone = [{**data["smells"][j], "reason": r} for j, r in sorted(reasons.items())]
     dismissed = Counter(data.get("dismissed", {}))
-    dismissed.update(data["smells"][j]["kind"] for j in drop)
-    return {**data, "smells": kept, "dismissed": dict(sorted(dismissed.items()))}
+    dismissed.update(s["kind"] for s in gone)
+    return {
+        **data,
+        "smells": kept,
+        "dismissed": dict(sorted(dismissed.items())),
+        "dismissed_smells": [*data.get("dismissed_smells", []), *gone],
+    }

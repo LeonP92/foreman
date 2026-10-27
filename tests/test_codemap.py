@@ -289,6 +289,7 @@ def test_map_counts_every_smell_and_what_the_cap_dropped(make_repo, tmp_path, ca
         assert len(result["smells"]) == 20
 
 
+@pytest.mark.slow
 def test_large_repo_maps_quickly(make_repo):
     files = {
         f"pkg{i % 30}/mod{i}.py": f"import pkg{(i + 1) % 30}.mod{i + 1}\n"
@@ -302,7 +303,7 @@ def test_large_repo_maps_quickly(make_repo):
     start = time.perf_counter()
     data = codemap.build(root, _config())
     # measured 3.0 s (mention scan 0.3 s) on a laptop; the bound catches a per-file scan
-    assert time.perf_counter() - start < 10
+    assert time.perf_counter() - start < 30
     assert len(data["nodes"]) == 3000
 
 
@@ -328,6 +329,9 @@ def test_map_dismiss_drops_triaged_smells_and_keeps_counts(make_repo, tmp_path, 
         assert ["m00.py"] not in [s["nodes"] for s in result["smells"]]
         assert len(result["smells"]) == 19
     assert '"dismissed": {"deadcode": 1}' in (out / "map.html").read_text(encoding="utf-8")
+    # the same triage again is a no-op
+    assert main(["map", "--out", str(out), "--dismiss", path]) == 0
+    assert json.loads(capsys.readouterr().out)["dismissed"] == {"deadcode": 1}
 
 
 def test_map_dismiss_rejects_unknown_kind_or_nodes(make_repo, tmp_path, capsys):

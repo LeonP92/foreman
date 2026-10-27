@@ -100,7 +100,7 @@ CAPPED = {
         ),
     ],
     "dropped": {"layering": 3},
-    "dismissed": {"layering": 2},
+    "dismissed": {"layering": 2, "deadcode": 4},
 }
 
 # One layer of three: with the drawer open it wraps, sending z -> x round the gutter.
