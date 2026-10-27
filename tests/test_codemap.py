@@ -342,3 +342,25 @@ def test_map_dismiss_rejects_unknown_kind_or_nodes(make_repo, tmp_path, capsys):
         assert main(["map", "--out", str(out), "--dismiss", path]) == 1
         err = capsys.readouterr().err
         assert error in err and err.count("\n") == 1
+
+
+def test_map_title_names_the_main_checkout_not_a_worktree(make_repo, tmp_path, capsys):
+    root = make_repo({"a.py": ""})
+    worktree = tmp_path.parent / f"{tmp_path.name}-wt-1a2b"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
+    assert codemap.build(worktree, _config())["title"] == f"Codebase map: {root.name}"
+    out = tmp_path / "out"
+    assert main(["map", "--root", str(worktree), "--out", str(out), "--title", "Shop"]) == 0
+    assert json.loads((out / "map.json").read_text(encoding="utf-8"))["title"] == "Shop"
+
+
+def test_skipped_extensions_are_still_mapped(make_repo):
+    root = make_repo({"a.py": "", "run.sh": "echo hi\n"})
+    data = codemap.build(root, {**DEFAULTS, "graph": {"skip": [".sh"]}})
+    assert data["unsupported"] == {}
+    assert "run.sh" in {n["id"] for n in data["nodes"]}

@@ -79,7 +79,12 @@ def check(data: dict) -> list[str]:
             problems.append(f"[{table}] must be a table")
         elif table == "graph":
             for name, r in values.items():
-                problems += [f"[graph.{name}]: {e}" for e in rule.validate(name, r)]
+                if name == "skip":
+                    ok = _type_problem("", r, []) is None and all(e.startswith(".") for e in r)
+                    if not ok:
+                        problems.append("graph.skip must be a list of extensions like '.sh'")
+                else:
+                    problems += [f"[graph.{name}]: {e}" for e in rule.validate(name, r)]
         else:
             for key, value in values.items():
                 if key not in DEFAULTS[table]:

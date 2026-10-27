@@ -77,7 +77,7 @@ DENSE_DIAGRAM = {
     "smells": [],
 }
 
-# One listed layering smell, three more past the cap and two dismissed by triage.
+# One listed layering smell, three more past the cap and two dismissed; hubs of two severities.
 CAPPED = {
     **MAP,
     "smells": [
@@ -87,7 +87,17 @@ CAPPED = {
             "nodes": ["app/main.py", "lib/util.py"],
             "title": "Forbidden import into lib/**",
             "evidence": "`app/main.py` imports `lib/util.py`",
-        }
+        },
+        *(
+            {
+                "kind": "hub",
+                "severity": sev,
+                "nodes": [node],
+                "title": f"Hub: {node}",
+                "evidence": "imports 9 modules",
+            }
+            for sev, node in [("medium", "app/main.py"), ("low", "lib/util.py")]
+        ),
     ],
     "dropped": {"layering": 3},
     "dismissed": {"layering": 2},
@@ -122,7 +132,7 @@ def test_views_in_a_browser(tmp_path, serve):
         ("map label follows its arc after the drawer closes", "passed"),
         ("map neighbourhood puts dependents left and dependencies right", "passed"),
         ("map renders when storage is unavailable", "passed"),
-        ("map smell chip counts what the cap dropped and triage dismissed", "passed"),
+        ("map smell chips split severities and count dropped and dismissed", "passed"),
         ("map with few package edges opens as a graph", "passed"),
         ("map with more than 30 package edges opens as a matrix", "passed"),
         ("problems only hides import edges", "passed"),

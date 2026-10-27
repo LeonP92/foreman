@@ -122,6 +122,11 @@ def test_unknown_extensions_counted_in_unsupported(make_repo):
     assert build(root)["unsupported"] == {".rb": 2}
 
 
+def test_skipped_extensions_are_not_unsupported(make_repo):
+    root = make_repo({"a.rb": "", "run.sh": "", "lib/go.sh": ""})
+    assert build(root, rules={"skip": [".sh"]})["unsupported"] == {".rb": 1}
+
+
 def test_python_inferred_source_roots(make_repo):
     root = make_repo(
         {

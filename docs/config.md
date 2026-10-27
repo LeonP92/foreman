@@ -30,6 +30,7 @@ is fine and means defaults). Unknown tables and keys are errors.
 | `audit.entry_points` | Globs for files a framework loads by path, so nothing imports them (plugin folders, scripts a tool config names). The audit never calls them dead code and flags them at most `low` as hubs. Migrations (`**/migrations/**`, `**/alembic/versions/**`, and the `versions` folder an `alembic.ini`-style `script_location` names) are always included. For a library, setup also lists its public files: those the package's main file (`__init__.py`, `index.*`, `lib/<name>.rb`, the manifest's `main`) re-exports or requires, and those the README documents. |
 | `rules.docs` | Repo docs that state design rules. |
 | `rules.layers` | Edges that must not exist: `[{from = "glob", to = "glob"}]`. An optional `except = ["glob", …]` lists targets under `to` that `from` may still import. |
+| `graph.skip` | Extensions with no import statements to graph (`[".sh"]`), so the map doesn't list them under "No import rule yet". Their files are still mapped for size, duplication and churn. Each must start with `.`. |
 | `graph.<name>` | Import rule for a language without a built-in graph (needs an import rule; setup writes one): `extensions`, `pattern` (regex, group 1 is the import), `resolve` (candidate paths using `{dir}`, `{1}`, `{1\|path}`). |
 
 `create`, `migrate`, `seed`, `drop` and `url_template` may use two placeholders, filled in

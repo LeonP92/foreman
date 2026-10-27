@@ -128,8 +128,9 @@ an import rule; write one at a time:
 4. After 3 tries without a rule that resolves most imports, remove it and tell the user
    these files need an import rule; the map will list them under "No import rule yet".
    If the files hold no import statements to match at all (shell scripts sourced by a
-   glob, say), stop after the first try, write no rule, and say so: the files are still
-   mapped for size, duplication and churn.
+   glob, say), stop after the first try, write no rule, add the extension to
+   `[graph] skip = [".sh", …]` and say so: the files are still mapped for size,
+   duplication and churn, and the map stops listing them under "No import rule yet".
 
 Ignore extensions that aren't source code the repo owns (generated files, fixtures); add
 them to `repo.ignore` instead. When every extension is done, run `config-check` once more

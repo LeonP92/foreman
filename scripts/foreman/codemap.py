@@ -1,6 +1,8 @@
 """Whole-repo map: modules grouped by directory, import edges, and repo-wide smells."""
 
 import posixpath
+import shutil
+import subprocess
 from collections import Counter
 from graphlib import TopologicalSorter
 from pathlib import Path
@@ -69,6 +71,24 @@ def _packages(edges: list[dict], kinds: list[str], group_of: dict, rank: dict) -
     return [pairs[k] for k in sorted(pairs)]
 
 
+def _repo_name(root: Path) -> str:
+    """The main checkout's folder, so a map of a temp worktree is still named for its repo."""
+    git = shutil.which("git")
+    common = (
+        git
+        and subprocess.run(
+            [git, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            check=False,
+            cwd=root,
+            capture_output=True,
+            encoding="utf-8",
+        ).stdout.strip()
+    )
+    return (
+        Path(common).parent.name if common and Path(common).name == ".git" else root.resolve().name
+    )
+
+
 def build(root: Path, config: dict) -> dict:
     ignore = config["repo"]["ignore"]
     layers = config.get("rules", {}).get("layers", [])
@@ -117,7 +137,7 @@ def build(root: Path, config: dict) -> dict:
     rank = {gid: (layer[gid], gid) for gid in group_ids}
     return {
         "kind": "map",
-        "title": f"Codebase map: {root.resolve().name}",
+        "title": f"Codebase map: {_repo_name(root)}",
         "notes": "Function sizes are measured for Python only.",
         "groups": [
             {

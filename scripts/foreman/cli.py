@@ -65,6 +65,8 @@ def _map(args) -> tuple[dict, int]:
         )
     else:
         data = codemap.build(args.root, _load(args))
+    if args.title:
+        data["title"] = args.title
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "map.json").write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
     html = render.write(data, args.out / "map.html")
@@ -104,6 +106,7 @@ _command("graph-rule-check", _graph_rule_check).add_argument("--name", required=
 _map_parser = _command("map", _map)
 _map_parser.add_argument("--out", type=Path, required=True)
 _map_parser.add_argument("--dismiss", type=Path)
+_map_parser.add_argument("--title")
 _config_parser = _SUBPARSERS.add_parser("config-check")
 _config_parser.set_defaults(func=_config_check)
 _config_parser.add_argument("--path", type=Path, default=Path(".foreman/config.toml"))

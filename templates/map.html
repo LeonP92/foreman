@@ -441,8 +441,9 @@ document.getElementById("drawer").addEventListener("click", ev => {
   focusItem(t.dataset.group);
 });
 
-// One chip per smell kind: up to 20 smells of each would flood the bar.
-function showSmells(kind, list, button) {
+// One chip per kind and severity: up to 20 smells of each kind would flood the bar.
+function showSmells(list, button, more, gone) {
+  const kind = list[0].kind;
   if (ego) render(view);
   clearHighlight();
   button.classList.add("active");
@@ -451,10 +452,9 @@ function showSmells(kind, list, button) {
   cards.forEach((card, id) => { card.classList.toggle("smelly", members.has(id)); card.classList.toggle("dim", !members.has(id)); });
   markEdges(edges, e => members.has(e.a) && members.has(e.b) ? "on" : "dim");
   if (matrixShown()) markMatrix((a, b) => members.has(a) && members.has(b), members);
-  const more = dropped(kind);
-  openDrawer(`<h2 class="sans">${esc(kind)} · ${list.length}</h2><p>${esc(SMELL_TEXT[kind])}</p>`
-    + (more ? `<p class="quiet">+${more} more not listed here; the audit report counts them all.</p>` : "")
-    + (dismissed(kind) ? `<p class="quiet">+${dismissed(kind)} dismissed by triage; the audit report says why.</p>` : "")
+  openDrawer(`<h2 class="sans">${esc(list[0].severity)} · ${esc(kind)} · ${list.length}</h2><p>${esc(SMELL_TEXT[kind])}</p>`
+    + (more ? `<p class="quiet">+${more} more ${esc(kind)} not listed here; the audit report counts them all.</p>` : "")
+    + (gone ? `<p class="quiet">+${gone} ${esc(kind)} dismissed by triage; the audit report says why.</p>` : "")
     + list.map(s => `<h3>${sevWord(s)}</h3><p>${fmt(s.title)}<span class="evidence">${fmt(s.evidence)}</span></p>`
       + `<ul>${s.nodes.map(id => `<li>${moduleLink(id)}</li>`).join("")}</ul>`).join(""), button);
 }
@@ -477,22 +477,26 @@ chips.insertAdjacentHTML("beforeend", `<span class="chip"><b>${DATA.groups.lengt
   + forbiddenChip(forbidden)
   + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${esc(n)})`).join(", ")} — run setup to graph them</span>` : "")
   + `<span class="sep"></span>` + (DATA.smells.length ? "" : NO_SMELLS));
-const kinds = {};
-DATA.smells.forEach(s => (kinds[s.kind] ||= []).push(s));
-Object.entries(kinds).map(([k, list]) => [k, list.sort(bySeverity)])
-  .sort(([a, x], [b, y]) => bySeverity(x[0], y[0]) || (a < b ? -1 : 1)).forEach(([kind, list]) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `chip sev-${list[0].severity}`;
-    const more = dropped(kind);
-    b.title = `${list.length + more} ${kind} smell${list.length + more > 1 ? "s" : ""}, worst ${list[0].severity}`
-      + (more ? `; ${more} past the cap are not listed` : "")
-      + (dismissed(kind) ? `; ${dismissed(kind)} dismissed by triage` : "");
-    b.innerHTML = `<span class="dot"></span><span class="ellipsis">${esc(list[0].severity)} · ${esc(kind)}</span><b>${list.length}</b>`
-      + (more ? `<span class="quiet">(+${more} more)</span>` : "") + dismissedNote(dismissed(kind));
-    b.addEventListener("click", ev => { ev.stopPropagation(); showSmells(kind, list, b); });
-    chips.appendChild(b);
-  });
+const chipLists = {};
+DATA.smells.forEach(s => (chipLists[`${s.kind} ${s.severity}`] ||= []).push(s));
+const ordered = Object.values(chipLists).sort((x, y) => bySeverity(x[0], y[0]) || (x[0].kind < y[0].kind ? -1 : 1));
+// The cap drops a kind's lowest-ranked smells, so its least severe chip carries the uncounted ones.
+const lastOfKind = {};
+ordered.forEach(list => lastOfKind[list[0].kind] = list);
+ordered.forEach(list => {
+  const {kind, severity} = list[0], last = lastOfKind[kind] === list;
+  const more = last ? dropped(kind) : 0, gone = last ? dismissed(kind) : 0;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = `chip sev-${severity}`;
+  b.title = `${list.length} ${severity} ${kind} smell${list.length > 1 ? "s" : ""}`
+    + (more ? `; ${more} more ${kind} past the cap are not listed` : "")
+    + (gone ? `; ${gone} ${kind} dismissed by triage` : "");
+  b.innerHTML = `<span class="dot"></span><span class="ellipsis">${esc(severity)} · ${esc(kind)}</span><b>${list.length}</b>`
+    + (more ? `<span class="quiet">(+${more} more)</span>` : "") + dismissedNote(gone);
+  b.addEventListener("click", ev => { ev.stopPropagation(); showSmells(list, b, more, gone); });
+  chips.appendChild(b);
+});
 
 const hit = (id, q) => id.toLowerCase().includes(q);
 const matches = (it, q) => it.kind === "module" ? hit(it.id, q)

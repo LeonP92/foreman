@@ -109,6 +109,8 @@ WRONG_TYPES = [
     ('repo = "x"', "[repo] must be a table"),
     ("graph = 1", "[graph] must be a table"),
     ("[graph]\nx = 1", "[graph.x]: must be a table"),
+    ("[graph]\nskip = '.sh'", "graph.skip must be a list of extensions like '.sh'"),
+    ("[graph]\nskip = ['sh']", "graph.skip must be a list of extensions like '.sh'"),
     ("[server]\nstart = 1", "server.start must be a string"),
     ("[server]\nready_path = 1", "server.ready_path must be a string"),
     ("[server]\nenv = 1", "server.env must be a table of strings"),
@@ -194,3 +196,7 @@ def test_file_database_may_have_a_per_server_url(tmp_path):
     assert check_toml(tmp_path, file_db + fixed) == [
         "database.url_template must contain {dir} or {name} for a file database"
     ]
+
+
+def test_graph_skip_lists_extensions(tmp_path):
+    assert check_toml(tmp_path, '[graph]\nskip = [".sh", ".bash"]') == []

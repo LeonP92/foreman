@@ -76,7 +76,11 @@ def build(
     rules = rules or {}
     files = list_files(root, ignore)
     index = make_index(root, files)
-    rule_by_ext = {ext: name for name, r in rules.items() for ext in r["extensions"]}
+    # `skip`: extensions setup found nothing to graph in, so they aren't reported as unsupported
+    skip = frozenset(rules.get("skip", ()))
+    rule_by_ext = {
+        ext: name for name, r in rules.items() if name != "skip" for ext in r["extensions"]
+    }
     scope = None if paths is None else set(paths)
     nodes: dict[str, str] = {}
     edges: dict[tuple[str, str], bool] = {}
@@ -88,7 +92,7 @@ def build(
         suffix = posixpath.splitext(path)[1]
         lang = language(path) or rule_by_ext.get(suffix)
         if lang is None:
-            if in_scope and suffix and suffix not in NON_SOURCE_EXTENSIONS:
+            if in_scope and suffix and suffix not in NON_SOURCE_EXTENSIONS | skip:
                 unsupported[suffix] += 1
             continue
         source = go_package(path) if lang == "go" else path

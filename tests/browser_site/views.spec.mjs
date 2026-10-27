@@ -132,10 +132,14 @@ test("diagram with more than 30 edges opens as a matrix", async ({ page }) => {
   await expect(page.locator('#seg [data-mode="matrix"]')).toHaveAttribute("aria-pressed", "true");
 });
 
-test("map smell chip counts what the cap dropped and triage dismissed", async ({ page }) => {
+test("map smell chips split severities and count dropped and dismissed", async ({ page }) => {
   await page.goto("/capped.html");
-  await expect(page.locator("button.chip")).toHaveText("high · layering1(+3 more)(+2 dismissed)");
-  await expect(page.locator(".chip", { hasText: "smells" })).toHaveText("4 smells(+2 dismissed)");
+  await expect(page.locator("button.chip")).toHaveText([
+    "high · layering1(+3 more)(+2 dismissed)",
+    "medium · hub1",
+    "low · hub1",
+  ]);
+  await expect(page.locator(".chip", { hasText: "smells" })).toHaveText("6 smells(+2 dismissed)");
 });
 
 test("map double-click on a group drills in", async ({ page }) => {
