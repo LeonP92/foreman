@@ -58,13 +58,13 @@ hubs. A change to a hub reaches everything around it, so it is the riskiest plac
 **cochange** — two files that changed in the same commits but don't import each other:
 hidden coupling. Needs at least `cochange_min_both = 5` shared commits and confidence of at
 least `cochange_min_conf = 0.6`; `medium` from `cochange_medium_conf = 0.8`, else `low`. A
-test and the file it tests are ignored, and so are two tests. A test is a file under a
-`test/`, `tests/`, `spec/` or `__tests__/` folder, or whose name carries a test marker:
+pair that includes a test is ignored: tests change with the code they cover. A test is a
+file under a `test/`, `tests/`, `spec/` or `__tests__/` folder (in any case, so Swift's
+`Tests/` counts), or whose name carries a test marker:
 `test_`/`spec_` before the name, or `_test`, `.test`, `.spec`, `_spec` after it
 (`test_x.py`, `x_test.go`, `x.spec.ts`, `x_spec.rb`). A `Test`, `Tests` or `Spec` suffix
 (`XTest.java`, `XSpec.kt`) marks a test only in a test folder or when `X.<ext>` exists, so a
-class merely named `PricingSpec` stays source. With the markers stripped a test pairs with
-`x.<ext>` anywhere. Only source
+class merely named `PricingSpec` stays source. Only source
 files take part: config and infra files (`.yml`, `.tf`) don't. A Python import through a
 package that re-exports a name counts as importing the submodule it comes from. A commit
 touching more files than `min(max(bulk_commit_min_files = 10, bulk_commit_share = 0.2 ×

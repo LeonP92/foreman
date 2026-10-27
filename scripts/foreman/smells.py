@@ -268,11 +268,9 @@ def _cochange(
             or p["conf"] < THRESHOLDS["cochange_min_conf"]
             or (a, b) in linked
             or (b, a) in linked
-            or (_is_test(p["a"], stems) and _is_test(p["b"], stems))
-            or (
-                _subject(p["a"], stems) == _subject(p["b"], stems)
-                and _is_test(p["a"], stems) != _is_test(p["b"], stems)
-            )
+            # tests change with the code they cover; that is normal, not hidden coupling
+            or _is_test(p["a"], stems)
+            or _is_test(p["b"], stems)
         ):
             continue
         severity = "medium" if p["conf"] >= THRESHOLDS["cochange_medium_conf"] else "low"

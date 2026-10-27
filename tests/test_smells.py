@@ -348,12 +348,13 @@ def test_same_name_modules_are_cochange():
     assert [s["nodes"] for s in found] == [["a/index.ts", "b/index.ts"]]
 
 
-def test_test_pairs_and_nested_test_subjects_are_not_cochange():
+def test_no_pair_with_a_test_is_cochange():
     pairs = [
         _pair(9, 1.0, "tests/test_a.py", "tests/test_b.py"),
         _pair(9, 1.0, "shop/cart.py", "tests/unit/shop/test_cart.py"),
         _pair(9, 1.0, "web/src/cart.ts", "web/__tests__/cart.ts"),
         _pair(9, 1.0, "web/src/cart.ts", "web/src/cart.test.ts"),
+        _pair(9, 1.0, "src/pricing.py", "tests/test_checkout.py"),
     ]
     nodes = [p[k] for p in pairs for k in ("a", "b")]
     assert _kinds(_detect(nodes, pairs=pairs), "cochange") == []
