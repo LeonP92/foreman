@@ -140,7 +140,7 @@ body.drawer-open .canvas { padding-right: 380px; }
 /* Drawer */
 .drawer { position: absolute; z-index: 2; top: 0; right: 0; bottom: 0; width: 380px;
   display: flex; flex-direction: column; border-left: 1px solid var(--hairline);
-  background: color-mix(in srgb, var(--surface-2) 90%, transparent); backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--surface-2) 90%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
   box-shadow: -16px 0 40px rgba(0,0,0,.25); transform: translateX(100%); visibility: hidden;
   transition: transform var(--ease), visibility var(--ease); }
 .drawer.open { transform: none; visibility: visible; }
@@ -168,3 +168,15 @@ body.drawer-open .canvas { padding-right: 380px; }
 .edge-list .kind { font-size: 11px; color: var(--ink-muted); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before { transition: none !important; } }
+
+/* A color-mix() holding var() can't be rejected at parse time, so without color-mix() support the
+   property resets (black lanes, see-through drawer). An earlier plain declaration would already have
+   lost the cascade, hence @supports. */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  .lane { fill: var(--surface-1); }
+  .drawer { background: var(--surface-2); }
+  button.chip.active { border-color: var(--sev); }
+  .card.r-removed, .card.r-affected { border-color: var(--role); }
+  .card.selected { box-shadow: 0 0 0 1px var(--role); }
+  .card.smelly { box-shadow: 0 0 0 1px var(--sev); }
+}
