@@ -352,7 +352,7 @@ def test_map_dismiss_rejects_unknown_kind_or_nodes(make_repo, tmp_path, capsys):
         assert error in err and err.count("\n") == 1
 
 
-def test_map_title_names_the_main_checkout_not_a_worktree(make_repo, tmp_path, capsys):
+def test_map_title_names_the_origin_or_main_checkout_not_a_worktree(make_repo, tmp_path):
     root = make_repo({"a.py": ""})
     worktree = tmp_path.parent / f"{tmp_path.name}-wt-1a2b"
     subprocess.run(
@@ -362,9 +362,12 @@ def test_map_title_names_the_main_checkout_not_a_worktree(make_repo, tmp_path, c
         capture_output=True,
     )
     assert codemap.build(worktree, _config())["title"] == f"Codebase map: {root.name}"
-    out = tmp_path / "out"
-    assert main(["map", "--root", str(worktree), "--out", str(out), "--title", "Shop"]) == 0
-    assert json.loads((out / "map.json").read_text(encoding="utf-8"))["title"] == "Shop"
+    for verb, url in [
+        ("add", "git@example.com:team/shop.git"),
+        ("set-url", "https://x.test/shop/"),
+    ]:
+        subprocess.run(["git", "remote", verb, "origin", url], cwd=root, check=True)
+        assert codemap.build(worktree, _config())["title"] == "Codebase map: shop"
 
 
 def test_skipped_extensions_are_still_mapped(make_repo):

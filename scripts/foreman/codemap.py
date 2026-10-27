@@ -1,6 +1,7 @@
 """Whole-repo map: modules grouped by directory, import edges, and repo-wide smells."""
 
 import posixpath
+import re
 import shutil
 import subprocess
 from collections import Counter
@@ -71,19 +72,21 @@ def _packages(edges: list[dict], kinds: list[str], group_of: dict, rank: dict) -
     return [pairs[k] for k in sorted(pairs)]
 
 
-def _repo_name(root: Path) -> str:
-    """The main checkout's folder, so a map of a temp worktree is still named for its repo."""
+def _git(root: Path, *args: str) -> str:
     git = shutil.which("git")
-    common = (
-        git
-        and subprocess.run(
-            [git, "rev-parse", "--path-format=absolute", "--git-common-dir"],
-            check=False,
-            cwd=root,
-            capture_output=True,
-            encoding="utf-8",
-        ).stdout.strip()
-    )
+    if git is None:
+        return ""
+    return subprocess.run(
+        [git, *args], check=False, cwd=root, capture_output=True, encoding="utf-8"
+    ).stdout.strip()
+
+
+def _repo_name(root: Path) -> str:
+    """The `origin` remote's name, else the main checkout's folder (a temp worktree's isn't it)."""
+    origin = _git(root, "remote", "get-url", "origin")
+    if origin:
+        return re.split(r"[/:\\]", origin.rstrip("/"))[-1].removesuffix(".git")
+    common = _git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
     return (
         Path(common).parent.name if common and Path(common).name == ".git" else root.resolve().name
     )
