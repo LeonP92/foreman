@@ -27,7 +27,10 @@ has committed against `BASE = git merge-base <repo.base> <branch>`, never the ti
 itself. If `BASE` equals the branch tip, check `git rev-list --first-parent <repo.base>`:
 if the tip is on it, the branch has no commits of its own and there is nothing to review
 (say so and stop); otherwise it was already merged (say so in the report and use `BASE^`,
-the merge-base's first parent, as `BASE`). Then check whether the branch is gone or
+the merge-base's first parent, as `BASE`). If there is no usable `BASE` (no common commit,
+`repo.base` has no commits, or `BASE^` is needed but `BASE` is a root commit), say so in the
+report and skip every base comparison: no failing-on-base run, no base side in verify, no
+base graph in the diagram; review the branch alone. Then check whether the branch is gone or
 already landed, using only refs already present (never fetch: a `--prune` deletes
 remote-tracking refs):
 - "branch deleted on remote" only when the branch had a remote counterpart

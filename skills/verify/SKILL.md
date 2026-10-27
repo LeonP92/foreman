@@ -66,9 +66,9 @@ its path), pass it to every launch with
 
 ## 3. Worktrees and data
 
-1. The base is `BASE = git merge-base <repo.base> <branch>`, never the tip of
-   `repo.base`; if `BASE` equals the branch tip, there is nothing to review, or it was
-   already merged and `BASE^` is the base, as the review skill decides. Make a temp folder
+1. `BASE = git merge-base <repo.base> <branch>`; nothing to review, already merged (`BASE^`)
+   or no usable base, as the review skill decides. With no usable base, say so and run only
+   the branch (its URL as `--base`, no `--branch`). Make a temp folder
    under the system temp directory, outside the repo, and add two worktrees there:
    `git worktree add --detach <temp>/base <BASE>` and the same for the branch. Pick each
    server's port, `{name}` and `{dir}`, and prepare each worktree (copy `[repo] copy`
