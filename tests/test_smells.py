@@ -154,11 +154,14 @@ def test_duplicate_severity_and_order():
     ]
 
 
-def test_each_kind_is_capped():
+def test_each_kind_is_capped_and_the_rest_counted():
     blocks = [_block(10 + i, "a.py", "b.py") for i in range(25)]
-    found = _kinds(_detect(["a.py", "b.py"], blocks=blocks), "duplicate")
-    assert len(found) == smells.MAX_PER_KIND
-    assert found[0]["evidence"].startswith("34 lines")
+    found = _detect(["a.py", "b.py"], blocks=blocks, cycles=[["a.py", "b.py"]])
+    shown, dropped = smells.cap(found)
+    assert len(_kinds(shown, "duplicate")) == smells.MAX_PER_KIND
+    assert _kinds(shown, "duplicate")[0]["evidence"].startswith("34 lines")
+    assert len(_kinds(shown, "cycle")) == 1
+    assert dropped == {"duplicate": 5}
 
 
 def test_dead_code_skips_tests_and_entry_points():

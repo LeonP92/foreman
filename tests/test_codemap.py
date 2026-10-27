@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from foreman import codemap, render
+from foreman.cli import main
 from foreman.config import DEFAULTS
 
 RUN = str(Path(__file__).resolve().parents[1] / "scripts" / "run.py")
@@ -272,3 +273,15 @@ def test_configured_entry_points_and_infra_files(make_repo):
     data = codemap.build(root, {**DEFAULTS, "audit": {"entry_points": ["plugins/*.py"]}})
     assert [s["nodes"] for s in data["smells"] if s["kind"] == "deadcode"] == [["lonely.py"]]
     assert "infra/main.tf" not in {n["id"] for n in data["nodes"]}
+
+
+def test_map_counts_every_smell_and_what_the_cap_dropped(make_repo, tmp_path, capsys):
+    root = make_repo({f"m{i:02}.py": "" for i in range(23)})
+    out = tmp_path / "out"
+    assert main(["map", "--root", str(root), "--out", str(out)]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    data = json.loads((out / "map.json").read_text(encoding="utf-8"))
+    for result in (printed, data):
+        assert result["dropped"] == {"deadcode": 3}
+        assert result["counts"] == {"deadcode": {"low": 23}}
+        assert len(result["smells"]) == 20

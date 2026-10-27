@@ -6,6 +6,7 @@ import json
 import posixpath
 import re
 import tomllib
+from collections import Counter
 from collections.abc import Collection, Iterable, Sequence
 from pathlib import Path
 from typing import TypedDict
@@ -89,8 +90,19 @@ def _ranked(kind: str, found: list[Found]) -> list[Smell]:
     found.sort(key=lambda f: (SEVERITY_RANK[f[1]], -f[0], f[2]))
     return [
         {"kind": kind, "severity": sev, "nodes": nodes, "title": title, "evidence": evidence}
-        for _, sev, nodes, title, evidence in found[:MAX_PER_KIND]
+        for _, sev, nodes, title, evidence in found
     ]
+
+
+def cap(found: list[Smell]) -> tuple[list[Smell], dict[str, int]]:
+    """The first MAX_PER_KIND smells of each kind, and how many of each kind were dropped."""
+    seen: Counter[str] = Counter()
+    shown = []
+    for s in found:
+        seen[s["kind"]] += 1
+        if seen[s["kind"]] <= MAX_PER_KIND:
+            shown.append(s)
+    return shown, {k: n - MAX_PER_KIND for k, n in seen.items() if n > MAX_PER_KIND}
 
 
 def _cycles(graph: dict) -> list[Found]:

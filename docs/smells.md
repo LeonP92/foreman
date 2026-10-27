@@ -4,7 +4,8 @@ foreman reports two families. Diagram smells are judged by the agent for one cha
 must carry evidence. Audit smells are computed by `python3 scripts/run.py map` from the
 import graph, git history, file sizes and duplicate scan. Audit thresholds are relative to
 the repo's own spread (percentiles) with a fixed floor, so a small repo isn't flagged for
-being small. Each audit kind lists at most 20 smells, ranked by severity then size.
+being small. Each audit kind lists at most 20 smells, ranked by severity then size; `map` reports how many
+more each kind had under `dropped`, and `counts` gives every smell by kind and severity.
 
 ## Diagram smells
 

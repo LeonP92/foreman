@@ -66,6 +66,8 @@ def _map(args) -> tuple[dict, int]:
         "html": html.as_posix(),
         **summary,
         "smells": data["smells"],
+        "dropped": data["dropped"],
+        "counts": data["counts"],
         "unsupported": data["unsupported"],
     }, 0
 

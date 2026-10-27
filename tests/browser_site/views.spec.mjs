@@ -131,3 +131,9 @@ test("diagram with more than 30 edges opens as a matrix", async ({ page }) => {
   await expect(page.locator("#matrix")).toBeVisible();
   await expect(page.locator('#seg [data-mode="matrix"]')).toHaveAttribute("aria-pressed", "true");
 });
+
+test("map smell chip counts what the cap dropped", async ({ page }) => {
+  await page.goto("/capped.html");
+  await expect(page.locator("button.chip")).toHaveText("high · layering1(+3 more)");
+  await expect(page.locator(".chip", { hasText: "smells" })).toHaveText("4 smells");
+});

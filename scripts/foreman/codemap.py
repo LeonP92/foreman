@@ -84,6 +84,10 @@ def build(root: Path, config: dict) -> dict:
         smells.entry_points(root, files, config["audit"]["entry_points"]),
         smells.facades(root, files),
     )
+    shown, dropped = smells.cap(found)
+    counts: dict[str, Counter[str]] = {}
+    for s in found:
+        counts.setdefault(s["kind"], Counter())[s["severity"]] += 1
     lines: Counter[str] = Counter()
     for f in measured["files"]:
         lines[go_package(f["path"]) if f["path"].endswith(".go") else f["path"]] += f["lines"]
@@ -138,6 +142,8 @@ def build(root: Path, config: dict) -> dict:
             for e, kind in zip(g["edges"], kinds, strict=True)
         ],
         "packages": _packages(g["edges"], kinds, group_of, rank),
-        "smells": found,
+        "smells": shown,
+        "dropped": dropped,
+        "counts": {k: dict(c) for k, c in counts.items()},
         "unsupported": g["unsupported"],
     }

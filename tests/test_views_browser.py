@@ -77,6 +77,21 @@ DENSE_DIAGRAM = {
     "smells": [],
 }
 
+# One listed layering smell and three more past the cap.
+CAPPED = {
+    **MAP,
+    "smells": [
+        {
+            "kind": "layering",
+            "severity": "high",
+            "nodes": ["app/main.py", "lib/util.py"],
+            "title": "Forbidden import into lib/**",
+            "evidence": "`app/main.py` imports `lib/util.py`",
+        }
+    ],
+    "dropped": {"layering": 3},
+}
+
 # One layer of three: with the drawer open it wraps, sending z -> x round the gutter.
 WIDE = _map([("x", 0), ("y", 0), ("z", 0)], [("z", "x", "cycle", "up")])
 
@@ -91,6 +106,7 @@ def test_views_in_a_browser(tmp_path, serve):
     render.write(DENSE, site / "dense.html")
     render.write(LAYERED, site / "layered.html")
     render.write(WIDE, site / "wide.html")
+    render.write(CAPPED, site / "capped.html")
     render.write(DENSE_DIAGRAM, site / "dense-diagram.html")
     r = run(SPEC, tmp_path / "out", serve(site))
     assert [(t["title"], t["status"]) for t in r["tests"]] == [
@@ -103,6 +119,7 @@ def test_views_in_a_browser(tmp_path, serve):
         ("map label follows its arc after the drawer closes", "passed"),
         ("map neighbourhood puts dependents left and dependencies right", "passed"),
         ("map renders when storage is unavailable", "passed"),
+        ("map smell chip counts what the cap dropped", "passed"),
         ("map with few package edges opens as a graph", "passed"),
         ("map with more than 30 package edges opens as a matrix", "passed"),
         ("problems only hides import edges", "passed"),

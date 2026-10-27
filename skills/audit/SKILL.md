@@ -37,7 +37,9 @@ run the UI pass).
 2. **Map it.** Run
    `python3 -I <root>/scripts/run.py map --root <temp> --config <repo>/.foreman/config.toml --out <run>`
    (both paths absolute). It prints the map path, group and module counts, the ranked
-   smells, and `unsupported`: file extensions that need an import rule.
+   smells (at most 20 per kind), `dropped` (how many more each kind had), `counts` (every
+   smell by kind and severity, before that cap), and `unsupported`: file extensions that
+   need an import rule.
 3. **Read the top smells.** For the highest-ranked ones, open the files named in the
    evidence and confirm the smell is real. Drop any that aren't (say why under
    "Not checked" or in a line below the list), and write a suggested next step for each
@@ -65,20 +67,31 @@ with no `--branch`. Each problem is a finding with steps, expected, actual and s
 
 ## Report
 
-Write `<run>/audit.md`, glance first:
+Write `<run>/audit.md` in three parts. Totals come from `counts`, so they include smells
+past the per-kind cap.
+
+1. **Glance:** the verdict, a table of kinds × severity, the map path, and languages with
+   no import rule.
+2. **Top items per kind:** for each kind, up to 5, high first, numbered across kinds: the
+   modules, the evidence, and a suggested next step (split a file, move an import behind
+   an interface, confirm and delete). List the ones you checked and dropped, with why.
+3. **Appendix:** a table of every listed smell (kind, severity, modules, title), and per
+   kind the `dropped` count the map didn't list.
 
 ```
 ## Audit: main @ 3f2a9c1
 
-Verdict: 2 high-severity smells to look at first · 9 smells (2 high / 4 medium / 3 low:
-3 cochange, 2 cycle, 2 oversize, 1 hub, 1 deadcode) · UI smoke 5/6 pages clean ·
+Verdict: 3 high-severity smells to look at first · 61 smells · UI smoke 5/6 pages clean
+| kind     | high | medium | low |
+|----------|------|--------|-----|
+| layering | 3    | 0      | 0   |
+| cochange | 0    | 12     | 23  |
+| deadcode | 0    | 0      | 23  |
 map: .foreman/reports/audit/20261027T091500Z/map.html
 No import rule yet: .rb (14 files) — run setup to add one.
 ```
 
-Then the smells, ranked, numbered: kind and severity, the modules, the evidence, and a
-suggested next step (split a file, merge two twins, move an import behind an interface,
-confirm and delete). Then UI smoke findings, in the review's finding format
+Then UI smoke findings, in the review's finding format
 (`<root>/skills/review/references/report.md`).
 
 Then tell the reader how to use the map:
