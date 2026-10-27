@@ -87,11 +87,10 @@ def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
     files = list_files(root, ignore)
     index = make_index(root, files)
     stems = {posixpath.splitext(posixpath.basename(p))[0] for p in files}
-    # a rule resolving against the importing file's folder is relative: a miss is a miss
-    relative = any("{dir}" in template for template in rule["resolve"])
     covered = [p for p in files if posixpath.splitext(p)[1] in rule["extensions"]]
-    matches = resolved = external = 0
+    matches = resolved = 0
     examples = []
+    externals = []
     unmatched = []
     for path in covered:
         text = read_text(root / path) or ""
@@ -99,25 +98,23 @@ def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
             matches += 1
             if _resolve(path, capture, index, rule):
                 resolved += 1
-            # A bare name no part of which names a repo file (`json`, `java.util.List`) is a library
-            # import. Any repo path a capture spells (`{1|path}`) ends in a file stem, so checking
-            # segments covers paths too.
-            elif (
-                not relative
-                and "/" not in capture
-                and stems.isdisjoint(re.split(r"[./:]+", capture))
-            ):
-                external += 1
+            # A capture no part of which names a repo file (`json`, `java.util.List`) is a library
+            # import. Any repo path a capture spells ends in a file stem, so checking segments
+            # covers relative paths too; a missing relative file can still land here, so
+            # `external_examples` shows what was counted.
+            elif stems.isdisjoint(re.split(r"[./:]+", capture)):
+                externals.append({"import": capture, "path": path})
             elif len(examples) < 5:
                 examples.append({"import": capture, "path": path})
         lines = islice(_unmatched(text, rule), 5 - len(unmatched))
         unmatched += [{"line": line, "path": path} for line in lines]
-    internal = matches - external
+    internal = matches - len(externals)
     return {
         "files": len(covered),
         "matches": matches,
         "resolved": resolved,
-        "external": external,
+        "external": len(externals),
+        "external_examples": externals[:5],
         # below half resolved, the graph is so sparse most files would look dead
         "ok": bool(covered) and internal > 0 and resolved / internal >= 0.5,
         "unresolved_examples": examples,

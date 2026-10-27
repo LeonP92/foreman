@@ -164,7 +164,9 @@ def build(root: Path, config: dict) -> dict:
         ],
         "packages": _packages(g["edges"], kinds, group_of, rank),
         "smells": shown,
-        "dropped": dropped,
+        # per-kind totals stay for older readers; chips use the per-severity counts
+        "dropped": {k: sum(c.values()) for k, c in sorted(dropped.items())},
+        "dropped_by_severity": dropped,
         "counts": {k: dict(c) for k, c in counts.items()},
         "unsupported": g["unsupported"],
     }
@@ -181,7 +183,7 @@ def _matching(smells: list[dict], entry: dict) -> list[int]:
 
 
 def dismiss(data: dict, triage: dict) -> dict:
-    """The map without the smells triage dismissed; `dismissed` counts them per kind.
+    """The map without the smells triage dismissed, counted per kind and per kind and severity.
 
     `dismissed_smells` keeps what was removed, so re-running the same triage is a no-op.
     """
@@ -226,9 +228,13 @@ def dismiss(data: dict, triage: dict) -> dict:
     gone = [{**data["smells"][j], "reason": r} for j, r in sorted(reasons.items())]
     dismissed = Counter(data.get("dismissed", {}))
     dismissed.update(s["kind"] for s in gone)
+    by_severity = {k: Counter(c) for k, c in data.get("dismissed_by_severity", {}).items()}
+    for s in gone:
+        by_severity.setdefault(s["kind"], Counter())[s["severity"]] += 1
     return {
         **data,
         "smells": kept,
         "dismissed": dict(sorted(dismissed.items())),
+        "dismissed_by_severity": {k: dict(c) for k, c in sorted(by_severity.items())},
         "dismissed_smells": [*data.get("dismissed_smells", []), *gone],
     }

@@ -107,17 +107,19 @@ def _ranked(kind: str, found: list[Found]) -> list[Smell]:
     ]
 
 
-def cap(found: list[Smell]) -> tuple[list[Smell], dict[str, int]]:
-    """The first MAX_PER_KIND smells of each capped kind, and how many of each were dropped."""
+def cap(found: list[Smell]) -> tuple[list[Smell], dict[str, dict[str, int]]]:
+    """The first MAX_PER_KIND smells of each capped kind, and per kind and severity how many
+    were dropped."""
     seen: Counter[str] = Counter()
     shown = []
+    dropped: dict[str, Counter[str]] = {}
     for s in found:
         seen[s["kind"]] += 1
         if s["kind"] in UNCAPPED or seen[s["kind"]] <= MAX_PER_KIND:
             shown.append(s)
-    return shown, {
-        k: n - MAX_PER_KIND for k, n in seen.items() if n > MAX_PER_KIND and k not in UNCAPPED
-    }
+        else:
+            dropped.setdefault(s["kind"], Counter())[s["severity"]] += 1
+    return shown, {k: dict(c) for k, c in dropped.items()}
 
 
 def triage_order(

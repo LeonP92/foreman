@@ -117,6 +117,7 @@ def test_setup_reads_ci_and_stops_on_import_free_languages():
         '`[graph] skip = [".sh", …]`',
         "`unmatched_examples`",
         "`external`",
+        "`external_examples`",
     ]:
         assert phrase in text, phrase
 

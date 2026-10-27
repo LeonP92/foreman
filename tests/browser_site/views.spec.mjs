@@ -134,14 +134,15 @@ test("diagram with more than 30 edges opens as a matrix", async ({ page }) => {
 
 test("map smell chips split severities and count dropped and dismissed", async ({ page }) => {
   await page.goto("/capped.html");
+  // each note sits on the chip of its own kind and severity
   await expect(page.locator("button.chip")).toHaveText([
     "high · layering1(+3 more)(+2 dismissed)",
-    "medium · hub1",
-    "low · hub1",
+    "medium · hub1(+1 dismissed)",
+    "low · hub1(+2 more)",
   ]);
-  await expect(page.locator(".chip", { hasText: "smells" })).toHaveText("6 smells(+6 dismissed)");
-  // every deadcode smell was dismissed: a count-0 chip still says so
-  await expect(page.locator(".chip", { hasText: "deadcode" })).toHaveText("deadcode0(+4 dismissed)");
+  await expect(page.locator(".chip", { hasText: "smells" })).toHaveText("8 smells(+7 dismissed)");
+  // every low deadcode smell was dismissed: a count-0 chip still says so
+  await expect(page.locator(".chip", { hasText: "deadcode" })).toHaveText("low · deadcode0(+4 dismissed)");
 });
 
 test("map double-click on a group drills in", async ({ page }) => {

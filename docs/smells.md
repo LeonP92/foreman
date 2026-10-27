@@ -17,7 +17,9 @@ node set with all its smells, every high item first, then the rest round-robin a
 reads the files behind each item, confirms or dismisses it against a checklist of known
 false positives
 (`skills/audit/references/triage.md`), and runs `map --out <run> --dismiss <triage.json>`
-to re-render the map without the dismissed ones; `dismissed` counts them per kind.
+to re-render the map without the dismissed ones; `dismissed` counts them per kind. The map
+also keeps `dropped_by_severity` and `dismissed_by_severity`, so each note sits on the chip
+of its own kind and severity.
 
 ## Diagram smells
 

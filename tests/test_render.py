@@ -89,6 +89,9 @@ def test_script_close_tag_in_data_is_escaped(tmp_path):
     data["title"] = "</script><script>alert(1)</script>"
     html = render.write(data, tmp_path / "d.html").read_text(encoding="utf-8")
     assert "alert(1)</script>" not in html
+    # the page and visible titles are the data's, before any script runs
+    title = "&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
+    assert f"<title>{title}</title>" in html and f'<h1 id="title">{title}</h1>' in html
     payload = html.split("const DATA = ", 1)[1].split(";\n", 1)[0]
     assert json.loads(payload) == data
 
@@ -198,6 +201,9 @@ def test_map_inlines_theme_and_escapes_payload(tmp_path):
     assert "#0d0d0d" in html
     assert "function openDrawer(" in html
     assert "alert(1)</script>" not in html
+    # the page and visible titles are the data's, before any script runs
+    title = "&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;"
+    assert f"<title>{title}</title>" in html and f'<h1 id="title">{title}</h1>' in html
     payload = html.split("const DATA = ", 1)[1].split(";\n", 1)[0]
     assert json.loads(payload) == data
 

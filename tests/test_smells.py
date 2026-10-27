@@ -217,7 +217,7 @@ def test_each_kind_is_capped_except_cycles_and_layering():
     assert len(_kinds(shown, "duplicate")) == smells.MAX_PER_KIND
     assert _kinds(shown, "duplicate")[0]["evidence"].startswith("36 lines")
     assert len(_kinds(shown, "cycle")) == 25
-    assert dropped["duplicate"] == 5 and "cycle" not in dropped
+    assert dropped["duplicate"] == {"low": 5} and "cycle" not in dropped
 
 
 def test_dead_code_skips_tests_and_entry_points():

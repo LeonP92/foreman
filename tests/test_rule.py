@@ -44,10 +44,19 @@ def test_check_reports_resolution_rate(make_repo):
     )
     result = rule.check(root, RUBY)
     assert (result["files"], result["matches"], result["resolved"]) == (2, 2, 1)
-    # {dir} templates resolve relative to the file, so a miss is never external
-    assert result["external"] == 0
+    # no repo file is named `missing`, so even under a {dir} template it counts as external,
+    # and is listed so a missing relative file stays visible
+    assert result["external"] == 1
+    assert result["external_examples"] == [{"import": "missing", "path": "a.rb"}]
     assert result["ok"] is True
-    assert result["unresolved_examples"] == [{"import": "missing", "path": "a.rb"}]
+    assert result["unresolved_examples"] == []
+
+
+def test_relative_capture_naming_a_repo_file_is_a_miss(make_repo):
+    root = make_repo({"a.rb": "require_relative 'lib/b'\n", "b.rb": ""})
+    result = rule.check(root, RUBY)
+    assert (result["resolved"], result["external"], result["external_examples"]) == (0, 0, [])
+    assert result["unresolved_examples"] == [{"import": "lib/b", "path": "a.rb"}]
 
 
 LOAD_PATH = {

@@ -1,5 +1,6 @@
 """Validate report data and render it into a self-contained HTML template."""
 
+import html
 import json
 from pathlib import Path
 
@@ -260,6 +261,7 @@ def write(data: dict, out: Path) -> Path:
         .read_text(encoding="utf-8")
         .replace("/*__THEME__*/", (TEMPLATES / "_theme.css").read_text(encoding="utf-8"))
         .replace("/*__UI__*/", (TEMPLATES / "_ui.js").read_text(encoding="utf-8"))
+        .replace("/*__TITLE__*/", html.escape(data["title"]))
     )
     # `<` only occurs inside JSON strings, so < keeps `</script>` and `<!--` inert.
     payload = json.dumps(data).replace("<", "\\u003c")

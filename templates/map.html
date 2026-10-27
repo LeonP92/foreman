@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>Codebase map</title>
+<title>/*__TITLE__*/</title>
 <style>
 /*__THEME__*/
 .card { --role: var(--ink-muted); }
@@ -26,7 +26,7 @@
 <body>
 <header class="topbar">
   <div class="bar-row">
-    <div class="bar-title"><h1 id="title"></h1><p id="notes"></p></div>
+    <div class="bar-title"><h1 id="title">/*__TITLE__*/</h1><p id="notes"></p></div>
     <div class="seg" id="seg" role="group" aria-label="Package view">
       <button type="button" data-mode="graph">Graph</button><button type="button" data-mode="matrix">Matrix</button>
     </div>
@@ -460,10 +460,11 @@ function showSmells(list, button, more, gone) {
 }
 
 const chips = document.getElementById("chips");
+const bySev = (counts, kind, severity) => ((counts || {})[kind] || {})[severity] || 0;
 // Smells past the per-kind cap: counted by codemap, not listed.
-const dropped = kind => (DATA.dropped || {})[kind] || 0;
+const dropped = (kind, severity) => bySev(DATA.dropped_by_severity, kind, severity);
 // Smells triage read and dismissed as false positives: counted, not listed.
-const dismissed = kind => (DATA.dismissed || {})[kind] || 0;
+const dismissed = (kind, severity) => bySev(DATA.dismissed_by_severity, kind, severity);
 const sum = counts => Object.values(counts || {}).reduce((a, n) => a + n, 0);
 const smellTotal = DATA.smells.length + sum(DATA.dropped);
 const dismissedNote = n => n ? `<span class="quiet">(+${n} dismissed)</span>` : "";
@@ -478,34 +479,30 @@ chips.insertAdjacentHTML("beforeend", `<span class="chip"><b>${DATA.groups.lengt
   + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${esc(n)})`).join(", ")} — run setup to graph them</span>` : "")
   + `<span class="sep"></span>` + (DATA.smells.length ? "" : NO_SMELLS));
 const chipLists = {};
-DATA.smells.forEach(s => (chipLists[`${s.kind} ${s.severity}`] ||= []).push(s));
-const ordered = Object.values(chipLists).sort((x, y) => bySeverity(x[0], y[0]) || (x[0].kind < y[0].kind ? -1 : 1));
-// The cap drops a kind's lowest-ranked smells, so its least severe chip carries the uncounted ones.
-const lastOfKind = {};
-ordered.forEach(list => lastOfKind[list[0].kind] = list);
-ordered.forEach(list => {
-  const {kind, severity} = list[0], last = lastOfKind[kind] === list;
-  const more = last ? dropped(kind) : 0, gone = last ? dismissed(kind) : 0;
+const chipList = (kind, severity) => chipLists[`${kind} ${severity}`] ||= {kind, severity, list: []};
+DATA.smells.forEach(s => chipList(s.kind, s.severity).list.push(s));
+// A kind and severity whose smells were all past the cap or dismissed still gets a chip, with nothing to show.
+[DATA.dropped_by_severity, DATA.dismissed_by_severity].forEach(counts =>
+  Object.entries(counts || {}).forEach(([kind, sevs]) => Object.keys(sevs).forEach(sev => chipList(kind, sev))));
+Object.values(chipLists).sort((x, y) => bySeverity(x, y) || (x.kind < y.kind ? -1 : 1)).forEach(({kind, severity, list}) => {
+  const more = dropped(kind, severity), gone = dismissed(kind, severity);
+  const notes = (more ? `<span class="quiet">(+${more} more)</span>` : "") + dismissedNote(gone);
+  const label = `<span class="dot"></span><span class="ellipsis">${esc(severity)} · ${esc(kind)}</span><b>${list.length}</b>`;
+  const title = `${list.length} ${severity} ${kind} listed`
+    + (more ? `; ${more} more past the cap are not listed` : "")
+    + (gone ? `; ${gone} dismissed by triage` : "");
+  if (!list.length) {
+    chips.insertAdjacentHTML("beforeend", `<span class="chip sev-${esc(severity)}" title="${esc(title)}">${label}${notes}</span>`);
+    return;
+  }
   const b = document.createElement("button");
   b.type = "button";
   b.className = `chip sev-${severity}`;
-  b.title = `${list.length} ${severity} ${kind} smell${list.length > 1 ? "s" : ""}`
-    + (more ? `; ${more} more ${kind} past the cap are not listed` : "")
-    + (gone ? `; ${gone} ${kind} dismissed by triage` : "");
-  b.innerHTML = `<span class="dot"></span><span class="ellipsis">${esc(severity)} · ${esc(kind)}</span><b>${list.length}</b>`
-    + (more ? `<span class="quiet">(+${more} more)</span>` : "") + dismissedNote(gone);
+  b.title = title;
+  b.innerHTML = label + notes;
   b.addEventListener("click", ev => { ev.stopPropagation(); showSmells(list, b, more, gone); });
   chips.appendChild(b);
 });
-// A kind whose listed smells were all dismissed still gets a chip, with nothing to show.
-[...new Set([...Object.keys(DATA.dropped || {}), ...Object.keys(DATA.dismissed || {})])].sort()
-  .filter(kind => !lastOfKind[kind]).forEach(kind => {
-    const more = dropped(kind), gone = dismissed(kind);
-    chips.insertAdjacentHTML("beforeend", `<span class="chip" title="${esc(kind)}: none listed`
-      + (more ? `; ${more} past the cap` : "") + (gone ? `; ${gone} dismissed by triage` : "")
-      + `"><span class="ellipsis">${esc(kind)}</span><b>0</b>`
-      + (more ? `<span class="quiet">(+${more} more)</span>` : "") + dismissedNote(gone) + `</span>`);
-  });
 
 const hit = (id, q) => id.toLowerCase().includes(q);
 const matches = (it, q) => it.kind === "module" ? hit(it.id, q)

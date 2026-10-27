@@ -329,6 +329,8 @@ def test_map_dismiss_drops_triaged_smells_and_keeps_counts(make_repo, tmp_path, 
         assert result["counts"] == {"deadcode": {"low": 23}}
         assert ["m00.py"] not in [s["nodes"] for s in result["smells"]]
         assert len(result["smells"]) == 19
+    assert data["dismissed_by_severity"] == {"deadcode": {"low": 1}}
+    assert data["dropped_by_severity"] == {"deadcode": {"low": 3}}
     assert '"dismissed": {"deadcode": 1}' in (out / "map.html").read_text(encoding="utf-8")
     # the same triage again is a no-op
     assert main(["map", "--out", str(out), "--dismiss", path]) == 0
