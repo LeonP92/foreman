@@ -203,7 +203,7 @@ function focusNode(n) {
   if (mine.length) html += `<h3>Smells</h3><ul>${mine.map(s => `<li>${sevWord(s)} ${esc(s.kind)}: ${fmt(s.title)}</li>`).join("")}</ul>`;
   html += `<h3>Edges out</h3>${edgeList(edgeEls.filter(e => e.a === n.id), "→", "b")}`
     + `<h3>Edges in</h3>${edgeList(edgeEls.filter(e => e.b === n.id), "←", "a")}`;
-  openDrawer(html);
+  openDrawer(html, nodeEls.get(n.id));
   reveal();
 }
 function showSmell(s, button) {
@@ -221,7 +221,7 @@ function showSmell(s, button) {
   openDrawer(`<h2 class="sans">${fmt(s.title)}</h2><div class="meta">${sevWord(s)}<span class="quiet">${esc(s.kind)}</span></div>`
     + `<h3>What it means</h3><p>${esc(SMELL_TEXT[s.kind])}</p><h3>Evidence</h3><p>${fmt(s.evidence)}</p>`
     + (s.suggestion ? `<h3>Suggestion</h3><p>${fmt(s.suggestion)}</p>` : "")
-    + `<h3>Nodes (${s.nodes.length})</h3><ul>${s.nodes.map(id => `<li>${linkTo(id)}</li>`).join("")}</ul>`);
+    + `<h3>Nodes (${s.nodes.length})</h3><ul>${s.nodes.map(id => `<li>${linkTo(id)}</li>`).join("")}</ul>`, button);
 }
 
 const chips = document.getElementById("chips");

@@ -2,37 +2,394 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
 <title>Codebase map</title>
 <style>
-  :root { --bg:#fff; --fg:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#111827; --fg:#e5e7eb; --muted:#9ca3af; --line:#374151; } }
-  body { margin:0; padding:10px 16px; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
-  h1 { font-size:16px; margin:0 0 4px; }
-  h2 { font-size:13px; margin:16px 0 4px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
-  .notes { font-size:12px; color:var(--muted); }
-  .sev { font-size:11px; font-weight:700; text-transform:uppercase; }
-  code { font:12px ui-monospace, monospace; }
+/*__THEME__*/
+.card { --role: var(--ink-muted); }
+.card.selected { --role: var(--ink-2); }
+.card.stub { border-style: dashed; background: var(--page); }
+.card.stub .card-label { color: var(--ink-2); }
+.badge.lang { --role: var(--ink-2); }
+.crumbs { display: flex; align-items: center; gap: 6px; font: 500 12.5px var(--mono); color: var(--ink-1); }
+.crumbs .quiet { font-family: var(--sans); }
+.drawer-body .evidence { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-muted); }
+/* Many edges at rest read as noise; focus still lights them fully. */
+.stage.dense .edge:not(.on):not(.dim) { opacity: .3; }
+.drawer-body .actions { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
 </style>
 </head>
 <body>
-<h1 id="title"></h1>
-<p class="notes" id="notes"></p>
-<h2>Groups</h2><ul id="groups"></ul>
-<h2>Smells</h2><ul id="smells"></ul>
+<header class="topbar">
+  <div class="bar-row">
+    <div class="bar-title"><h1 id="title"></h1><p id="notes"></p></div>
+    <label class="filter">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.75"/><path d="m10.5 10.5 3.5 3.5"/></svg>
+      <input id="filter" type="text" autocomplete="off" spellcheck="false" placeholder="Filter modules" aria-label="Filter modules (Enter focuses the first match)">
+      <kbd id="filter-key"></kbd>
+    </label>
+    <button class="icon-btn" type="button" popovertarget="legend">Legend</button>
+    <button class="icon-btn" type="button" id="theme" aria-label="Toggle light and dark theme" title="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"/></svg>
+    </button>
+  </div>
+  <div class="bar-row bar-chips" id="chips"><nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav><span class="sep"></span></div>
+</header>
+<div id="legend" class="legend" popover>
+  <h4>Edges</h4>
+  <ul>
+    <li><svg width="34" height="8"><line class="edge import" x1="0" y1="4" x2="34" y2="4"/></svg>imports (thicker = more)</li>
+    <li><svg width="34" height="8"><line class="edge cycle" x1="0" y1="4" x2="34" y2="4"/></svg>import cycle</li>
+    <li><svg width="34" height="8"><line class="edge forbidden" x1="0" y1="4" x2="34" y2="4"/></svg>forbidden layer crossing</li>
+  </ul>
+  <h4>Smells</h4>
+  <ul>
+    <li><span><span class="dot sev-low"></span></span>low</li>
+    <li><span><span class="dot sev-medium"></span></span>medium</li>
+    <li><span><span class="dot sev-high"></span></span>high</li>
+  </ul>
+  <p>Click a box to focus it and its neighbours. Double-click or Enter opens a group; inside, dashed stubs stand for the other groups and open them. Esc or a click on empty space clears.</p>
+</div>
+<div class="view">
+  <main class="canvas" id="canvas"><div class="stage" id="stage"><svg id="g"></svg></div></main>
+  <aside id="drawer" class="drawer" aria-label="Details">
+    <button class="icon-btn drawer-close" type="button" aria-label="Close details">
+      <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+    </button>
+    <div class="drawer-body"></div>
+  </aside>
+</div>
+
 <script>
+/*__UI__*/
 const DATA = /*__DATA__*/null;
 
-const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
-const SEV = {low:"#ca8a04", medium:"#ea580c", high:"#be123c"};
+// [width, height] per card kind. Stubs (other groups) sit in a column left of the module grid.
+const SIZE = {group: [248, 64], module: [212, 48], stub: [180, 44]};
+// Groups get wider gaps so the few edges between them stay readable.
+const GAP = {group: [72, 44], module: [20, 14]}, PAD = 32, TOP = 58, STUB_GAP = 72;
+const STUB = "\u0000";
+const KIND = {import: "imports", cycle: "import cycle", forbidden: "forbidden layer crossing"};
+const SEV_RANK = {low: 1, medium: 2, high: 3};
+const SMELL_TEXT = {
+  cycle: "Modules that import each other at runtime; none can change or load alone.",
+  layering: "Imports that cross a layer boundary the rules forbid.",
+  hub: "Many modules meet here; a change to it ripples to all of them.",
+  cochange: "Files that keep changing together without importing each other: a hidden coupling.",
+  hotspot: "Large files that change often; most bugs and merge conflicts land here.",
+  oversize: "Files or functions far larger than the rest of the repo.",
+  duplicate: "The same block of code in several places; a fix to one misses the others.",
+  deadcode: "Nothing imports these and they are not entry points; they may be unused.",
+};
+const byId = Object.fromEntries(DATA.nodes.map(n => [n.id, n]));
+const groupById = Object.fromEntries(DATA.groups.map(g => [g.id, g]));
+const bySeverity = (x, y) => SEV_RANK[y.severity] - SEV_RANK[x.severity];
+const nodeSmells = {}, groupSmells = {};
+DATA.smells.forEach(s => {
+  s.nodes.forEach(id => (nodeSmells[id] ||= []).push(s));
+  new Set(s.nodes.map(id => byId[id].group)).forEach(g => (groupSmells[g] ||= []).push(s));
+});
+[nodeSmells, groupSmells].forEach(m => Object.values(m).forEach(list => list.sort(bySeverity)));
+const groupLines = g => g.nodes.reduce((sum, id) => sum + byId[id].lines, 0);
+const mainLang = g => { const c = {}; g.nodes.forEach(id => c[byId[id].lang] = (c[byId[id].lang] || 0) + 1);
+  return Object.keys(c).sort((a, b) => c[b] - c[a])[0]; };
+const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+const sevWord = s => `<span class="sev-word sev-${esc(s.severity)}"><span class="dot"></span>${esc(s.severity)}</span>`;
+const smellBadge = list => !list ? ""
+  : `<span class="smell-badge sev-${list[0].severity}" title="${esc(list.map(s => `${s.severity} ${s.kind}: ${s.title}`).join("\n"))}">${list.length > 1 ? list.length : "!"}</span>`;
+
 document.title = DATA.title;
 document.getElementById("title").innerHTML = fmt(DATA.title);
 document.getElementById("notes").innerHTML = fmt(DATA.notes || "");
-document.getElementById("groups").innerHTML = DATA.groups
-  .map(g => `<li>${esc(g.label)} (${g.nodes.length} modules)</li>`).join("");
-document.getElementById("smells").innerHTML = DATA.smells.length
-  ? DATA.smells.map(s => `<li><span class="sev" style="color:${SEV[s.severity]}">${esc(s.severity)}</span> ${esc(s.kind)}: ${fmt(s.title)} — ${fmt(s.evidence)}</li>`).join("")
-  : "<li>none found</li>";
+
+const canvas = document.getElementById("canvas"), stage = document.getElementById("stage");
+const svg = document.getElementById("g"), NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+const defs = el("defs", {}), regions = el("g", {});
+for (const k of ["import", "cycle", "forbidden"]) {
+  const m = el("marker", {id: "a-" + k, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 11, markerHeight: 11,
+    markerUnits: "userSpaceOnUse", orient: "auto-start-reverse"}, defs);
+  el("path", {d: "M0,1 L10,5 L0,9 z", class: "ah-" + k}, m);
+}
+
+// Collapses module edges onto what the view shows: groups in the package view, modules + stubs inside a group.
+function aggregate(viewOf) {
+  const agg = new Map();
+  for (const e of DATA.edges) {
+    const a = viewOf(e.from), b = viewOf(e.to);
+    if (a === b || (a[0] === STUB && b[0] === STUB)) continue;
+    const key = a + "\n" + b;
+    if (!agg.has(key)) agg.set(key, {a, b, count: 0, kinds: {}});
+    const x = agg.get(key);
+    x.count++;
+    x.kinds[e.kind] = (x.kinds[e.kind] || 0) + 1;
+  }
+  return [...agg.values()].map(x => ({...x, kind: x.kinds.forbidden ? "forbidden" : x.kinds.cycle ? "cycle" : "import"}));
+}
+const packageEdges = aggregate(id => byId[id].group);
+
+let view = null, items = [], edges = [], focused = null, near = new Set();
+const cards = new Map(), pos = {};
+
+function itemsFor(group) {
+  if (!group) return DATA.groups.map(g => ({id: g.id, kind: "group", label: g.label,
+    sub: `${plural(g.nodes.length, "module")} · ${plural(groupLines(g), "line")}`, badge: mainLang(g), smells: groupSmells[g.id]}));
+  const prefix = group === "." ? "" : group + "/";
+  const modules = groupById[group].nodes.map(id => { const n = byId[id], dir = id.slice(prefix.length, -n.label.length);
+    return {id, kind: "module", label: n.label, sub: plural(n.lines, "line") + (dir ? " · " + dir : ""), smells: nodeSmells[id]}; });
+  const stubs = DATA.groups.filter(g => g.id !== group).map(g => {
+    const links = edges.filter(e => e.a === STUB + g.id || e.b === STUB + g.id).reduce((n, e) => n + e.count, 0);
+    return {id: STUB + g.id, kind: "stub", group: g.id, label: g.label, sub: plural(links, "import")};
+  }).filter(s => !s.sub.startsWith("0 "));
+  return [...stubs, ...modules];
+}
+
+function render(group) {
+  view = group;
+  focused = null;
+  near = new Set();
+  edges = group ? aggregate(id => byId[id].group === group ? id : STUB + byId[id].group) : packageEdges;
+  items = itemsFor(group);
+  cards.forEach(card => card.remove());
+  cards.clear();
+  svg.replaceChildren(defs, regions);
+  for (const k in pos) delete pos[k];
+  for (const it of items) {
+    const [w, h] = SIZE[it.kind], card = document.createElement("div");
+    const open = it.kind === "stub" ? () => render(it.group) : it.kind === "group" ? () => render(it.id) : null;
+    card.className = `card ${it.kind}`;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.title = it.kind === "stub" ? `Open group ${it.label}` : it.kind === "group" ? `${it.label}: double-click or Enter to open` : it.id;
+    card.setAttribute("aria-label", it.kind === "module" ? it.id : card.title);
+    card.style.width = w + "px";
+    card.style.height = h + "px";
+    card.innerHTML = `<div class="card-top"><span class="card-label">${esc(it.label)}</span>`
+      + (it.badge ? `<span class="badge lang">${esc(it.badge)}</span>` : "")
+      + `</div><div class="card-sub">${esc(it.sub)}</div>${smellBadge(it.smells)}`;
+    card.addEventListener("click", ev => { ev.stopPropagation(); it.kind === "stub" ? open() : focusItem(it.id); });
+    if (it.kind === "group") card.addEventListener("dblclick", open);
+    card.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      (ev.key === "Enter" || it.kind === "stub") && open ? open() : focusItem(it.id);
+    });
+    cards.set(it.id, card);
+    stage.appendChild(card);
+  }
+  const name = id => id[0] === STUB ? id.slice(1) : id;
+  edges.forEach(e => {
+    e.path = el("path", {class: `edge ${e.kind}`, "marker-end": `url(#a-${e.kind})`});
+    e.path.style.strokeWidth = Math.min(4.5, 1.5 + .75 * Math.log2(e.count));
+    const extra = Object.entries(e.kinds).filter(([k]) => k !== "import").map(([k, n]) => `${n} ${KIND[k]}`);
+    el("title", {}, e.path).textContent = `${name(e.a)} → ${name(e.b)}: ${plural(e.count, "import")}${extra.length ? " (" + extra.join(", ") + ")" : ""}`;
+  });
+  stage.className = edges.length > 40 ? "stage dense" : "stage";
+  renderCrumbs();
+  layout(true);
+  canvas.scrollTo({top: 0, left: 0});
+  closeDrawer();
+}
+
+function renderCrumbs() {
+  const crumbs = document.getElementById("crumbs");
+  crumbs.innerHTML = view
+    ? `<button type="button" class="link" id="crumb-all">All groups</button><span class="quiet">/</span><span>${esc(view)}</span>`
+    : `<span>All groups</span><span class="quiet">double-click a group to open it</span>`;
+  if (view) document.getElementById("crumb-all").addEventListener("click", ev => {
+    const from = view;
+    ev.stopPropagation();
+    render(null);
+    cards.get(from).focus();
+  });
+}
+
+// Grid order: selection, then its neighbours, then the rest; each keeps data order (sort is stable).
+function layout(instant = false) {
+  const rank = it => it.id === focused ? 0 : near.has(it.id) ? 1 : 2;
+  const stubs = items.filter(it => it.kind === "stub").sort((a, b) => rank(a) - rank(b));
+  const boxes = items.filter(it => it.kind !== "stub").sort((a, b) => rank(a) - rank(b));
+  const [bw, bh] = SIZE[boxes[0].kind], [GAP_X, GAP_Y] = GAP[boxes[0].kind], [sw, sh] = SIZE.stub;
+  const left = PAD + (stubs.length ? sw + STUB_GAP : 0);
+  const cols = Math.max(1, Math.min(boxes.length, Math.floor((canvas.clientWidth - left - PAD + GAP_X) / (bw + GAP_X))));
+  const to = {};
+  stubs.forEach((it, i) => to[it.id] = {x: PAD, y: TOP + i * (sh + GAP.module[1])});
+  boxes.forEach((it, i) => to[it.id] = {x: left + (i % cols) * (bw + GAP_X), y: TOP + Math.floor(i / cols) * (bh + GAP_Y)});
+  // The package view's last row keeps a gap below for same-row arcs.
+  const gridW = cols * (bw + GAP_X) - GAP_X, gridH = Math.ceil(boxes.length / cols) * (bh + GAP_Y) - (view ? GAP_Y : 0);
+  const stubH = stubs.length * (sh + GAP.module[1]) - GAP.module[1];
+  const width = left + gridW + PAD, height = TOP + Math.max(gridH, stubH) + PAD;
+  stage.style.width = width + "px";
+  stage.style.height = height + "px";
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  regions.replaceChildren();
+  const region = (x, w, h, label) => {
+    el("rect", {class: "lane", x: x - 16, y: 16, width: w + 32, height: TOP + h - 16 + 16, rx: 14}, regions);
+    el("text", {class: "lane-label", x, y: 40}, regions).textContent = label;
+  };
+  region(left, gridW, gridH, view ? `${view} · ${plural(boxes.length, "module")}` : plural(boxes.length, "group"));
+  if (stubs.length) region(PAD, sw, stubH, "Linked groups");
+  const from = instant ? to : {...pos};
+  animate(k => {
+    items.forEach(({id}) => { const a = from[id] || to[id], b = to[id];
+      pos[id] = {x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k}; });
+    const pairs = {};
+    edges.forEach(e => e.path.setAttribute("d", edgePath(e.a, e.b, pairs)));
+    cards.forEach((card, id) => { card.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
+  });
+}
+
+const sizeOf = id => SIZE[id[0] === STUB ? "stub" : view ? "module" : "group"];
+function edgePath(a, b, pairs) {
+  const p = pos[a], q = pos[b], [pw, ph] = sizeOf(a), [qw, qh] = sizeOf(b);
+  const key = [a, b].sort().join("\n"), k = pairs[key] = (pairs[key] || 0) + 1;
+  const bend = (k - 1) * 18 * (a < b ? 1 : -1), y1 = p.y + ph / 2, y2 = q.y + qh / 2;
+  // Same row: arc under it, so the edge doesn't run behind the cards in between.
+  if (Math.abs(p.y - q.y) < 1) {
+    const x1 = p.x + pw / 2, x2 = q.x + qw / 2, y = p.y + ph, dip = 40 + bend;
+    return `M${x1},${y} C${x1},${y + dip} ${x2},${y + dip} ${x2},${q.y + qh}`;
+  }
+  if (Math.abs(p.x - q.x) < 1) {
+    const x = p.x + pw;
+    return `M${x},${y1} C${x + 40 + bend},${y1} ${x + 40 + bend},${y2} ${x},${y2}`;
+  }
+  const [x1, x2] = p.x < q.x ? [p.x + pw, q.x] : [p.x, q.x + qw], mid = (x1 + x2) / 2;
+  return `M${x1},${y1} C${mid},${y1 + bend} ${mid},${y2 + bend} ${x2},${y2}`;
+}
+
+function clearHighlight() {
+  const moved = focused;
+  focused = null;
+  near = new Set();
+  if (moved) layout();
+  cards.forEach(card => card.classList.remove("selected", "smelly", "dim"));
+  edges.forEach(e => e.path.classList.remove("dim", "on"));
+  stage.className = edges.length > 40 ? "stage dense" : "stage";
+  document.querySelectorAll("#chips button.chip").forEach(b => b.classList.remove("active"));
+  closeDrawer();
+}
+
+function focusItem(id) {
+  clearHighlight();
+  focused = id;
+  near = new Set(edges.flatMap(e => e.a === id ? [e.b] : e.b === id ? [e.a] : []));
+  layout();
+  canvas.scrollTo({top: 0, left: 0});
+  cards.forEach((card, cid) => {
+    card.classList.toggle("selected", cid === id);
+    card.classList.toggle("dim", cid !== id && !near.has(cid));
+  });
+  edges.forEach(e => { const on = e.a === id || e.b === id;
+    e.path.classList.toggle("on", on); e.path.classList.toggle("dim", !on); });
+  openDrawer(view ? moduleHtml(byId[id]) : groupHtml(groupById[id]), cards.get(id));
+}
+
+const moduleLink = id => `<button type="button" class="link" data-module="${esc(id)}">${esc(id)}</button>`;
+const groupLink = id => `<button type="button" class="link" data-group="${esc(id)}">${esc(groupById[id].label)}</button>`;
+const smellList = list => `<ul>${list.map(s => `<li>${sevWord(s)} ${esc(s.kind)}: ${fmt(s.title)}<span class="evidence">${fmt(s.evidence)}</span></li>`).join("")}</ul>`;
+const linkList = (list, link, note) => list.length
+  ? `<ul class="edge-list">${list.map(x => `<li>${link(x)}<span class="kind">${esc(note(x))}</span></li>`).join("")}</ul>`
+  : `<p class="quiet">None</p>`;
+const edgeNote = e => e.kind === "import" ? "" : KIND[e.kind];
+
+function moduleHtml(n) {
+  const out = DATA.edges.filter(e => e.from === n.id), into = DATA.edges.filter(e => e.to === n.id), mine = nodeSmells[n.id] || [];
+  return `<h2>${esc(n.id)}</h2><div class="meta"><span class="badge lang">${esc(n.lang)}</span><span class="quiet">${plural(n.lines, "line")}</span></div>`
+    + `<h3>Group</h3><p>${groupLink(n.group)}</p>`
+    + (mine.length ? `<h3>Smells (${mine.length})</h3>${smellList(mine)}` : "")
+    + `<h3>Imports (${out.length})</h3>${linkList(out, e => moduleLink(e.to), edgeNote)}`
+    + `<h3>Imported by (${into.length})</h3>${linkList(into, e => moduleLink(e.from), edgeNote)}`;
+}
+
+function groupHtml(g) {
+  const mine = groupSmells[g.id] || [], shown = mine.slice(0, 5);
+  const out = packageEdges.filter(e => e.a === g.id), into = packageEdges.filter(e => e.b === g.id);
+  const note = e => plural(e.count, "import") + (e.kind === "import" ? "" : " · " + KIND[e.kind]);
+  return `<h2>${esc(g.label)}</h2><div class="meta"><span class="badge lang">${esc(mainLang(g))}</span>`
+    + `<span class="quiet">${plural(g.nodes.length, "module")} · ${plural(groupLines(g), "line")}</span></div>`
+    + `<div class="actions"><button type="button" class="icon-btn" data-open="${esc(g.id)}">Open group</button><span class="quiet">or double-click / Enter</span></div>`
+    + `<h3>Worst smells${mine.length ? ` (${mine.length})` : ""}</h3>`
+    + (mine.length ? smellList(shown) + (mine.length > shown.length ? `<p class="quiet">and ${mine.length - shown.length} more</p>` : "") : `<p class="quiet">None</p>`)
+    + `<h3>Depends on (${out.length})</h3>${linkList(out, e => groupLink(e.b), note)}`
+    + `<h3>Depended on by (${into.length})</h3>${linkList(into, e => groupLink(e.a), note)}`;
+}
+
+function showModule(id) {
+  if (byId[id].group !== view) render(byId[id].group);
+  focusItem(id);
+}
+document.getElementById("drawer").addEventListener("click", ev => {
+  const t = ev.target.closest("[data-module],[data-group],[data-open]");
+  if (!t) return;
+  if (t.dataset.module) return showModule(t.dataset.module);
+  if (t.dataset.open) return render(t.dataset.open);
+  if (view) render(null);
+  focusItem(t.dataset.group);
+});
+
+// One chip per smell kind: up to 20 smells of each would flood the bar.
+function showSmells(kind, list, button) {
+  clearHighlight();
+  button.classList.add("active");
+  stage.classList.add(`sev-${list[0].severity}`);
+  const members = new Set(list.flatMap(s => view ? s.nodes : s.nodes.map(id => byId[id].group)));
+  cards.forEach((card, id) => { card.classList.toggle("smelly", members.has(id)); card.classList.toggle("dim", !members.has(id)); });
+  edges.forEach(e => { const on = members.has(e.a) && members.has(e.b);
+    e.path.classList.toggle("on", on); e.path.classList.toggle("dim", !on); });
+  openDrawer(`<h2 class="sans">${esc(kind)} · ${list.length}</h2><p>${esc(SMELL_TEXT[kind])}</p>`
+    + list.map(s => `<h3>${sevWord(s)}</h3><p>${fmt(s.title)}<span class="evidence">${fmt(s.evidence)}</span></p>`
+      + `<ul>${s.nodes.map(id => `<li>${moduleLink(id)}</li>`).join("")}</ul>`).join(""), button);
+}
+
+const chips = document.getElementById("chips");
+const forbidden = DATA.edges.filter(e => e.kind === "forbidden").length;
+const unsupported = Object.entries(DATA.unsupported || {}).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1));
+const NO_RULE_TEXT = "Files in these languages are still on the map and checked for size, duplication and churn; they have no import edges until a rule exists.";
+chips.insertAdjacentHTML("beforeend", `<span class="chip"><b>${DATA.groups.length}</b> groups</span>`
+  + `<span class="chip"><b>${DATA.nodes.length.toLocaleString()}</b> modules</span>`
+  + `<span class="chip"><b>${DATA.edges.length.toLocaleString()}</b> imports</span>`
+  + (DATA.smells.length ? `<span class="chip"><b>${DATA.smells.length}</b> smells</span>` : "")
+  + (forbidden ? `<span class="chip alert"><b>${forbidden}</b> forbidden</span>` : `<span class="quiet">No forbidden crossings</span>`)
+  + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${n})`).join(", ")} — run setup to graph them</span>` : "")
+  + `<span class="sep"></span>` + (DATA.smells.length ? "" : `<span class="quiet">No structural smells found</span>`));
+const kinds = {};
+DATA.smells.forEach(s => (kinds[s.kind] ||= []).push(s));
+Object.entries(kinds).map(([k, list]) => [k, list.sort(bySeverity)])
+  .sort(([a, x], [b, y]) => bySeverity(x[0], y[0]) || (a < b ? -1 : 1)).forEach(([kind, list]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `chip sev-${list[0].severity}`;
+    b.title = `${list.length} ${kind} smell${list.length > 1 ? "s" : ""}, worst ${list[0].severity}`;
+    b.innerHTML = `<span class="dot"></span><span class="ellipsis">${esc(list[0].severity)} · ${esc(kind)}</span><b>${list.length}</b>`;
+    b.addEventListener("click", ev => { ev.stopPropagation(); showSmells(kind, list, b); });
+    chips.appendChild(b);
+  });
+
+const hit = (id, q) => id.toLowerCase().includes(q);
+const matches = (it, q) => it.kind === "module" ? hit(it.id, q)
+  : it.kind === "group" && (hit(it.id, q) || groupById[it.id].nodes.some(id => hit(id, q)));
+initUI({
+  dismiss: clearHighlight,
+  onFilter: q => {
+    clearHighlight();
+    if (!q) return;
+    items.forEach(it => cards.get(it.id).classList.toggle("dim", !matches(it, q)));
+    edges.forEach(e => e.path.classList.add("dim"));
+  },
+  // A group that matches only through one of its modules opens and focuses that module.
+  onFilterEnter: q => {
+    const it = q && items.find(x => matches(x, q));
+    if (!it) return;
+    if (it.kind === "module" || hit(it.id, q)) focusItem(it.id);
+    else showModule(groupById[it.id].nodes.find(id => hit(id, q)));
+  },
+});
+render(null);
+canvas.addEventListener("click", clearHighlight);
+addEventListener("resize", () => layout(true));
 </script>
 </body>
 </html>

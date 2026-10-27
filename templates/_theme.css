@@ -106,13 +106,15 @@ body.drawer-open .canvas { padding-right: 380px; }
   cursor: pointer; transition: opacity var(--ease), border-color var(--ease), box-shadow var(--ease); }
 .card::before { content: ""; position: absolute; left: 6px; top: 10px; bottom: 10px; width: 3px;
   border-radius: 2px; background: var(--role); }
-.card:hover { border-color: var(--ink-muted); }
 .card.r-removed, .card.r-affected { border-style: dashed; border-color: color-mix(in srgb, var(--role) 60%, transparent); }
+/* After the dashed-ring rule (same specificity) so hover shows on every card; selected/smelly still win. */
+.card:hover { border-color: var(--ink-muted); }
 .card.selected { border-color: var(--role);
   box-shadow: 0 0 0 1px var(--role), 0 0 22px color-mix(in srgb, var(--role) 30%, transparent); }
 .card.smelly { border-color: var(--sev);
   box-shadow: 0 0 0 1px var(--sev), 0 0 22px color-mix(in srgb, var(--sev) 25%, transparent); }
 .card.dim { opacity: .15; }
+.card:focus-visible { opacity: 1; }
 .card-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .card-label { flex: 1; min-width: 0; font: 500 12.5px var(--mono); color: var(--ink-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

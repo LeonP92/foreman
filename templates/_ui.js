@@ -1,5 +1,6 @@
 // Shared foreman UI: escaping, theme toggle, filter keys, drawer, focus animation.
 // Text from DATA is escaped; `backticks` become <code>.
+// Requires: #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme.
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)");
@@ -19,7 +20,10 @@ function animate(step, ms = 200) {
 }
 
 const drawer = document.getElementById("drawer");
-function openDrawer(html) {
+let drawerOpener = null;
+// opener: the element focus returns to if the drawer closes while holding focus.
+function openDrawer(html, opener) {
+  drawerOpener = opener;
   drawer.querySelector(".drawer-body").innerHTML = html;
   drawer.querySelector(".drawer-body").scrollTop = 0;
   drawer.classList.add("open");
@@ -27,6 +31,7 @@ function openDrawer(html) {
   document.body.classList.add("drawer-open");
 }
 function closeDrawer() {
+  if (drawer.contains(document.activeElement) && drawerOpener && drawerOpener.isConnected) drawerOpener.focus();
   drawer.classList.remove("open");
   drawer.inert = true;
   document.body.classList.remove("drawer-open");

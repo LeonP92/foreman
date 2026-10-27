@@ -168,3 +168,25 @@ def test_hub_self_edge_is_not_a_neighbour():
     edges.append({"from": "h", "to": "h", "kind": "call"})
     errs = render.validate(_data([hub, *leaves], edges, [_smell("hub", ["h"])]))
     assert any("hub has 4 neighbours" in e for e in errs)
+
+
+def test_map_inlines_theme_and_escapes_payload(tmp_path):
+    data = {
+        "kind": "map",
+        "title": "</script><script>alert(1)</script>",
+        "notes": "",
+        "groups": [{"id": "src", "label": "src", "nodes": ["src/a.py"]}],
+        "nodes": [
+            {"id": "src/a.py", "label": "a.py", "group": "src", "lang": "python", "lines": 3}
+        ],
+        "edges": [],
+        "smells": [],
+        "unsupported": {".rb": 2},
+    }
+    html = render.write(data, tmp_path / "map.html").read_text(encoding="utf-8")
+    assert "/*__" not in html
+    assert "#0d0d0d" in html
+    assert "function openDrawer(" in html
+    assert "alert(1)</script>" not in html
+    payload = html.split("const DATA = ", 1)[1].split(";\n", 1)[0]
+    assert json.loads(payload) == data
