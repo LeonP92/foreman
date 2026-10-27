@@ -344,21 +344,26 @@ _NAME = re.compile(r"[\w-]+(?:\.[\w-]+)*")
 
 
 def mentioned(root: Path, files: Sequence[str]) -> frozenset[str]:
-    """Files whose basename, with or without extension, appears in another tracked text file."""
+    """Files whose name appears in another tracked text file; a bare stem only if it is unique."""
     # One pass: each name remembers the one file it came from, or "" once a second file has it.
     seen: dict[str, str] = {}
     for path in files:
         tokens = set(_NAME.findall(read_text(root / path) or ""))
         for token in tokens | {part for t in tokens for part in t.split(".")}:
             seen[token] = path if seen.get(token, path) == path else ""
-    return frozenset(
-        f
+    # a path mention always holds the file name, so the name covers both
+    stems = Counter(
+        posixpath.splitext(posixpath.basename(f))[0]
         for f in files
-        if any(
-            seen.get(name, f) != f
-            for name in (posixpath.basename(f), posixpath.splitext(posixpath.basename(f))[0])
-        )
+        if posixpath.splitext(f)[1] not in ("", *NON_SOURCE_EXTENSIONS)
     )
+
+    def names(f: str) -> list[str]:
+        name = posixpath.basename(f)
+        stem = posixpath.splitext(name)[0]
+        return [name, stem] if stems[stem] == 1 else [name]
+
+    return frozenset(f for f in files if any(seen.get(n, f) != f for n in names(f)))
 
 
 def _load(path: Path, parse) -> dict:

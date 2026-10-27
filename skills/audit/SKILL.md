@@ -47,8 +47,8 @@ run the UI pass).
    one-line reason and evidence (`file:line`). Write a suggested next step for each
    confirmed one. Thresholds are relative to this repo's own spread, not fixed numbers.
 4. **Re-render without the dismissed.** Write `<run>/triage.json` as
-   `{"dismissed": [{"kind": …, "nodes": […], "reason": …}]}`, with `kind` and `nodes` as the
-   map lists them, then run
+   `{"dismissed": [{"kind": …, "nodes": […], "title": …, "reason": …}]}`, with `kind`,
+   `nodes` and `title` as the map lists them, then run
    `python3 -I <root>/scripts/run.py map --out <run> --dismiss <run>/triage.json`. It
    rewrites the map without them and counts them per kind under `dismissed`; fix any
    entry it rejects and re-run.

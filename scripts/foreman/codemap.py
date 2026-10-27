@@ -170,17 +170,12 @@ def build(root: Path, config: dict) -> dict:
     }
 
 
-def _key(smell: dict) -> tuple[str, tuple[str, ...]]:
-    return smell["kind"], tuple(sorted(smell["nodes"]))
-
-
 def dismiss(data: dict, triage: dict) -> dict:
     """The map without the smells triage dismissed; `dismissed` counts them per kind."""
     entries = triage.get("dismissed") if isinstance(triage, dict) else None
     if not isinstance(entries, list):
         raise ValueError("triage: 'dismissed' must be a list")  # noqa: TRY004 - CLI maps bad input to ValueError
-    listed = {_key(s) for s in data["smells"]}
-    drop = set()
+    drop: set[int] = set()
     for i, e in enumerate(entries):
         if not (
             isinstance(e, dict)
@@ -189,18 +184,35 @@ def dismiss(data: dict, triage: dict) -> dict:
             and all(isinstance(n, str) for n in e["nodes"])
             and isinstance(e.get("reason"), str)
             and e["reason"].strip()
+            and isinstance(e.get("title", ""), str)
         ):
             raise ValueError(
                 f"triage dismissed #{i}: needs a string kind, a list of nodes and a reason"
+                " (title optional)"
             )
         if e["kind"] not in render.MAP_SMELLS:
             raise ValueError(f"triage dismissed #{i}: unknown kind {e['kind']!r}")
-        if _key(e) not in listed:
+        found = [
+            j
+            for j, s in enumerate(data["smells"])
+            if s["kind"] == e["kind"]
+            and sorted(s["nodes"]) == sorted(e["nodes"])
+            and e.get("title", s["title"]) == s["title"]
+        ]
+        where = f"triage dismissed #{i}"
+        if not found:
             raise ValueError(
-                f"triage dismissed #{i}: no listed {e['kind']} smell with nodes {sorted(e['nodes'])}"
+                f"{where}: no listed {e['kind']} smell with nodes {sorted(e['nodes'])}"
+                + (f" and title {e['title']!r}" if "title" in e else "")
             )
-        drop.add(_key(e))
-    kept = [s for s in data["smells"] if _key(s) not in drop]
+        # without a title, kind + nodes must pick one smell (a file's size and a function's)
+        if len(found) > 1 and "title" not in e:
+            titles = "; ".join(data["smells"][j]["title"] for j in found)
+            raise ValueError(
+                f"{where}: {len(found)} listed {e['kind']} smells match; add a title: {titles}"
+            )
+        drop.update(found)
+    kept = [s for j, s in enumerate(data["smells"]) if j not in drop]
     dismissed = Counter(data.get("dismissed", {}))
-    dismissed.update(s["kind"] for s in data["smells"] if _key(s) in drop)
+    dismissed.update(data["smells"][j]["kind"] for j in drop)
     return {**data, "smells": kept, "dismissed": dict(sorted(dismissed.items()))}

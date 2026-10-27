@@ -78,8 +78,10 @@ the others.
 **deadcode** — a module nothing imports that isn't a test, a known entry point (manifest
 scripts, `main`, `cli`, a shebang, an `if __name__ == "__main__"` block, `package main`), a
 file a framework loads by path (migrations, `[audit] entry_points`) or a config file, and
-whose name (`widget.js` or `widget`) appears in no other tracked file: a template's
-`<script src>`, a config, a manifest or a doc that names it counts as a user. Always `low`,
+whose path or file name (`static/widget.js`, `widget.js`) appears in no other tracked file:
+a template's `<script src>`, a config, a manifest or a doc that names it counts as a user.
+A bare stem (`widget`) counts only when no other source file shares it, so a mention of
+`utils` saves no `utils.py`. Always `low`,
 and only a candidate: dynamic loading can hide its users.
 
 ## Known limits

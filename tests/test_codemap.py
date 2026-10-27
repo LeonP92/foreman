@@ -5,6 +5,7 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 from foreman import codemap, render
 from foreman.cli import main
 from foreman.config import DEFAULTS
@@ -364,3 +365,23 @@ def test_skipped_extensions_are_still_mapped(make_repo):
     data = codemap.build(root, {**DEFAULTS, "graph": {"skip": [".sh"]}})
     assert data["unsupported"] == {}
     assert "run.sh" in {n["id"] for n in data["nodes"]}
+
+
+def _oversize_map():
+    smell = {"kind": "oversize", "severity": "low", "nodes": ["a.py"], "evidence": "big"}
+    return {
+        "smells": [
+            {**smell, "title": "Large file: a.py"},
+            {**smell, "title": "Long function: `run` in a.py"},
+        ]
+    }
+
+
+def test_dismiss_matches_one_smell_by_title():
+    entry = {"kind": "oversize", "nodes": ["a.py"], "reason": "generated"}
+    data = codemap.dismiss(_oversize_map(), {"dismissed": [{**entry, "title": "Large file: a.py"}]})
+    assert [s["title"] for s in data["smells"]] == ["Long function: `run` in a.py"]
+    assert data["dismissed"] == {"oversize": 1}
+    with pytest.raises(ValueError, match="2 listed oversize smells match") as err:
+        codemap.dismiss(_oversize_map(), {"dismissed": [entry]})
+    assert "Long function: `run` in a.py" in str(err.value)

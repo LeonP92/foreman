@@ -88,6 +88,8 @@ def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
     files = list_files(root, ignore)
     index = make_index(root, files)
     stems = {posixpath.splitext(posixpath.basename(p))[0] for p in files}
+    # a rule resolving against the importing file's folder is relative: a miss is a miss
+    relative = any("{dir}" in template for template in rule["resolve"])
     covered = [p for p in files if posixpath.splitext(p)[1] in rule["extensions"]]
     matches = resolved = external = 0
     examples = []
@@ -99,7 +101,9 @@ def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
             if _resolve(path, capture, index, rule):
                 resolved += 1
             # a bare name no repo file has (`json`, `java.util.List`) is a library import
-            elif "/" not in capture and posixpath.splitext(capture)[0] not in stems:
+            elif (
+                not relative and "/" not in capture and posixpath.splitext(capture)[0] not in stems
+            ):
                 external += 1
             elif len(examples) < 5:
                 examples.append({"import": capture, "path": path})

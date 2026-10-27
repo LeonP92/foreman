@@ -38,23 +38,29 @@ def test_java_rule_maps_packages_and_skips_external(make_repo):
 def test_check_reports_resolution_rate(make_repo):
     root = make_repo(
         {
-            "a.rb": "require_relative 'b'\nrequire_relative 'lib/missing'\nrequire_relative 'set'\n",
+            "a.rb": "require_relative 'b'\nrequire_relative 'missing'\n",
             "b.rb": "",
         }
     )
     result = rule.check(root, RUBY)
-    assert (result["files"], result["matches"], result["resolved"]) == (2, 3, 1)
-    assert result["external"] == 1
+    assert (result["files"], result["matches"], result["resolved"]) == (2, 2, 1)
+    # {dir} templates resolve relative to the file, so a miss is never external
+    assert result["external"] == 0
     assert result["ok"] is True
-    assert result["unresolved_examples"] == [{"import": "lib/missing", "path": "a.rb"}]
+    assert result["unresolved_examples"] == [{"import": "missing", "path": "a.rb"}]
+
+
+LOAD_PATH = {
+    "extensions": [".rb"],
+    "pattern": r"^\s*require\s+['\"](.+?)['\"]",
+    "resolve": ["app/{1}.rb"],
+}
 
 
 def test_check_counts_only_unknown_bare_names_as_external(make_repo):
     # `pricing` names a repo file the templates can't reach, so it is a miss, not external
-    root = make_repo(
-        {"a.rb": "require_relative 'pricing'\nrequire_relative 'json'\n", "lib/pricing.rb": ""}
-    )
-    result = rule.check(root, RUBY)
+    root = make_repo({"a.rb": "require 'pricing'\nrequire 'json'\n", "lib/pricing.rb": ""})
+    result = rule.check(root, LOAD_PATH)
     assert (result["matches"], result["resolved"], result["external"]) == (2, 0, 1)
     assert result["unresolved_examples"] == [{"import": "pricing", "path": "a.rb"}]
     assert result["ok"] is False

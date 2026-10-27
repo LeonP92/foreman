@@ -236,6 +236,10 @@ def test_files_named_in_other_files_are_mentioned(make_repo):
         "bin/helper.rb": "",
         "lonely.py": "# lonely.py talks only about itself\n",
         "logo.png": b"\x89PNG\0lonely.py",
+        # a stem two source files share names neither
+        "docs/notes.md": "Shared helpers live in utils.\n",
+        "web/utils.py": "",
+        "api/utils.py": "",
     }
     root = make_repo(files)
     assert smells.mentioned(root, sorted(files)) == frozenset(
