@@ -55,10 +55,14 @@ possibly dead code. Each kind's rule, threshold and severity are in
 
 ## UI smoke
 
-Only against the base server; there is no comparison. Follow the verify skill for data
-(copies only, refuse if `[database]` can't isolate), preparing the worktree (copy, install,
-build) and its environment, the server on a free port, login, and stopping the whole
-process tree. Pick 3–8 main pages from the repo's routes (the router files, page folders
+Only against the base server; there is no comparison. Data: never copy the real database,
+and skip `seed`. With `kind = "none"` there is nothing to set up; with `kind = "command"`,
+or `"file"` with `env_override` set, the server gets an empty database at its own `{name}`
+or `{dir}`, made by `create` (if set) and `migrate`. Otherwise skip the smoke pass and say
+why under "Not checked:". If signing in needs seeded data, smoke only the pages reachable
+without it and list the rest. Follow the verify skill for preparing the worktree (copy,
+install, build) and its environment, the server on a free port, login, and stopping the
+whole process tree. Pick 3–8 main pages from the repo's routes (the router files, page folders
 or URL config), one test each, titled by page (`cart`, `order-history`). For each page:
 it loads, no console errors, no 4xx/5xx responses, and Tab moves a visible focus through
 its controls. Run

@@ -38,7 +38,9 @@ remote-tracking refs):
   `git cherry <repo.base> <branch>` starts with `-`, or
   `git log --format='%h %s' BASE..<repo.base>` contains one of the branch's commit
   subjects or its `#N` PR number (`<sha>` is that base commit; without one, say "appears
-  squash-merged").
+  squash-merged"). If `gh` is installed and signed in, also run the read-only
+  `gh pr list --head <branch> --state merged --json number,mergeCommit`: a merged PR's
+  number is the `#N`, and its `mergeCommit`, if on `<repo.base>`, is `<sha>`.
 
 Either way the review continues on the given tip. Diff with
 `git diff BASE <branch>`; anything run on the base (tests in step 4, verify, the diagram)
@@ -50,7 +52,8 @@ then `install`, `build`) and run every command in it through the launcher, as
 `<root>/skills/verify/references/servers.md` says.
 
 Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
-`<branch>` has each `/` replaced by `-` and `<stamp>` is the UTC start time as
+`<branch>` is the name without a remote prefix (`origin/foo` → `foo`), each `/` replaced by
+`-`, and `<stamp>` is the UTC start time as
 `%Y%m%dT%H%M%SZ`. Never write into an earlier run's folder; when done, write the stamp
 alone to `.foreman/reports/<branch>/latest`. Report: `<run>/review.md`; verify and the
 diagram write into the same `<run>`.
@@ -70,14 +73,19 @@ diagram write into the same `<run>`.
    HTML or a shell unescaped, no new route without the access check its neighbours have.
 4. **Tests.** First the tests that cover the changed code, separately per suite: never mix
    suites that need different setup (browser e2e tests and unit tests, say) in one
-   command. Unit-test files go to `test_targeted` with `{paths}` filled in (or `test` if
-   empty); a changed e2e test runs through `e2e`. Then the full checks: `lint`,
-   `typecheck`, `test`, `e2e`, skipping empty ones. Record each command and its result,
-   one row per command. On a failure, keep the
+   command. Unit-test files go to `test_targeted` with `{paths}` filled in; fill
+   `{paths}` only into a command that has it. A suite whose command has none (`test` when
+   `test_targeted` is empty, `e2e`) runs once, in full, and the report says so. Then the
+   full checks not yet run: `lint`, `typecheck`, `test`, `e2e`, skipping empty ones.
+   Record each command and its result, one row per command. On a failure, keep the
    lines that show why, and run that test on the base too: a failure on both is
    pre-existing; report it, but not as this change's fault.
 5. **Verify.** If the diff touches anything a user sees (templates, components, styles,
-   routes that return HTML or redirect, form handling), follow the verify skill. Otherwise
+   routes that return HTML or redirect, form handling), or changes what a user can see or
+   do through the UI even if no template or route file changed (backend data a page
+   lists, a permission a page checks), follow the verify skill. A flow that needs an
+   external service uses a local stub the repo provides, or a tiny local fake server for
+   that call; otherwise list it under "Not checked:" with the reason. With no such change,
    write "n/a, no user-facing change".
 6. **Diagram.** Follow the diagram skill.
 

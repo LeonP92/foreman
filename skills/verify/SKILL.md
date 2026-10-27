@@ -22,7 +22,8 @@ from the base branch and one built from the change, each on its own copy of the 
   deletion). End with "Not checked:" and why.
 
 Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
-`<branch>` has each `/` replaced by `-` and `<stamp>` is the UTC start time as
+`<branch>` is the name without a remote prefix (`origin/foo` → `foo`), each `/` replaced by
+`-`, and `<stamp>` is the UTC start time as
 `%Y%m%dT%H%M%SZ`. Never write into an earlier run's folder; when done, write the stamp
 alone to `.foreman/reports/<branch>/latest`. Output: `<run>/verify/` (inside a review,
 the review's `<run>`). Needs Node 20 or newer; `browser-run` installs its own Playwright.
@@ -59,7 +60,7 @@ Do not continue the run.
 
 Every command runs through the launcher in `references/servers.md`, with an explicit
 environment that can't reach the real database. If setup made a throwaway secrets file
-(`<user config dir>/foreman/secrets/<repo name>-<8 hex>.env`; `throwaway.py <repo>` from
+(`<user config dir>/foreman/secrets/<repo name>-<8 hex>.env`; `foreman_throwaway.py <repo>` from
 `<root>/skills/setup/references/ci.md` prints its path), pass it to every launch with
 `--env-file`.
 
@@ -143,7 +144,8 @@ paths. Look at the screenshots, not only the statuses: layout breaks don't fail 
 Stop both servers (whole process trees), then remove the worktrees, temp files and
 `{dir}` folders, as `references/servers.md` shows. Run `drop` for each `command` database
 you created (if `drop` is empty, list the names under "Not checked:"); never drop one you
-didn't create. The user's real data must be untouched.
+didn't create. The user's real data must be untouched. Setup's throwaway secrets file is
+shared by every run on this repo and never removed by cleanup.
 
 ## Finish
 

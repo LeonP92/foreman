@@ -157,6 +157,13 @@ def parse_results(report: dict, ignore_console: Sequence[str] = ()) -> list[dict
                         "screenshots": [
                             Path(p).as_posix() for p in _attachments(result, "foreman-screenshot")
                         ],
+                        # what the spec printed (console.log), so exploration specs can report
+                        "stdout": [
+                            line
+                            for chunk in result.get("stdout", [])
+                            for line in _ANSI.sub("", chunk.get("text", "")).splitlines()
+                            if line.strip()
+                        ],
                         **(_failure(result["error"]) if "error" in result else {}),
                     }
                 )

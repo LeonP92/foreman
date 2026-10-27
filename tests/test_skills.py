@@ -117,6 +117,15 @@ def test_setup_reads_ci_and_stops_on_import_free_languages():
         assert phrase in text, phrase
 
 
+def _settings(command: dict, tmp_path: Path) -> dict:
+    return {
+        "remove": ["DATABASE_URL"],
+        "checkout": str(tmp_path / "main"),
+        "command": command,
+        "server": {},
+    }
+
+
 def _py(*args, env=None):
     return subprocess.run(
         [sys.executable, "-I", *map(str, args)],
@@ -129,7 +138,7 @@ def _py(*args, env=None):
 
 
 def test_dotenv_helper_lists_names_and_rewrites_lines(tmp_path):
-    helper = _snippet(tmp_path, "dotenv.py")
+    helper = _snippet(tmp_path, "foreman_dotenv.py")
     dotenv = tmp_path / ".env"
     dotenv.write_text(
         "SECRET_KEY=s3cret\r\nexport DATABASE_URL=sqlite:///real.db\r\n", encoding="utf-8"
@@ -142,10 +151,10 @@ def test_dotenv_helper_lists_names_and_rewrites_lines(tmp_path):
 
 
 def test_launcher_reads_references_after_removing_database_variables(tmp_path):
-    launcher = _snippet(tmp_path, "launch")
+    launcher = _snippet(tmp_path, "foreman_launch.py")
     settings = tmp_path / "s.json"
     settings.write_text(
-        json.dumps({"remove": ["DATABASE_URL"], "command": {"A": "${SHOP_KEY}"}, "server": {}}),
+        json.dumps(_settings({"A": "${SHOP_KEY}"}, tmp_path)),
         encoding="utf-8",
     )
     env = {**os.environ, "SHOP_KEY": "k", "DATABASE_URL": "sqlite:///real.db"}
@@ -153,7 +162,7 @@ def test_launcher_reads_references_after_removing_database_variables(tmp_path):
     ran = _py(launcher, settings, tmp_path, "-", show, env=env)
     assert ran.stdout.split() == ["k", "False"]
     settings.write_text(
-        json.dumps({"remove": ["DATABASE_URL"], "command": {"A": "${DATABASE_URL}"}, "server": {}}),
+        json.dumps(_settings({"A": "${DATABASE_URL}"}, tmp_path)),
         encoding="utf-8",
     )
     failed = _py(launcher, settings, tmp_path, "-", show, env=env)
@@ -165,7 +174,7 @@ def test_launcher_reads_references_after_removing_database_variables(tmp_path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
 def test_throwaway_secrets_go_to_a_stable_user_only_file_and_are_not_printed(tmp_path):
-    helper = _snippet(tmp_path, "throwaway.py", "setup/references/ci.md")
+    helper = _snippet(tmp_path, "foreman_throwaway.py", "setup/references/ci.md")
     repo = tmp_path / "shop"
     env = {**os.environ, "XDG_CONFIG_HOME": str(tmp_path / "cfg")}
     only_path = _py(helper, repo, env=env).stdout.split()
@@ -212,7 +221,7 @@ def test_verify_builds_data_instead_of_skipping():
 
 
 def test_env_files_are_read_only_through_the_names_helper():
-    rule = "may be read only through the names-only helper `dotenv.py`"
+    rule = "may be read only through the names-only helper `foreman_dotenv.py`"
     ask = "ask the user which variable names it sets"
     for text in [
         skill_text("setup"),
@@ -248,10 +257,10 @@ def test_known_console_noise_is_explained_where_it_is_offered():
 
 
 def test_launcher_loads_env_files_but_never_a_database_location(tmp_path):
-    launcher = _snippet(tmp_path, "launch")
+    launcher = _snippet(tmp_path, "foreman_launch.py")
     settings = tmp_path / "s.json"
     settings.write_text(
-        json.dumps({"remove": ["DATABASE_URL"], "command": {"A": "${SHOP_KEY}"}, "server": {}}),
+        json.dumps(_settings({"A": "${SHOP_KEY}"}, tmp_path)),
         encoding="utf-8",
     )
     secrets_file = tmp_path / "shop.env"
@@ -327,4 +336,95 @@ def test_every_audit_run_keeps_its_own_report_folder():
         "`.foreman/reports/audit/latest`",
         "--out <run>/smoke",
     ]:
+        assert phrase in text, phrase
+
+
+def test_launcher_drops_variables_pointing_into_the_main_checkout(tmp_path):
+    launcher = _snippet(tmp_path, "foreman_launch.py")
+    settings = tmp_path / "s.json"
+    settings.write_text(json.dumps(_settings({}, tmp_path)), encoding="utf-8")
+    main = tmp_path / "main"
+    env = {
+        **os.environ,
+        "VIRTUAL_ENV": "/elsewhere/venv",
+        "PYTHONPATH": "/elsewhere/lib",
+        "NODE_PATH": "/elsewhere/node",
+        "SHOP_CACHE": str(main / "cache"),
+        "SHOP_NEIGHBOUR": str(tmp_path / "main-other"),
+        "PATH": os.pathsep.join([str(main / ".venv" / "bin"), os.environ["PATH"]]),
+    }
+    names = ["VIRTUAL_ENV", "PYTHONPATH", "NODE_PATH", "SHOP_CACHE", "SHOP_NEIGHBOUR"]
+    show = (
+        f'"{sys.executable}" -c "import os; '
+        f"print(*[n for n in {names!r} if n in os.environ], str(os.environ['PATH']).startswith({str(main)!r}))\""
+    )
+    ran = _py(launcher, settings, tmp_path, "-", show, env=env)
+    assert ran.stdout.split() == ["SHOP_NEIGHBOUR", "False"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_throwaway_secrets_are_safe_to_add_concurrently(tmp_path):
+    helper = _snippet(tmp_path, "foreman_throwaway.py", "setup/references/ci.md")
+    env = {**os.environ, "XDG_CONFIG_HOME": str(tmp_path / "cfg")}
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-I", str(helper), str(tmp_path / "shop"), "SHOP_A", "SHOP_B"],
+            env=env,
+            stdout=subprocess.PIPE,
+            encoding="utf-8",
+        )
+        for _ in range(6)
+    ]
+    paths = {p.communicate()[0].split()[0] for p in procs}
+    assert all(p.returncode == 0 for p in procs)
+    (path,) = paths
+    names = [line.split("=", 1)[0] for line in Path(path).read_text(encoding="utf-8").splitlines()]
+    assert sorted(names) == ["SHOP_A", "SHOP_B"]
+    assert not Path(path).with_suffix(".lock").exists()
+
+
+def test_helpers_live_apart_under_collision_free_names():
+    text = " ".join(all_skill_text().split())
+    for name in ["foreman_dotenv.py", "foreman_launch.py", "foreman_throwaway.py"]:
+        assert f"<temp>/foreman-bin/{name}" in text, name
+    for old in ["<temp>/dotenv.py", "<temp>/launch.py", "<temp>/throwaway.py"]:
+        assert old not in text, old
+    servers = " ".join(
+        (SKILLS_DIR / "verify" / "references" / "servers.md").read_text(encoding="utf-8").split()
+    )
+    assert "cwd = the worktree, never the helper dir" in servers
+    for var in ["`VIRTUAL_ENV`", "`PYTHONPATH`", "`NODE_PATH`", "main checkout"]:
+        assert var in servers, var
+
+
+def test_throwaway_secrets_survive_cleanup():
+    ci = " ".join(
+        (SKILLS_DIR / "setup" / "references" / "ci.md").read_text(encoding="utf-8").split()
+    )
+    verify = " ".join(skill_text("verify").split())
+    for text in (ci, verify):
+        assert "never removed by cleanup" in text
+    assert "lock file" in ci
+
+
+def test_review_verifies_user_visible_changes_and_reads_squash_merges_from_gh():
+    text = " ".join(skill_text("review").split())
+    for phrase in [
+        "even if no template or route file changed",
+        "a local stub the repo provides",
+        "a tiny local fake server",
+        "gh pr list --head <branch> --state merged --json number,mergeCommit",
+        "runs once, in full, and the report says so",
+    ]:
+        assert phrase in text, phrase
+
+
+def test_run_folders_strip_the_remote_prefix():
+    for skill in ["review", "verify", "diagram"]:
+        assert "(`origin/foo` → `foo`)" in " ".join(skill_text(skill).split()), skill
+
+
+def test_audit_smoke_never_copies_real_data():
+    text = " ".join(skill_text("audit").split())
+    for phrase in ["never copy the real database", "skip `seed`", '`kind = "none"`']:
         assert phrase in text, phrase

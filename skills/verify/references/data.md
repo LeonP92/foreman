@@ -1,8 +1,10 @@
 # Building the data each item needs
 
 Never skip a test item because the copies have no matching data: create the records it
-needs in the copies. Only if that is truly impossible (the state comes from an outside
-service you can't reach, say) list the item under "Not checked:" with the reason.
+needs in the copies. A flow that calls an outside service uses a local stub the repo
+provides, or a tiny local fake server for that call (on a free port; point the app at it in
+that side's launcher settings). Only if that is truly impossible list the item under "Not checked:" with the
+reason.
 
 ## Phase a: pre-change data, with the base code
 

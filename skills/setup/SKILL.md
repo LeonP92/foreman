@@ -33,7 +33,7 @@ says about itself, asks the user only for what is missing, and writes
    that really run: read its `env:` blocks and the steps it runs before the tests, as
    `references/ci.md` says.
 5. `.env.example`-style files, to learn variable names. Env files (`.env`, `.env.local`
-   and the like) may be read only through the names-only helper `dotenv.py` in
+   and the like) may be read only through the names-only helper `foreman_dotenv.py` in
    `<root>/skills/verify/references/servers.md`, never opened or printed otherwise; if the
    host blocks reading one, ask the user which variable names it sets.
 6. The default branch: `git symbolic-ref refs/remotes/origin/HEAD` (the part after

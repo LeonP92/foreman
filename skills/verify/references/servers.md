@@ -4,6 +4,13 @@ A dev server usually starts children (a bundler, a reloader, workers). Stopping 
 process you launched leaves them running and holding the port or the worktree's files.
 Start each server as the leader of a new process group, then stop the whole group.
 
+## Helper scripts
+
+Save the helpers below (and setup's `foreman_throwaway.py`) in `<temp>/foreman-bin/`, outside
+the repo, under exactly these names: `foreman_dotenv.py`, `foreman_launch.py`. Their names
+can't shadow a module or script of the app's. Run app commands with cwd = the worktree, never
+the helper dir.
+
 ## Per-server values
 
 Before a side's first command, pick its values: a free port (bind a socket to port 0 and
@@ -19,12 +26,12 @@ In each worktree foreman makes, before running anything:
    worktree, as a plain file copy. Never print, quote or summarise its contents; note any
    that are missing.
 2. A copied file may point the app at the real database. Env files (`.env`, `.env.local`
-   and the like) may be read only through the names-only helper `dotenv.py` below, never
+   and the like) may be read only through the names-only helper `foreman_dotenv.py` below, never
    opened or printed otherwise; if the host blocks reading one, ask the user which
    variable names it sets. List the names each copy sets
-   with `python3 -I <temp>/dotenv.py <worktree>/<file>` (names only, never values). For
+   with `python3 -I <temp>/foreman-bin/foreman_dotenv.py <worktree>/<file>` (names only, never values). For
    every database-location name in that list, rewrite its line in the worktree's copy to
-   this server's value: `python3 -I <temp>/dotenv.py <worktree>/<file> NAME=<value>`. If
+   this server's value: `python3 -I <temp>/foreman-bin/foreman_dotenv.py <worktree>/<file> NAME=<value>`. If
    the config gives no value for it (neither `[env]` nor `env_override` sets it), stop
    and say which file sets which name: the copy must decide, not the framework's
    precedence rules.
@@ -33,7 +40,7 @@ In each worktree foreman makes, before running anything:
 ```python
 import re, sys
 
-# dotenv.py <file>: the names it sets. dotenv.py <file> NAME=value ...: rewrite those lines.
+# foreman_dotenv.py <file>: the names it sets. <file> NAME=value ...: rewrite those lines.
 LINE = re.compile(r"^(export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=[^\r\n]*", re.M)
 path, *pairs = sys.argv[1:]
 text = open(path, encoding="utf-8", newline="").read()
@@ -52,7 +59,10 @@ else:
 Every command foreman runs in a worktree (`install`, `build`, tests, `create`, `migrate`,
 `seed`, `drop`, `start`) goes through the launcher, which builds its environment:
 
-1. Start from the agent's environment.
+1. Start from the agent's environment, without the variables that point into the main
+   checkout (the repo foreman was started in): `VIRTUAL_ENV`, `PYTHONPATH`, `NODE_PATH`,
+   and any whose value is a path inside it; `PATH` keeps its other entries. Otherwise
+   a worktree's commands run the main checkout's code or packages.
 2. Remove every variable that names a database location: `DATABASE_URL`,
    `DATABASE_PATH`, `DB_URL`, `DB_PATH`, `env_override`, and any other that
    `.env.example`, `[env]`, `[server] env` or the repo's docs name as one.
@@ -66,10 +76,11 @@ Fill in `{port}`, `{url}` (`http://127.0.0.1:{port}`), `{dir}` and `{name}` your
 command starts, so secret values never land in a file or the transcript, and a reference
 to a removed database variable fails instead of reaching the real database.
 
-Write the settings for each side to `<temp>/<side>-env.json`:
+Write the settings for each side to `<temp>/<side>-env.json`, with `checkout` the main
+checkout's absolute path:
 
 ```json
-{"remove": ["DATABASE_URL"],
+{"remove": ["DATABASE_URL"], "checkout": "/home/me/shop",
  "command": {"DATABASE_URL": "sqlite:///data/app.db", "SECRET_KEY": "${SHOP_SECRET_KEY}"},
  "server": {"DATABASE_URL": "sqlite:///data/app.db", "SECRET_KEY": "${SHOP_SECRET_KEY}",
             "APP_URL": "http://127.0.0.1:50123"}}
@@ -77,8 +88,8 @@ Write the settings for each side to `<temp>/<side>-env.json`:
 
 ## Launcher
 
-Save this outside the repo (for example `<temp>/launch.py`). Run a command and wait for
-it with `python3 -I <temp>/launch.py <settings> <worktree> - "<command>"`; it exits with
+Save this as `<temp>/foreman-bin/foreman_launch.py`. Run a command and wait for
+it with `python3 -I <temp>/foreman-bin/foreman_launch.py <settings> <worktree> - "<command>"`; it exits with
 the command's status. Start a server with a log file instead of `-`, and `[server] start`
 with `{port}` filled in: it prints the server's PID and returns while the server keeps
 running in its own process group, so the whole tree can be stopped later.
@@ -89,6 +100,7 @@ environment before `${NAME}` is filled in. It never prints values, and a file th
 a removed database location is rejected with a one-line error naming the variable.
 
 ```python
+# foreman_launch.py [--env-file F ...] <settings> <cwd> <log or -> <command>
 import json, os, re, subprocess, sys
 
 args, env_files = sys.argv[1:], []
@@ -98,7 +110,22 @@ while args[0] == "--env-file":
 SETTINGS, CWD, LOG, COMMAND = args
 settings = json.load(open(SETTINGS, encoding="utf-8"))
 values = settings["command" if LOG == "-" else "server"]
-base = {k: v for k, v in os.environ.items() if k not in settings["remove"]}
+checkout = settings["checkout"]
+
+
+def inside(value):
+    return value == checkout or value.startswith(checkout + os.sep)
+
+
+base = {
+    k: v
+    for k, v in os.environ.items()
+    if k not in settings["remove"]
+    and k not in ("VIRTUAL_ENV", "PYTHONPATH", "NODE_PATH")
+    and not inside(v)
+}
+# PATH often starts with the checkout's own tool folder (an activated venv): keep the rest.
+base["PATH"] = os.pathsep.join(p for p in os.environ["PATH"].split(os.pathsep) if not inside(p))
 for path in env_files:
     text = open(path, encoding="utf-8").read()
     for name, value in re.findall(r"^(?:export\s+)?([A-Za-z_]\w*)=([^\r\n]*)", text, re.M):

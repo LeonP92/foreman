@@ -26,6 +26,7 @@ def test_parse_results_maps_projects_errors_and_screenshots():
             "bad_responses": ["404 http://127.0.0.1:50001/missing.js"],
             "ignored_console_errors": [],
             "screenshots": ["/out/total-shows-3-base.png"],
+            "stdout": ["rows: 3", "last row: total"],
             "error": "Error: expect(locator).toHaveText(expected) failed\n"
             "Locator:  locator('#total')\n"
             'Expected: "3"\n'
@@ -41,6 +42,7 @@ def test_parse_results_maps_projects_errors_and_screenshots():
             "bad_responses": [],
             "ignored_console_errors": [],
             "screenshots": ["/out/total-shows-3-branch.png"],
+            "stdout": [],
         },
     ]
 

@@ -45,7 +45,12 @@
            "column": 40,
            "line": 5
           }
-         }
+         },
+         "stdout": [
+          {
+           "text": "rows: 3\n\u001b[2mlast row\u001b[22m: total\n"
+          }
+         ]
         }
        ],
        "status": "unexpected"
@@ -76,7 +81,8 @@
            "contentType": "application/json",
            "body": "Ii9vdXQvdG90YWwtc2hvd3MtMy1icmFuY2gucG5nIg=="
           }
-         ]
+         ],
+         "stdout": []
         }
        ],
        "status": "expected"

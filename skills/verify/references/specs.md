@@ -5,7 +5,9 @@
 To learn the running app (labels, routes, what a page shows) before writing the final
 spec, write a throwaway spec (`<run>/explore/explore.spec.mjs`) and run it through
 `browser-run` like the real one, with `--out <run>/explore`. Its screenshots and results
-are kept there, apart from the real run's, for the report to point at. If you use a
+are kept there, apart from the real run's, for the report to point at. Lines it prints with
+`console.log` (the labels on a page, the rows a table shows) come back under each test's
+`stdout`, so print what you need to learn rather than guessing it from screenshots. If you use a
 browser tool instead, run it from a folder outside the repo and afterwards remove only the
 files it created there.
 
