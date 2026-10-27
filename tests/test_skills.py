@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from foreman.cli import COMMANDS
 
 SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
@@ -57,12 +58,38 @@ def test_every_skill_forbids_touching_what_it_did_not_create():
         assert rule in " ".join(skill_text(skill).split()), skill
 
 
-def _snippet(tmp_path, marker: str) -> Path:
-    text = (SKILLS_DIR / "verify" / "references" / "servers.md").read_text(encoding="utf-8")
+def _snippet(tmp_path, marker: str, ref: str = "verify/references/servers.md") -> Path:
+    text = (SKILLS_DIR / ref).read_text(encoding="utf-8")
     code = next(c for c in re.findall(r"```python\n(.*?)```", text, re.DOTALL) if marker in c)
     path = tmp_path / f"{marker}.py"
     path.write_text(code, encoding="utf-8")
     return path
+
+
+def test_verify_spec_guidance_covers_known_pitfalls():
+    text = " ".join(
+        (SKILLS_DIR / "verify" / "references" / "specs.md").read_text(encoding="utf-8").split()
+    )
+    for phrase in [
+        'Never `test.describe.configure({ mode: "serial" })`',
+        "`toBeVisible()` / `toBeHidden()`",
+        "one database per side",
+        "through `browser-run`",
+        "remove only the files it created",
+    ]:
+        assert phrase in text, phrase
+    assert "references/specs.md" in skill_text("verify")
+
+
+def test_setup_reads_ci_and_stops_on_import_free_languages():
+    text = " ".join(skill_text("setup").split())
+    for phrase in [
+        "`env:` blocks",
+        "references/ci.md",
+        "no import statements",
+        "stop after the first try",
+    ]:
+        assert phrase in text, phrase
 
 
 def _py(*args, env=None):
@@ -109,3 +136,15 @@ def test_launcher_reads_references_after_removing_database_variables(tmp_path):
     assert failed.stderr.strip().splitlines() == [
         "launch: ${DATABASE_URL} is not set, or names a removed database location"
     ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_throwaway_secrets_go_to_a_user_only_file_and_are_not_printed(tmp_path):
+    helper = _snippet(tmp_path, "throwaway.py", "setup/references/ci.md")
+    out = tmp_path / "cfg" / "shop.env"
+    ran = _py(helper, out, "SHOP_SECRET_KEY", "SHOP_SIGNING_KEY")
+    assert ran.stdout.split() == ["SHOP_SECRET_KEY", "SHOP_SIGNING_KEY"]
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert [line.split("=", 1)[0] for line in lines] == ["SHOP_SECRET_KEY", "SHOP_SIGNING_KEY"]
+    assert all(line.split("=", 1)[1] not in ran.stdout for line in lines)
+    assert out.stat().st_mode & 0o777 == 0o600

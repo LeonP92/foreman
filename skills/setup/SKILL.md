@@ -29,7 +29,8 @@ says about itself, asks the user only for what is missing, and writes
 3. Task runners: `Makefile`, `justfile`, npm scripts, wrapper scripts in `bin/` and
    `scripts/`.
 4. CI workflows (`.github/workflows/*` or the repo's equivalent). CI shows the commands
-   that really run.
+   that really run: read its `env:` blocks and the steps it runs before the tests, as
+   `references/ci.md` says.
 5. `.env.example`-style files, to learn variable names. Never open `.env` or any file
    holding real secrets.
 6. The default branch: `git symbolic-ref refs/remotes/origin/HEAD` (the part after
@@ -48,11 +49,13 @@ Fill each table from what you read:
   read) without opening them, and ask before listing each.
 - `[commands]` install, lint, typecheck, test, e2e, and `test_targeted` with `{paths}` where
   the test runner accepts file paths; `build` for what a fresh checkout needs before it
-  runs or renders properly (an asset build CI runs before its tests). Leave a command
-  empty when the repo has none.
+  runs or renders properly (the asset builds and codegen CI runs before its tests). Leave
+  a command empty when the repo has none.
 - `[env]` variables every command needs (from `.env.example`, settings code, CI `env:`
   blocks). Plain values as written; a secret only as `${NAME}`, a variable the user
-  exports, never its value. An app that needs its own address gets `{url}`.
+  exports, never its value. A required secret the user has no value for: offer a
+  throwaway, generated into a user-only file outside the repo (`references/ci.md`). An
+  app that needs its own address gets `{url}`.
 - `[server]` the dev-server command with `{port}` in place of the port, a `ready_path` that
   answers once the app is up, and any `env` only the server needs.
 - `[login]` plain steps a browser can follow to sign in locally: a dev-login link, a seeded
@@ -107,6 +110,9 @@ an import rule; write one at a time:
    many imports matched and resolved, with examples that didn't. Adjust and re-run.
 4. After 3 tries without a rule that resolves most imports, remove it and tell the user
    these files need an import rule; the map will list them under "No import rule yet".
+   If the files hold no import statements to match at all (shell scripts sourced by a
+   glob, say), stop after the first try, write no rule, and say so: the files are still
+   mapped for size, duplication and churn.
 
 Ignore extensions that aren't source code the repo owns (generated files, fixtures); add
 them to `repo.ignore` instead. When every extension is done, run `config-check` once more

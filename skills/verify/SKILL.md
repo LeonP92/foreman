@@ -77,7 +77,7 @@ environment that can't reach the real database.
      worktree with that server's settings.
 3. Migrate the branch's database with the **branch** code: run `migrate` in the branch
    worktree.
-4. Records you only discover you need while exploring (step 4) are phase 2: write them
+4. Records you only discover you need while exploring (step 5) are phase 2: write them
    once as set-up statements or a script and apply exactly the same ones to both copies,
    after both are migrated.
 
@@ -85,13 +85,15 @@ Record what data you created and which phase each record came from; the report s
 
 ## 4. Servers
 
-For each worktree, start `[server] start` with its `{port}` through the launcher, which
-puts it in its own process group so the whole tree can be stopped later. Poll `http://127.0.0.1:<port><ready_path>` until it answers; if it never does, report the
+For each worktree, start `[server] start` with its `{port}` through the launcher (its own
+process group, so the whole tree can be stopped). Poll
+`http://127.0.0.1:<port><ready_path>` until it answers; if it never does, report the
 server's last output lines and stop.
 
 ## 5. One Playwright spec
 
-Write one spec, for example `.foreman/reports/<branch>/verify/verify.spec.mjs`:
+Read `references/specs.md` first: how to explore the app safely, and the pitfalls that
+make a base/branch comparison lie. Write one spec, for example `.foreman/reports/<branch>/verify/verify.spec.mjs`:
 
 ```js
 import { test, expect } from "./foreman-fixtures.mjs";
