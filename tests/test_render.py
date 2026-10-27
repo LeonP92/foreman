@@ -76,6 +76,38 @@ def test_script_close_tag_in_data_is_escaped(tmp_path):
     assert json.loads(payload) == data
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda d: d.update(nodes={"a": 1}),
+        lambda d: d.update(lanes=[["core"]]),
+        lambda d: d["nodes"].append("c.py"),
+        lambda d: d["edges"].append(None),
+        lambda d: d["nodes"][0].update(id=["a"], label=3),
+        lambda d: d["nodes"][0].update(summary=["x"]),
+        lambda d: d["nodes"][0].update(summary={"added": "x"}),
+        lambda d: d["nodes"][0]["summary"]["changed"].append(7),
+        lambda d: d["edges"][0].update(**{"from": {"id": "a"}}),
+        lambda d: d.update(smells=[_smell("twin", [["a"], "b"])]),
+        lambda d: d.update(smells=[_smell({"k": 1}, ["a", "b"])]),
+        lambda d: d.update(smells=[_smell("hub", ["a"])], edges=[{"to": "b", "from": "a"}, {}]),
+    ],
+)
+def test_malformed_shapes_are_problems_not_exceptions(change):
+    data = _data()
+    change(data)
+    assert render.validate(data)
+
+
+def test_cli_render_malformed_has_no_traceback(tmp_path, capsys):
+    data = tmp_path / "d.json"
+    data.write_text(json.dumps({**_data(), "nodes": [1, "x"], "edges": {}}), encoding="utf-8")
+    assert main(["render", str(data), str(tmp_path / "d.html")]) == 1
+    err = capsys.readouterr().err
+    assert err.splitlines()[0] == "foreman: invalid diagram: 3 problems"
+    assert "Traceback" not in err
+
+
 def test_unknown_kind_is_rejected():
     assert render.validate({"kind": "pie"}) == ["kind must be one of ['diagram'], got 'pie'"]
 

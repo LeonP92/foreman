@@ -27,7 +27,7 @@
   code { font:12px ui-monospace, monospace; }
   .old { color:var(--removed); text-decoration:line-through; }
   .new { color:var(--added); }
-  g.node { cursor:pointer; transition:transform 200ms ease; }
+  g.node { cursor:pointer; }
   g.node rect { fill:var(--bg); stroke-width:2; }
   g.node.selected rect { stroke-width:4; }
   g.node text { fill:var(--fg); font-size:12px; pointer-events:none; }
@@ -163,15 +163,25 @@ const SECTIONS = [["added","Added"],["removed","Removed"],["changed","Changed"],
 const labelOf = id => DATA.nodes.find(n => n.id === id).label;
 const sevTag = s => `<span class="sev" style="color:${SEV[s.severity]}">${s.severity}</span>`;
 // Rows go selection first, then `first`, then the rest; each group keeps data order (sort is stable).
+// Nodes and edges move in one frame loop so edges stay attached while nodes slide.
+let frame = 0;
 function layout(first = new Set(), sel = null) {
   const rank = n => n.id === sel ? 0 : first.has(n.id) ? 1 : 2, rows = DATA.lanes.map(() => 0);
+  const from = {...pos}, to = {}, start = performance.now(), me = ++frame;
   [...DATA.nodes].sort((a, b) => rank(a) - rank(b)).forEach(n => { const lane = DATA.lanes.indexOf(n.lane);
-    pos[n.id] = {x: LEFT + lane * LANE_GAP, y: TOP + rows[lane]++ * GAP}; });
-  pairCount = {};
-  // shortcut: edges jump to their new route while nodes slide; animate `d` if that reads badly.
-  edgeEls.forEach(e => e.path.setAttribute("d", edgePath(e.a, e.b)));
-  twinEls.forEach(t => t.path.setAttribute("d", edgePath(...t.s.nodes)));
-  nodeEls.forEach((g, id) => g.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`);
+    to[n.id] = {x: LEFT + lane * LANE_GAP, y: TOP + rows[lane]++ * GAP}; });
+  const step = now => {
+    if (me !== frame) return;
+    const t = Math.min(1, (now - start) / 200), k = t * (2 - t);
+    DATA.nodes.forEach(({id}) => { const a = from[id] || to[id], b = to[id];
+      pos[id] = {x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k}; });
+    pairCount = {};
+    edgeEls.forEach(e => e.path.setAttribute("d", edgePath(e.a, e.b)));
+    twinEls.forEach(w => w.path.setAttribute("d", edgePath(...w.s.nodes)));
+    nodeEls.forEach((g, id) => g.setAttribute("transform", `translate(${pos[id].x},${pos[id].y})`));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  step(start);
 }
 function clearHighlight() {
   layout();

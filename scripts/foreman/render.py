@@ -13,14 +13,57 @@ SMELL_SEVERITIES = {"low", "medium", "high"}
 # kind -> (min nodes, max nodes)
 DIAGRAM_SMELLS = {"scatter": (3, None), "twin": (2, 2), "hub": (1, 1)}
 HUB_MIN_NEIGHBOURS = 5
+# Item fields that must be strings when present; type errors stop validation before the rules.
+_STRING_FIELDS = {
+    "nodes": ("id", "label", "sub", "lane", "status"),
+    "edges": ("from", "to", "kind", "label"),
+    "smells": ("kind", "severity", "title", "evidence", "suggestion"),
+}
 
 
-def _diagram(data: dict) -> list[str]:
+def _is_str_list(value) -> bool:
+    return isinstance(value, list) and all(isinstance(v, str) for v in value)
+
+
+def _shape_problems(data: dict) -> list[str]:
     errs = [
         f"missing top-level key '{k}'"
         for k in ("title", "lanes", "nodes", "edges")
         if k not in data
     ]
+    if errs:
+        return errs
+    if not isinstance(data["title"], str):
+        errs.append("'title' must be a string")
+    if not _is_str_list(data["lanes"]):
+        errs.append("'lanes' must be a list of strings")
+    for key, fields in _STRING_FIELDS.items():
+        items = data.get(key, [])
+        if not isinstance(items, list):
+            errs.append(f"'{key}' must be a list")
+            continue
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                errs.append(f"{key} #{i}: must be an object")
+                continue
+            errs += [
+                f"{key} #{i}: '{f}' must be a string"
+                for f in fields
+                if not isinstance(item.get(f, ""), str)
+            ]
+            if key == "smells" and not _is_str_list(item.get("nodes", [])):
+                errs.append(f"smells #{i}: 'nodes' must be a list of node ids")
+            if key == "nodes":
+                summary = item.get("summary", {})
+                if not isinstance(summary, dict) or not all(
+                    isinstance(v, list) for v in summary.values()
+                ):
+                    errs.append(f"nodes #{i}: 'summary' must be an object of lists")
+    return errs
+
+
+def _diagram(data: dict) -> list[str]:
+    errs = _shape_problems(data)
     if errs:
         return errs
     ids = set()
@@ -89,9 +132,9 @@ def _smell_problems(smells: list, ids: set, edges: list) -> list[str]:
         if kind == "hub" and len(nodes) == 1 and not unknown:
             (hub,) = nodes
             near = {
-                e["to"] if e["from"] == hub else e["from"]
+                e.get("to") if e.get("from") == hub else e.get("from")
                 for e in edges
-                if hub in (e["from"], e["to"])
+                if hub in (e.get("from"), e.get("to"))
             }
             if len(near) < HUB_MIN_NEIGHBOURS:
                 errs.append(
@@ -106,7 +149,7 @@ _VALIDATORS = {"diagram": _diagram}
 
 def validate(data: dict) -> list[str]:
     kind = data.get("kind", "diagram")
-    if kind not in _VALIDATORS:
+    if not isinstance(kind, str) or kind not in _VALIDATORS:
         return [f"kind must be one of {sorted(_VALIDATORS)}, got {kind!r}"]
     return _VALIDATORS[kind](data)
 
