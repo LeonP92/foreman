@@ -34,6 +34,7 @@ def _non_overlapping(locs: list[tuple[str, int]]) -> list[tuple[str, int]]:
 
 def find(root: Path, ignore: Sequence[str] = ()) -> dict:
     lines = {p: _normalised(p, t) for p, t in source_texts(root, ignore).items()}
+
     def windows():
         for path, norm in lines.items():
             for k in range(len(norm) - DUPE_WINDOW + 1):
