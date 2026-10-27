@@ -85,6 +85,7 @@ def _git_files(root: Path) -> list[str] | None:
         cwd=root,
         capture_output=True,
         encoding="utf-8",
+        errors="surrogateescape",
     )
     if result.returncode != 0:
         return None
@@ -104,11 +105,20 @@ def is_ignored(path: str, ignore: Sequence[str]) -> bool:
     return any(fnmatch.fnmatchcase(path, g) or fnmatch.fnmatchcase("/" + path, g) for g in ignore)
 
 
+def is_utf8(path: str) -> bool:
+    try:
+        path.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def list_files(root: Path, ignore: Sequence[str] = ()) -> list[str]:
     paths = _git_files(root)
     if paths is None:
         paths = _walk_files(root)
-    return sorted(p for p in paths if not is_ignored(p, ignore))
+    # a name that isn't UTF-8 decodes with surrogates; it can't be reported, so it is skipped
+    return sorted(p for p in paths if is_utf8(p) and not is_ignored(p, ignore))
 
 
 def language(path: str) -> str | None:

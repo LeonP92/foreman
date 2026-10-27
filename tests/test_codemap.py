@@ -392,3 +392,29 @@ def test_dismiss_matches_one_smell_by_title():
     with pytest.raises(ValueError, match="2 listed oversize smells match") as err:
         codemap.dismiss(_oversize_map(), {"dismissed": [entry]})
     assert "Long function: `run` in a.py" in str(err.value)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="bytes arguments are POSIX-only")
+def test_a_file_name_that_is_not_utf8_is_skipped(make_repo):
+    root = make_repo({"a.py": "import b\n", "b.py": ""})
+    git = [
+        "git",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "user.name=T",
+        "-c",
+        "user.email=t@example.com",
+    ]
+    blob = subprocess.run(
+        [*git, "hash-object", "-w", "b.py"], cwd=root, capture_output=True, check=True
+    ).stdout.strip()
+    # committed straight to the index: some file systems refuse such a name on disk
+    subprocess.run(
+        [*git, "update-index", "--add", "--cacheinfo", b"100644," + blob + b",bad\xff.py"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run([*git, "commit", "-qm", "odd name"], cwd=root, check=True)
+    data = codemap.build(root, _config())
+    assert sorted(n["id"] for n in data["nodes"]) == ["a.py", "b.py"]

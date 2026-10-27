@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from itertools import combinations
 from pathlib import Path
 
-from .files import NON_SOURCE_EXTENSIONS, is_ignored, list_files
+from .files import NON_SOURCE_EXTENSIONS, is_ignored, is_utf8, list_files
 from .metrics import percentiles
 from .smells import THRESHOLDS
 
@@ -43,6 +43,7 @@ def _commits(root: Path) -> tuple[list[tuple[str, int, list[str]]], str | None]:
         cwd=root,
         capture_output=True,
         encoding="utf-8",
+        errors="surrogateescape",
     )
     if result.returncode != 0:
         return [], "not a git repository or no commits"
@@ -50,7 +51,8 @@ def _commits(root: Path) -> tuple[list[tuple[str, int, list[str]]], str | None]:
     for record in result.stdout.split("\x01")[1:]:
         head, _, rest = record.partition("\0")
         sha, stamp = head.split(" ")
-        commits.append((sha, int(stamp), [p for p in rest.removeprefix("\n").split("\0") if p]))
+        paths = [p for p in rest.removeprefix("\n").split("\0") if p and is_utf8(p)]
+        commits.append((sha, int(stamp), paths))
     return commits, None
 
 
