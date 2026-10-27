@@ -1,3 +1,5 @@
+import os
+import shutil
 import sqlite3
 from contextlib import closing
 
@@ -61,3 +63,48 @@ def test_missing_dst_parent_is_a_one_line_error(tmp_path, capsys):
     assert main(["db-copy", str(tmp_path / "a.db"), str(tmp_path / "no" / "b.db")]) == 1
     err = capsys.readouterr().err
     assert err.count("\n") == 1 and "unable to open database file" in err
+
+
+def _sidecars(src):
+    return {
+        p.name: (p.stat().st_size, p.stat().st_mtime_ns) for p in src.parent.glob(src.name + "*")
+    }
+
+
+def test_wal_source_files_are_left_alone(tmp_path):
+    src = tmp_path / "a.db"
+    with closing(sqlite3.connect(src)) as writer:
+        writer.execute("pragma journal_mode=wal")
+        writer.execute("create table t(x)")
+        writer.commit()
+        before = _sidecars(src)
+        assert before.keys() == {"a.db", "a.db-wal", "a.db-shm"}
+        for name in before:  # left behind by an app that died
+            shutil.copy2(tmp_path / name, tmp_path / name.replace("a.db", "orphan.db"))
+        copy(src, tmp_path / "b.db")
+        assert _sidecars(src) == before
+    orphan = tmp_path / "orphan.db"
+    sizes = {name: size for name, (size, _) in _sidecars(orphan).items()}
+    copy(orphan, tmp_path / "c.db")
+    # the last connection to close would checkpoint and delete them
+    assert {name: size for name, (size, _) in _sidecars(orphan).items()} == sizes
+    copy(src, tmp_path / "d.db")  # closed cleanly: no sidecars, and none created
+    assert _sidecars(src).keys() == {"a.db"}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory permissions")
+def test_source_in_read_only_folder_is_copied(tmp_path):
+    folder = tmp_path / "ro"
+    folder.mkdir()
+    with closing(sqlite3.connect(folder / "a.db")) as con:
+        con.execute("pragma journal_mode=wal")
+        con.execute("create table t(x)")
+        con.execute("insert into t values (7)")
+        con.commit()
+    folder.chmod(0o555)
+    try:
+        copy(folder / "a.db", tmp_path / "b.db")
+    finally:
+        folder.chmod(0o755)
+    with closing(sqlite3.connect(tmp_path / "b.db")) as out:
+        assert out.execute("select x from t").fetchall() == [(7,)]
