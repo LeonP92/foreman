@@ -37,12 +37,9 @@ and the screenshot name.
 
 ## 2. Can the data be isolated?
 
-Read `[database]`:
-
-- `none`: no data to prepare.
-- `file`: works when `path` is inside the repo. Each worktree gets its own copy.
-- `command`: works when `create`, `env_override` and `url_template` give each server its
-  own database.
+Read `[database]`. `none`: no data to prepare. `file`: works when `path` is inside the
+repo; each worktree gets its own copy. `command`: works when `create`, `env_override` and
+`url_template` give each server its own database.
 
 Otherwise stop before starting anything. Say why, and what config would make it possible.
 Never point a server at a database you didn't copy or create.
@@ -127,8 +124,9 @@ Set any credential the spec reads (the `[login]` password) in that command's env
 loaded from a file; never type it into the spec, the command line or the transcript.
 
 The result lists each test per project (`base`, `branch`) with status, the error's first
-lines and location when it failed, console errors, bad responses and screenshots named
-`<item>-base.png` and `<item>-branch.png`. If the spec fails to load, fix it and re-run.
+lines and location when it failed, console errors (known noise apart, under
+`ignored_console_errors`), bad responses and screenshots named `<item>-base.png` and
+`<item>-branch.png`. If the spec fails to load, fix it and re-run.
 
 ## 6. Read the results
 

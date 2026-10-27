@@ -166,3 +166,8 @@ def test_verdict_counts_only_must_fix():
     )
     assert "N is exactly the number of Must fix findings" in text
     assert "never change the verdict" in text
+
+
+def test_known_console_noise_is_explained_where_it_is_offered():
+    assert "ignore_console" in skill_text("setup")
+    assert "ignored_console_errors" in skill_text("verify")

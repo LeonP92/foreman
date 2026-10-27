@@ -8,6 +8,12 @@ through `browser-run` like the real one; its screenshots and results stay in the
 folder. If you use a browser tool instead, run it from a folder outside the repo and
 afterwards remove only the files it created there.
 
+A console error that shows on every base page you explored (say, a page that streams
+events and logs "Event stream reconnecting" on load) is known noise, not a finding. Offer
+the user an anchored regex for it in `[verify] ignore_console` (`^Event stream
+reconnecting`); add it only with a yes. `browser-run` then lists it under
+`ignored_console_errors`.
+
 ## Pitfalls
 
 - **No serial mode.** Never `test.describe.configure({ mode: "serial" })`. An expected

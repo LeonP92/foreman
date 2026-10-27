@@ -29,6 +29,7 @@ DEFAULTS = {
         "url_template": "",
     },
     "rules": {"docs": [], "layers": []},
+    "verify": {"ignore_console": []},
     "graph": {},
 }
 DB_KINDS = ("none", "file", "command")
@@ -124,6 +125,13 @@ def _semantic_problems(data: dict) -> list[str]:
         for key in DB_REQUIRED.get(kind, ())
         if not _get(data, "database", key)
     ]
+    patterns = _get(data, "verify", "ignore_console", [])
+    # wrong types are already reported by check()
+    for pattern in [] if _type_problem("", patterns, []) else patterns:
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            problems.append(f"verify.ignore_console: {pattern!r} does not compile: {exc}")
     layers = _get(data, "rules", "layers", [])
     if not isinstance(layers, list):
         return [*problems, "rules.layers must be a list of tables"]

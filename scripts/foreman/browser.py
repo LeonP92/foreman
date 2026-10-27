@@ -8,6 +8,7 @@ import secrets
 import shutil
 import subprocess
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
 
@@ -130,7 +131,7 @@ def _failure(error: dict) -> dict:
     return failure
 
 
-def parse_results(report: dict) -> list[dict]:
+def parse_results(report: dict, ignore_console: Sequence[str] = ()) -> list[dict]:
     if report.get("errors"):
         message = _ANSI.sub("", report["errors"][0]["message"])
         raise ValueError(f"spec failed to load: {message.splitlines()[0]}")
@@ -143,12 +144,15 @@ def parse_results(report: dict) -> list[dict]:
             for t in spec["tests"]:
                 result = t["results"][-1] if t["results"] else {"status": "skipped"}
                 extra = (_attachments(result, "foreman") or [{}])[0]
+                console = extra.get("consoleErrors", [])
+                noise = [m for m in console if any(re.search(p, m) for p in ignore_console)]
                 tests.append(
                     {
                         "title": spec["title"],
                         "project": t["projectName"],
                         "status": result["status"],
-                        "console_errors": extra.get("consoleErrors", []),
+                        "console_errors": [m for m in console if m not in noise],
+                        "ignored_console_errors": noise,
                         "bad_responses": extra.get("badResponses", []),
                         "screenshots": [
                             Path(p).as_posix() for p in _attachments(result, "foreman-screenshot")
@@ -167,7 +171,13 @@ def run_name() -> str:
     return f"{stamp}-{os.getpid()}-{secrets.token_hex(2)}"
 
 
-def run(spec: Path, out: Path, base_url: str, branch_url: str | None = None) -> dict:
+def run(
+    spec: Path,
+    out: Path,
+    base_url: str,
+    branch_url: str | None = None,
+    ignore_console: Sequence[str] = (),
+) -> dict:
     if _DIRECT_IMPORT.search(spec.read_text(encoding="utf-8")):
         raise ValueError(
             f"{spec.as_posix()}: import test/expect from './{FIXTURES}', not '@playwright/test'"
@@ -191,7 +201,7 @@ def run(spec: Path, out: Path, base_url: str, branch_url: str | None = None) -> 
         )
         if not results.exists():
             raise OSError(f"playwright produced no results: {_last_line(proc)}")
-        tests = parse_results(json.loads(results.read_text(encoding="utf-8")))
+        tests = parse_results(json.loads(results.read_text(encoding="utf-8")), ignore_console)
         kept = out / spec.name
         if not (kept.exists() and os.path.samefile(spec, kept)):
             shutil.copy2(spec, out)

@@ -71,7 +71,8 @@ def _map(args) -> tuple[dict, int]:
 
 
 def _browser_run(args) -> tuple[dict, int]:
-    return browser.run(args.spec, args.out, args.base, args.branch), 0
+    ignore_console = _load(args)["verify"]["ignore_console"]
+    return browser.run(args.spec, args.out, args.base, args.branch, ignore_console), 0
 
 
 def _db_copy(args) -> tuple[dict, int]:
@@ -98,8 +99,7 @@ _render_parser = _SUBPARSERS.add_parser("render")
 _render_parser.set_defaults(func=_render)
 _render_parser.add_argument("data", type=Path)
 _render_parser.add_argument("out", type=Path)
-_browser_parser = _SUBPARSERS.add_parser("browser-run")
-_browser_parser.set_defaults(func=_browser_run)
+_browser_parser = _command("browser-run", _browser_run)
 _browser_parser.add_argument("--spec", type=Path, required=True)
 _browser_parser.add_argument("--out", type=Path, required=True)
 _browser_parser.add_argument("--base", required=True)

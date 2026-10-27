@@ -28,6 +28,8 @@ url_template = "db://{name}"
 from = "core/**"
 to = "apps/**"
 except = ["apps/plugins/**"]
+[verify]
+ignore_console = ["^Event stream reconnecting"]
 [graph.ruby]
 extensions = [".rb"]
 pattern = "require '(.*)'"
@@ -62,6 +64,7 @@ def test_missing_file_gives_defaults(tmp_path):
         ('[database]\nkind = "command"\ncreate = "c"', "database.env_override is required"),
         ("[[rules.layers]]\nfrom = 'a/**'", "rules.layers entry needs"),
         ('[graph.python]\nextensions = [".py"]', "[graph.python]: missing key"),
+        ("[verify]\nignore_console = ['(']", "verify.ignore_console: '(' does not compile"),
     ],
 )
 def test_problems(tmp_path, text, expected):
@@ -120,6 +123,7 @@ WRONG_TYPES = [
     ("[database]\npath = 1", "database.path must be a string"),
     ("[database]\ndrop = 1", "database.drop must be a string"),
     ("[rules]\ndocs = 1", "rules.docs must be a list of strings"),
+    ("[verify]\nignore_console = 'x'", "verify.ignore_console must be a list of strings"),
     ("[rules]\nlayers = 1", "rules.layers must be a list of tables"),
     ("[rules]\nlayers = [1]", "rules.layers entry needs"),
     ("[[rules.layers]]\nfrom = 1\nto = 'a'", "rules.layers entry needs"),

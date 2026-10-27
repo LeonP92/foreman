@@ -24,6 +24,7 @@ def test_parse_results_maps_projects_errors_and_screenshots():
                 "Failed to load resource: the server responded with a status of 404 (File not found)"
             ],
             "bad_responses": ["404 http://127.0.0.1:50001/missing.js"],
+            "ignored_console_errors": [],
             "screenshots": ["/out/total-shows-3-base.png"],
             "error": "Error: expect(locator).toHaveText(expected) failed\n"
             "Locator:  locator('#total')\n"
@@ -38,9 +39,30 @@ def test_parse_results_maps_projects_errors_and_screenshots():
             "status": "passed",
             "console_errors": [],
             "bad_responses": [],
+            "ignored_console_errors": [],
             "screenshots": ["/out/total-shows-3-branch.png"],
         },
     ]
+
+
+def test_known_console_noise_is_kept_but_set_apart():
+    report = json.loads(
+        (Path(__file__).parent / "data" / "playwright_results.json").read_text(encoding="utf-8")
+    )
+    base = parse_results(report, ["^Failed to load resource"])[0]
+    assert base["console_errors"] == []
+    assert base["ignored_console_errors"] == [
+        "Failed to load resource: the server responded with a status of 404 (File not found)"
+    ]
+
+
+def test_browser_run_passes_configured_noise_patterns(tmp_path, monkeypatch, capsys):
+    (tmp_path / "c.toml").write_text("[verify]\nignore_console = ['^noise']\n", encoding="utf-8")
+    seen = []
+    monkeypatch.setattr(browser, "run", lambda *args: seen.append(args) or {"tests": []})
+    argv = ["browser-run", "--spec", "s.mjs", "--out", "o", "--base", "http://127.0.0.1:1"]
+    assert main([*argv, "--root", str(tmp_path), "--config", "c.toml"]) == 0
+    assert seen[0][-1] == ["^noise"]
 
 
 def test_node_too_old_is_a_clear_error(monkeypatch):
