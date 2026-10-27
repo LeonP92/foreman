@@ -64,7 +64,8 @@
 /*__UI__*/
 const DATA = /*__DATA__*/null;
 
-const W = 272, H = 58, PITCH = 86, LANE_GAP = W + 64, PAD = 48, TOP = 58;
+const H = 58, PITCH = 86, GAP = 64, PAD = 48, TOP = 58, MIN_W = 220, MAX_W = 340;
+let W = 272;
 const BADGE = {added:"new", changed:"changed", removed:"removed", affected:"affected"};
 const KIND = {import:"imports", call:"calls / renders", impl:"implements / subclasses",
   cycle:"import cycle", forbidden:"forbidden layer crossing"};
@@ -90,11 +91,8 @@ const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS
   for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
 
 const pos = {}, perLane = DATA.lanes.map(l => DATA.nodes.filter(n => n.lane === l).length);
-const width = 2 * PAD + (DATA.lanes.length - 1) * LANE_GAP + W;
 const height = TOP + Math.max(...perLane) * PITCH - (PITCH - H) + 32;
-stage.style.width = width + "px";
 stage.style.height = height + "px";
-svg.setAttribute("width", width);
 svg.setAttribute("height", height);
 
 const defs = el("defs", {});
@@ -107,10 +105,7 @@ const mi = el("marker", {id:"a-impl", viewBox:"0 0 12 12", refX:11, refY:6, mark
   markerUnits:"userSpaceOnUse", orient:"auto"}, defs);
 el("path", {d:"M1,1 L11,6 L1,11 z", class:"ah-impl"}, mi);
 
-DATA.lanes.forEach((name, i) => {
-  el("rect", {class:"lane", x:PAD + i * LANE_GAP - 16, y:16, width:W + 32, height:height - 32, rx:14});
-  el("text", {class:"lane-label", x:PAD + i * LANE_GAP, y:40}).textContent = name;
-});
+const lanes = el("g", {});
 
 const edgeEls = [], nodeEls = new Map();
 let pairCount = {};
@@ -139,13 +134,27 @@ const twinEls = SMELLS.filter(s => s.kind === "twin").map(s => {
   return {s, path};
 });
 
-// Rows go selection first, then `first`, then the rest; each group keeps data order (sort is stable).
-// Nodes and edges move in one frame loop so edges stay attached while nodes slide.
-function layout(first = new Set(), sel = null) {
-  const rank = n => n.id === sel ? 0 : first.has(n.id) ? 1 : 2, rows = DATA.lanes.map(() => 0);
-  const from = {...pos}, to = {};
+// Lanes share the available width (clamped); rows go selection first, then its neighbours, then the
+// rest, each keeping data order (sort is stable). Nodes and edges move in one frame loop so edges stay
+// attached while nodes slide.
+let focused = null, near = new Set();
+function layout(instant = false) {
+  const n = DATA.lanes.length;
+  W = Math.max(MIN_W, Math.min(MAX_W, Math.floor((availableWidth(canvas) - 2 * PAD - (n - 1) * GAP) / n)));
+  const width = 2 * PAD + (n - 1) * (W + GAP) + W;
+  stage.style.width = width + "px";
+  svg.setAttribute("width", width);
+  lanes.replaceChildren();
+  DATA.lanes.forEach((name, i) => {
+    el("rect", {class:"lane", x:PAD + i * (W + GAP) - 16, y:16, width:W + 32, height:height - 32, rx:14}, lanes);
+    el("text", {class:"lane-label", x:PAD + i * (W + GAP), y:40}, lanes).textContent = name;
+  });
+  nodeEls.forEach(card => { card.style.width = W + "px"; });
+  const rank = n => n.id === focused ? 0 : near.has(n.id) ? 1 : 2, rows = DATA.lanes.map(() => 0);
+  const to = {};
   [...DATA.nodes].sort((a, b) => rank(a) - rank(b)).forEach(n => { const lane = DATA.lanes.indexOf(n.lane);
-    to[n.id] = {x: PAD + lane * LANE_GAP, y: TOP + rows[lane]++ * PITCH}; });
+    to[n.id] = {x: PAD + lane * (W + GAP), y: TOP + rows[lane]++ * PITCH}; });
+  const from = instant ? to : {...pos};
   animate(k => {
     DATA.nodes.forEach(({id}) => { const a = from[id] || to[id], b = to[id];
       pos[id] = {x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k}; });
@@ -155,7 +164,6 @@ function layout(first = new Set(), sel = null) {
     nodeEls.forEach((card, id) => { card.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
   });
 }
-let focused = null;
 // Also runs when the drawer's padding transition ends; before that the scroll range can't reach the last lane.
 function reveal() {
   if (!focused) return;
@@ -164,6 +172,7 @@ function reveal() {
 }
 function clearHighlight() {
   focused = null;
+  near = new Set();
   layout();
   stage.className = "stage";
   nodeEls.forEach(card => card.classList.remove("selected", "smelly", "dim"));
@@ -182,8 +191,8 @@ const SECTIONS = [["added","Added"],["changed","Changed"],["removed","Removed"],
 function focusNode(n) {
   clearHighlight();
   focused = n.id;
-  const near = new Set(edgeEls.flatMap(e => e.a === n.id ? [e.b] : e.b === n.id ? [e.a] : []));
-  layout(near, n.id);
+  near = new Set(edgeEls.flatMap(e => e.a === n.id ? [e.b] : e.b === n.id ? [e.a] : []));
+  layout();
   canvas.scrollTo({top: 0});
   nodeEls.forEach((card, id) => {
     card.classList.toggle("selected", id === n.id);
@@ -249,7 +258,6 @@ DATA.nodes.forEach(n => {
   card.dataset.id = n.id;
   card.setAttribute("role", "button");
   card.setAttribute("aria-label", `${n.label}, ${BADGE[n.status]}`);
-  card.style.width = W + "px";
   card.style.height = H + "px";
   card.innerHTML = `<div class="card-top"><span class="card-label" title="${esc(n.label)}">${esc(n.label)}</span>`
     + `<span class="badge">${BADGE[n.status]}</span></div><div class="card-sub">${esc(n.sub || "")}</div>`;
@@ -270,6 +278,7 @@ document.getElementById("drawer").addEventListener("click", ev => {
 
 const matches = q => DATA.nodes.filter(n => n.label.toLowerCase().includes(q));
 initUI({
+  layout,
   dismiss: clearHighlight,
   onFilter: q => {
     clearHighlight();

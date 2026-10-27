@@ -65,7 +65,8 @@
 /*__UI__*/
 const DATA = /*__DATA__*/null;
 
-// [width, height] per card kind. Stubs (other groups) sit in a column left of the module grid.
+// [min width, height] per card kind; group and module cards stretch to fill their row. Stubs (other
+// groups) sit in a fixed-width column left of the module grid.
 const SIZE = {group: [248, 64], module: [212, 48], stub: [180, 44]};
 // Groups get wider gaps so the few edges between them stay readable.
 const GAP = {group: [72, 44], module: [20, 14]}, PAD = 32, TOP = 58, STUB_GAP = 72;
@@ -130,7 +131,7 @@ function aggregate(viewOf) {
 }
 const packageEdges = aggregate(id => byId[id].group);
 
-let view = null, items = [], edges = [], focused = null, near = new Set();
+let view = null, items = [], edges = [], focused = null, near = new Set(), boxW = 0;
 const cards = new Map(), pos = {};
 
 function itemsFor(group) {
@@ -164,7 +165,7 @@ function render(group) {
     card.setAttribute("role", "button");
     card.title = it.kind === "stub" ? `Open group ${it.label}` : it.kind === "group" ? `${it.label}: double-click or Enter to open` : it.id;
     card.setAttribute("aria-label", it.kind === "module" ? it.id : card.title);
-    card.style.width = w + "px";
+    card.style.width = w + "px";  // stubs keep this; layout() stretches the rest
     card.style.height = h + "px";
     card.innerHTML = `<div class="card-top"><span class="card-label">${esc(it.label)}</span>`
       + (it.badge ? `<span class="badge lang">${esc(it.badge)}</span>` : "")
@@ -213,12 +214,15 @@ function layout(instant = false) {
   const boxes = items.filter(it => it.kind !== "stub").sort((a, b) => rank(a) - rank(b));
   const [bw, bh] = SIZE[boxes[0].kind], [GAP_X, GAP_Y] = GAP[boxes[0].kind], [sw, sh] = SIZE.stub;
   const left = PAD + (stubs.length ? sw + STUB_GAP : 0);
-  const cols = Math.max(1, Math.min(boxes.length, Math.floor((canvas.clientWidth - left - PAD + GAP_X) / (bw + GAP_X))));
+  const room = availableWidth(canvas) - left - PAD, fit = Math.max(1, Math.floor((room + GAP_X) / (bw + GAP_X)));
+  const cols = Math.min(boxes.length, fit);
+  boxW = Math.max(bw, Math.floor((room - (fit - 1) * GAP_X) / fit));
+  boxes.forEach(it => { cards.get(it.id).style.width = boxW + "px"; });
   const to = {};
   stubs.forEach((it, i) => to[it.id] = {x: PAD, y: TOP + i * (sh + GAP.module[1])});
-  boxes.forEach((it, i) => to[it.id] = {x: left + (i % cols) * (bw + GAP_X), y: TOP + Math.floor(i / cols) * (bh + GAP_Y)});
+  boxes.forEach((it, i) => to[it.id] = {x: left + (i % cols) * (boxW + GAP_X), y: TOP + Math.floor(i / cols) * (bh + GAP_Y)});
   // The package view's last row keeps a gap below for same-row arcs.
-  const gridW = cols * (bw + GAP_X) - GAP_X, gridH = Math.ceil(boxes.length / cols) * (bh + GAP_Y) - (view ? GAP_Y : 0);
+  const gridW = cols * (boxW + GAP_X) - GAP_X, gridH = Math.ceil(boxes.length / cols) * (bh + GAP_Y) - (view ? GAP_Y : 0);
   const stubH = stubs.length * (sh + GAP.module[1]) - GAP.module[1];
   const width = left + gridW + PAD, height = TOP + Math.max(gridH, stubH) + PAD;
   stage.style.width = width + "px";
@@ -242,7 +246,7 @@ function layout(instant = false) {
   });
 }
 
-const sizeOf = id => SIZE[id[0] === STUB ? "stub" : view ? "module" : "group"];
+const sizeOf = id => id[0] === STUB ? SIZE.stub : [boxW, SIZE[view ? "module" : "group"][1]];
 function edgePath(a, b, pairs) {
   const p = pos[a], q = pos[b], [pw, ph] = sizeOf(a), [qw, qh] = sizeOf(b);
   const key = [a, b].sort().join("\n"), k = pairs[key] = (pairs[key] || 0) + 1;
@@ -372,6 +376,7 @@ const hit = (id, q) => id.toLowerCase().includes(q);
 const matches = (it, q) => it.kind === "module" ? hit(it.id, q)
   : it.kind === "group" && (hit(it.id, q) || groupById[it.id].nodes.some(id => hit(id, q)));
 initUI({
+  layout,
   dismiss: clearHighlight,
   onFilter: q => {
     clearHighlight();
@@ -389,7 +394,6 @@ initUI({
 });
 render(null);
 canvas.addEventListener("click", clearHighlight);
-addEventListener("resize", () => layout(true));
 </script>
 </body>
 </html>

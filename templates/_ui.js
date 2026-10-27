@@ -1,6 +1,6 @@
 // Shared foreman UI: escaping, theme toggle, filter keys, drawer, focus animation.
 // Text from DATA is escaped; `backticks` become <code>.
-// Requires: #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme.
+// Requires: #canvas, #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme.
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)");
@@ -20,25 +20,33 @@ function animate(step, ms = 200) {
 }
 
 const drawer = document.getElementById("drawer");
-let drawerOpener = null;
+let drawerOpener = null, relayout = () => {};
+// Width the view may lay out in: the canvas minus the drawer's reserved strip while it is open.
+const availableWidth = canvas => canvas.clientWidth - (drawer.classList.contains("open") ? drawer.offsetWidth : 0);
 // opener: the element focus returns to if the drawer closes while holding focus.
 function openDrawer(html, opener) {
   drawerOpener = opener;
+  const was = drawer.classList.contains("open");
   drawer.querySelector(".drawer-body").innerHTML = html;
   drawer.querySelector(".drawer-body").scrollTop = 0;
   drawer.classList.add("open");
   drawer.inert = false;
   document.body.classList.add("drawer-open");
+  if (!was) relayout();
 }
 function closeDrawer() {
   if (drawer.contains(document.activeElement) && drawerOpener && drawerOpener.isConnected) drawerOpener.focus();
+  const was = drawer.classList.contains("open");
   drawer.classList.remove("open");
   drawer.inert = true;
   document.body.classList.remove("drawer-open");
+  if (was) relayout();
 }
 
 // dismiss: clears the view's selection (Esc, drawer close). onFilter(query) / onFilterEnter(query).
-function initUI({dismiss, onFilter, onFilterEnter}) {
+// layout(instant): re-places the view in availableWidth(); animated when the drawer opens or closes,
+// snapped on resize (debounced, then one frame).
+function initUI({dismiss, onFilter, onFilterEnter, layout}) {
   const root = document.documentElement, filter = document.getElementById("filter");
   const saved = localStorage.getItem(THEME_KEY);
   if (saved) root.dataset.theme = saved;
@@ -59,4 +67,9 @@ function initUI({dismiss, onFilter, onFilterEnter}) {
   });
   drawer.querySelector(".drawer-close").addEventListener("click", dismiss);
   closeDrawer();
+  relayout = layout;
+  let timer;
+  // Border box only: the drawer's padding transition must not count as a resize.
+  new ResizeObserver(() => { clearTimeout(timer); timer = setTimeout(() => requestAnimationFrame(() => layout(true)), 100); })
+    .observe(document.getElementById("canvas"), {box: "border-box"});
 }
