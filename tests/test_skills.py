@@ -54,8 +54,23 @@ def test_change_skills_compare_against_the_merge_base():
 
 def test_every_skill_forbids_touching_what_it_did_not_create():
     rule = "Never delete or modify anything you didn't create in this run"
+    git = "never run repo-wide git maintenance (`git worktree prune`, `git gc`, branch deletion)"
     for skill in SKILLS:
-        assert rule in " ".join(skill_text(skill).split()), skill
+        text = " ".join(skill_text(skill).split())
+        assert rule in text, skill
+        assert git in text, skill
+
+
+def test_review_flags_gone_or_squash_merged_branches():
+    text = " ".join(skill_text("review").split())
+    report = " ".join(
+        (SKILLS_DIR / "review" / "references" / "report.md").read_text(encoding="utf-8").split()
+    )
+    for phrase in ["git ls-remote --heads", "git cherry", "continues on the given tip"]:
+        assert phrase in text, phrase
+    for phrase in ["branch deleted on remote", "appears squash-merged as <sha>"]:
+        assert phrase in text, phrase
+        assert phrase in report, phrase
 
 
 def _snippet(tmp_path, marker: str, ref: str = "verify/references/servers.md") -> Path:

@@ -17,8 +17,9 @@ the change works and what needs their judgement, and drill in only if they want 
 - Rules: never commit, push, or edit product code; never point anything at real data; pass
   credentials only through files or environment variables and never print them; clean up
   every worktree, server (whole process tree), and temp file you create. Never delete or
-  modify anything you didn't create in this run — including ignored files and folders.
-  End with "Not checked:" and why.
+  modify anything you didn't create in this run — including ignored files and folders —
+  and never run repo-wide git maintenance (`git worktree prune`, `git gc`, branch
+  deletion). End with "Not checked:" and why.
 
 The branch is the one the user named, else the current one. You review what the branch
 has committed against `BASE = git merge-base <repo.base> <branch>`, never the tip of
@@ -26,7 +27,13 @@ has committed against `BASE = git merge-base <repo.base> <branch>`, never the ti
 itself. If `BASE` equals the branch tip, check `git rev-list --first-parent <repo.base>`:
 if the tip is on it, the branch has no commits of its own and there is nothing to review
 (say so and stop); otherwise it was already merged (say so in the report and use `BASE^`,
-the merge-base's first parent, as `BASE`). Diff with
+the merge-base's first parent, as `BASE`). Then check whether the branch is gone or
+already landed: `git ls-remote --heads <remote> <branch>` (the branch's remote, usually
+`origin`) prints nothing if it was deleted there; search `git log BASE..<repo.base>` for
+a commit whose subject or PR number (`#12`) matches the branch's; and in
+`git cherry <repo.base> <branch>`, a line starting `-` has a patch-equivalent commit on the
+base. If so, the report header says "branch deleted on remote" or "appears squash-merged
+as <sha>", and the review continues on the given tip. Diff with
 `git diff BASE <branch>`; anything run on the base (tests in step 4, verify, the diagram)
 uses a worktree at `BASE`. The report names both SHAs. If the branch isn't checked out,
 or the working tree has uncommitted changes, work in a temporary worktree of the branch

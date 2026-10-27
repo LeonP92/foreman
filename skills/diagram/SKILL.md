@@ -17,8 +17,9 @@ The diagram is a fixed HTML template filled from one JSON file. You write only t
 - Rules: never commit, push, or edit product code; never point anything at real data; pass
   credentials only through files or environment variables and never print them; clean up
   every worktree, server (whole process tree), and temp file you create. Never delete or
-  modify anything you didn't create in this run — including ignored files and folders.
-  End with "Not checked:" and why.
+  modify anything you didn't create in this run — including ignored files and folders —
+  and never run repo-wide git maintenance (`git worktree prune`, `git gc`, branch
+  deletion). End with "Not checked:" and why.
 
 Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
 `<branch>` has each `/` replaced by `-` and `<stamp>` is the UTC start time as

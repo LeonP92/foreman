@@ -6,7 +6,9 @@ minute. Everything below it is there to drill into, never required reading.
 ## Top block
 
 Title it with the branch and both SHAs: `Review: <branch> (<branch sha>) vs merge-base
-<BASE sha>`, adding "already merged" when `BASE` had to step back to its first parent.
+<BASE sha>`, adding "already merged" when `BASE` had to step back to its first parent,
+and "branch deleted on remote" or "appears squash-merged as <sha>" when the review found
+it so.
 
 - **Verdict:** `fix N first`, where N is exactly the number of Must fix findings, or
   `ship` when there are none. Should fix and Nice to have never change the verdict; if
