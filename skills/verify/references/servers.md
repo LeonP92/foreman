@@ -110,11 +110,17 @@ while args[0] == "--env-file":
 SETTINGS, CWD, LOG, COMMAND = args
 settings = json.load(open(SETTINGS, encoding="utf-8"))
 values = settings["command" if LOG == "-" else "server"]
-checkout = settings["checkout"]
+
+
+def norm(path):
+    return os.path.normcase(os.path.normpath(path))  # Windows: slashes and case
+
+
+checkout = norm(settings["checkout"])
 
 
 def inside(value):
-    return value == checkout or value.startswith(checkout + os.sep)
+    return norm(value) == checkout or norm(value).startswith(checkout.rstrip(os.sep) + os.sep)
 
 
 base = {

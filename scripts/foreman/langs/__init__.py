@@ -1,6 +1,6 @@
 import posixpath
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from foreman.files import read_text
@@ -13,6 +13,8 @@ class RepoIndex:
     go_module: str | None
     go_packages: frozenset[str]
     python_roots: tuple[str, ...]
+    # per-build cache of package `__init__.py` re-exports, filled by the Python language
+    python_reexports: dict[str, dict[str, str]] = field(default_factory=dict, compare=False)
 
 
 def make_index(root: Path, files: list[str]) -> RepoIndex:

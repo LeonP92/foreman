@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -350,10 +351,18 @@ def test_launcher_drops_variables_pointing_into_the_main_checkout(tmp_path):
         "PYTHONPATH": "/elsewhere/lib",
         "NODE_PATH": "/elsewhere/node",
         "SHOP_CACHE": str(main / "cache"),
+        "SHOP_DOTTED": f"{tmp_path}{os.sep}x{os.sep}..{os.sep}main{os.sep}.{os.sep}logs",
         "SHOP_NEIGHBOUR": str(tmp_path / "main-other"),
         "PATH": os.pathsep.join([str(main / ".venv" / "bin"), os.environ["PATH"]]),
     }
-    names = ["VIRTUAL_ENV", "PYTHONPATH", "NODE_PATH", "SHOP_CACHE", "SHOP_NEIGHBOUR"]
+    names = [
+        "VIRTUAL_ENV",
+        "PYTHONPATH",
+        "NODE_PATH",
+        "SHOP_CACHE",
+        "SHOP_DOTTED",
+        "SHOP_NEIGHBOUR",
+    ]
     show = (
         f'"{sys.executable}" -c "import os; '
         f"print(*[n for n in {names!r} if n in os.environ], str(os.environ['PATH']).startswith({str(main)!r}))\""
@@ -363,24 +372,27 @@ def test_launcher_drops_variables_pointing_into_the_main_checkout(tmp_path):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
-def test_throwaway_secrets_are_safe_to_add_concurrently(tmp_path):
+def test_throwaway_secrets_wait_for_the_lock(tmp_path):
     helper = _snippet(tmp_path, "foreman_throwaway.py", "setup/references/ci.md")
     env = {**os.environ, "XDG_CONFIG_HOME": str(tmp_path / "cfg")}
-    procs = [
-        subprocess.Popen(
-            [sys.executable, "-I", str(helper), str(tmp_path / "shop"), "SHOP_A", "SHOP_B"],
-            env=env,
-            stdout=subprocess.PIPE,
-            encoding="utf-8",
-        )
-        for _ in range(6)
-    ]
-    paths = {p.communicate()[0].split()[0] for p in procs}
-    assert all(p.returncode == 0 for p in procs)
-    (path,) = paths
-    names = [line.split("=", 1)[0] for line in Path(path).read_text(encoding="utf-8").splitlines()]
-    assert sorted(names) == ["SHOP_A", "SHOP_B"]
-    assert not Path(path).with_suffix(".lock").exists()
+    repo = tmp_path / "shop"
+    path = Path(_py(helper, repo, "SHOP_A", env=env).stdout.split()[0])
+    lock = path.with_suffix(".lock")
+    lock.touch()
+    proc = subprocess.Popen(
+        [sys.executable, "-I", str(helper), str(repo), "SHOP_A", "SHOP_B"],
+        env=env,
+        stdout=subprocess.PIPE,
+        encoding="utf-8",
+    )
+    time.sleep(0.5)
+    assert proc.poll() is None
+    assert path.read_text(encoding="utf-8").count("SHOP_B") == 0
+    lock.unlink()
+    assert proc.communicate(timeout=10)[0].split() == [path.as_posix(), "SHOP_B"]
+    names = [line.split("=", 1)[0] for line in path.read_text(encoding="utf-8").splitlines()]
+    assert names == ["SHOP_A", "SHOP_B"]
+    assert not lock.exists()
 
 
 def test_helpers_live_apart_under_collision_free_names():

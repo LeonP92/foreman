@@ -200,7 +200,9 @@ def test_python_import_through_a_reexporting_package_reaches_the_submodule(make_
     root = make_repo(
         {
             "shop/__init__.py": "from .pricing import Price as Cost\nfrom shop.tax import rate\n",
-            "shop/pricing.py": "",
+            # a second-level re-export is not followed: no edge from app.py to shop/money.py
+            "shop/pricing.py": "from shop.money import Price\n",
+            "shop/money.py": "",
             "shop/tax.py": "",
             "app.py": "from shop import Cost, rate\n",
         }

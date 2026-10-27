@@ -1,5 +1,4 @@
 import ast
-import functools
 import posixpath
 
 from foreman.files import read_text
@@ -42,14 +41,15 @@ def _first(bases: list[str], name: str | None, index: RepoIndex) -> str | None:
     return None
 
 
-@functools.cache
 def _reexports(init: str, index: RepoIndex) -> dict[str, str]:
     """Name -> submodule file for each `from .sub import Name` at the top of a package `__init__.py`."""
+    if init in index.python_reexports:
+        return index.python_reexports[init]
+    found = index.python_reexports[init] = {}
     try:
         tree = ast.parse(read_text(index.root / init) or "")
     except SyntaxError:
-        return {}
-    found = {}
+        return found
     for node in tree.body:
         if isinstance(node, ast.ImportFrom):
             bases = _bases(init, node.level, node.module, index)
