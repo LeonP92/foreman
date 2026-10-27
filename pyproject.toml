@@ -1,0 +1,20 @@
+[project]
+name = "foreman"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]
+testpaths = ["tests"]
+markers = ["browser: needs a real browser (Node + Playwright)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+preview = true
+
+[tool.ruff.lint]
+extend-select = ["PLW1514"]
