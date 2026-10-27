@@ -28,7 +28,8 @@ two or more top-level directories, otherwise `medium`. Cycles make modules impos
 test, load or change alone.
 
 **layering** — an import that a `[rules] layers` pair forbids (for example `src/ui/**`
-importing `src/db/**`). Always `high`: it breaks a boundary the team chose.
+importing `src/db/**`), unless its target matches the pair's `except` globs. Always
+`high`: it breaks a boundary the team chose.
 
 **hub** — a module whose neighbours (importers plus imports) number at least
 `max(hub_floor = 8, repo p95)`. Always `medium`. A change to a hub reaches everything around

@@ -27,7 +27,7 @@ is fine and means defaults). Unknown tables and keys are errors.
 | `database.env_override` | Env var that points the server at its database. Required for `command`. |
 | `database.url_template` | Value for that env var. Required for `command`. |
 | `rules.docs` | Repo docs that state design rules. |
-| `rules.layers` | Edges that must not exist: `[{from = "glob", to = "glob"}]`. |
+| `rules.layers` | Edges that must not exist: `[{from = "glob", to = "glob"}]`. An optional `except = ["glob", …]` lists targets under `to` that `from` may still import. |
 | `graph.<name>` | Import rule for a language without a built-in graph (needs an import rule; setup writes one): `extensions`, `pattern` (regex, group 1 is the import), `resolve` (candidate paths using `{dir}`, `{1}`, `{1\|path}`). |
 
 `create`, `migrate`, `seed`, `drop` and `url_template` may use two placeholders, filled in
@@ -87,7 +87,7 @@ seed = "npm run seed"
 
 [rules]
 docs = ["docs/architecture.md"]
-layers = [{ from = "src/ui/**", to = "src/db/**" }]
+layers = [{ from = "src/ui/**", to = "src/db/**", except = ["src/db/types.ts"] }]
 ```
 
 ## Example: app with a server database

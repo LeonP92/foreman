@@ -108,14 +108,18 @@ def _cycles(graph: dict) -> list[Found]:
 
 
 def forbidden_by(edge: dict, layers: Sequence[dict]) -> dict | None:
-    """The first `[rules] layers` entry this edge crosses."""
+    """The first `[rules] layers` entry this edge crosses, unless its target is excepted."""
 
     # `id + "/"` lets `core/**` cover a Go package whose id is the directory `core`
     def under(node: str, glob: str) -> bool:
         return is_ignored(node, [glob]) or is_ignored(node + "/", [glob])
 
     for r in layers:
-        if under(edge["from"], r["from"]) and under(edge["to"], r["to"]):
+        if (
+            under(edge["from"], r["from"])
+            and under(edge["to"], r["to"])
+            and not any(under(edge["to"], g) for g in r.get("except", ()))
+        ):
             return r
     return None
 

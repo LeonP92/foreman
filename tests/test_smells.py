@@ -57,6 +57,17 @@ def test_layering_flags_only_the_forbidden_direction():
     assert [(s["severity"], s["nodes"]) for s in found] == [("high", ["core/a.py", "app/b.py"])]
 
 
+def test_layering_skips_targets_the_rule_excepts():
+    layers = [{"from": "ui/**", "to": "data/**", "except": ["data/public/**", "data/types.py"]}]
+    edges = [
+        ("ui/a.py", "data/db.py"),
+        ("ui/a.py", "data/public/api.py"),
+        ("ui/a.py", "data/types.py"),
+    ]
+    found = _kinds(_detect(edges=edges, layers=layers), "layering")
+    assert [s["nodes"] for s in found] == [["ui/a.py", "data/db.py"]]
+
+
 def test_hub_at_floor_and_just_under():
     found = _kinds(_detect(edges=[("h.py", f"n{i}.py") for i in range(8)]), "hub")
     assert [s["nodes"] for s in found] == [["h.py"]]

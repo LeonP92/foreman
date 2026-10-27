@@ -223,6 +223,18 @@ def test_package_takes_its_most_severe_module_kind(make_repo):
     assert packages[("core", "app")] == ("forbidden", "down", 2)
 
 
+def test_excepted_target_is_a_plain_import(make_repo):
+    root = make_repo(
+        {"core/a.py": "import app.b\nimport app.api\n", "app/b.py": "", "app/api.py": ""}
+    )
+    rule = {"from": "core/**", "to": "app/**", "except": ["app/api.py"]}
+    data = codemap.build(root, _config(layers=[rule]))
+    assert {e["to"]: e["kind"] for e in data["edges"]} == {
+        "app/api.py": "import",
+        "app/b.py": "forbidden",
+    }
+
+
 def test_map_rejects_bad_layer_and_packages():
     data = {
         "kind": "map",

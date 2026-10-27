@@ -63,8 +63,11 @@ Fill each table from what you read:
 - `[database]` see "Databases" below.
 - `[rules]` the docs that state design rules, and `layers`: translate every layering rule
   the docs state ("the UI never imports the database layer") into
-  `{from = "<glob>", to = "<glob>"}` pairs. Show the user each rule beside the sentence it
-  came from. Add no rule the repo doesn't state.
+  `{from = "<glob>", to = "<glob>"}` pairs. A stated exception ("X must not import Y
+  unless it is declared public") becomes `except = ["<glob>", …]`: the targets under `to`
+  that are allowed; list them only if the repo names them or marks them in a way you can
+  glob. Show the user each rule beside the sentence it came from. Add no rule the repo
+  doesn't state.
 
 ### Databases
 

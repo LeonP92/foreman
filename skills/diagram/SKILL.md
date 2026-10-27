@@ -49,7 +49,7 @@ has each `/` replaced by `-`.
    prompts and config are nodes too; connect them with `call` edges labelled by the
    relation (`renders`, `loads`).
 4. **Forbidden edges.** An edge is `forbidden` only when it matches a pair in the repo's
-   `[rules] layers`. Name the rule and the doc it comes from in `notes`. No rule, no
+   `[rules] layers` and its target isn't in that pair's `except`. Name the rule and the doc it comes from in `notes`. No rule, no
    forbidden edge.
 5. **Nodes.** Every changed module, class or interface, plus unchanged ones exactly one hop
    from a changed node. Drop everything else, including tests. Every node needs an edge.

@@ -32,6 +32,7 @@ DEFAULTS = {
     "graph": {},
 }
 DB_KINDS = ("none", "file", "command")
+LAYER_KEYS = ("from", "to", "except")
 DB_REQUIRED = {"file": ("path",), "command": ("create", "env_override", "url_template")}
 ENV_PLACEHOLDERS = ("port", "url", "dir", "name")
 # Common names for where an app finds its database; verify removes them before any command runs.
@@ -130,6 +131,10 @@ def _semantic_problems(data: dict) -> list[str]:
         pair = (entry.get("from"), entry.get("to")) if isinstance(entry, dict) else ()
         if not (len(pair) == 2 and all(isinstance(g, str) and g for g in pair)):
             problems.append(f"rules.layers entry needs string 'from' and 'to': {entry!r}")
+            continue
+        problems += [f"rules.layers unknown key {k!r}" for k in entry if k not in LAYER_KEYS]
+        if _type_problem("", entry.get("except", []), []):
+            problems.append(f"rules.layers except must be a list of strings: {entry!r}")
     return problems
 
 

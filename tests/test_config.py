@@ -27,6 +27,7 @@ url_template = "db://{name}"
 [[rules.layers]]
 from = "core/**"
 to = "apps/**"
+except = ["apps/plugins/**"]
 [graph.ruby]
 extensions = [".rb"]
 pattern = "require '(.*)'"
@@ -122,6 +123,9 @@ WRONG_TYPES = [
     ("[rules]\nlayers = 1", "rules.layers must be a list of tables"),
     ("[rules]\nlayers = [1]", "rules.layers entry needs"),
     ("[[rules.layers]]\nfrom = 1\nto = 'a'", "rules.layers entry needs"),
+    ("[[rules.layers]]\nfrom = 'a'\nto = 'b'\nexcept = 'c'", "rules.layers except must be"),
+    ("[[rules.layers]]\nfrom = 'a'\nto = 'b'\nexcept = [1]", "rules.layers except must be"),
+    ("[[rules.layers]]\nfrom = 'a'\nto = 'b'\nunless = []", "rules.layers unknown key 'unless'"),
 ]
 
 
