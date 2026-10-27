@@ -3,6 +3,8 @@
 import base64
 import json
 import os
+import re
+import secrets
 import shutil
 import subprocess
 import time
@@ -16,6 +18,12 @@ MIN_NODE = 20
 FIXTURES = "foreman-fixtures.mjs"
 CONFIG = "playwright.config.mjs"
 RUN_MAX_AGE = 7 * 24 * 3600
+_DIRECT_IMPORT = re.compile(
+    r"""^\s*import .* from ['"]@playwright/test['"]"""
+    r"""|import\(['"]@playwright/test['"]\)"""
+    r"""|require\(['"]@playwright/test['"]\)""",
+    re.MULTILINE,
+)
 
 
 def cache_dir() -> Path:
@@ -102,14 +110,20 @@ def parse_results(report: dict) -> list[dict]:
     return sorted(tests, key=lambda t: (t["title"], t["project"]))
 
 
+def run_name() -> str:
+    # pid + random suffix keeps runs started in the same second apart.
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return f"{stamp}-{os.getpid()}-{secrets.token_hex(2)}"
+
+
 def run(spec: Path, out: Path, base_url: str, branch_url: str | None = None) -> dict:
-    if "@playwright/test" in spec.read_text(encoding="utf-8"):
+    if _DIRECT_IMPORT.search(spec.read_text(encoding="utf-8")):
         raise ValueError(
             f"{spec.as_posix()}: import test/expect from './{FIXTURES}', not '@playwright/test'"
         )
     cli = ensure()
     runs = cache_dir() / "runs"
-    run_dir = runs / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = runs / run_name()
     run_dir.mkdir(parents=True)
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)

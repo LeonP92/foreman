@@ -47,11 +47,39 @@ def test_node_too_old_is_a_clear_error(monkeypatch):
         browser.ensure()
 
 
-def test_spec_importing_playwright_directly_is_rejected(tmp_path):
+@pytest.mark.parametrize(
+    "line",
+    [
+        'import { test } from "@playwright/test";',
+        "  import { test, expect } from '@playwright/test';",
+        'const pw = await import("@playwright/test");',
+        "const { test } = require('@playwright/test');",
+    ],
+)
+def test_spec_importing_playwright_directly_is_rejected(tmp_path, line):
     spec = tmp_path / "x.spec.mjs"
-    spec.write_text('import { test } from "@playwright/test";\n', encoding="utf-8")
+    spec.write_text(line + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="foreman-fixtures"):
         run(spec, tmp_path / "out", "http://127.0.0.1:1")
+
+
+def test_spec_mentioning_playwright_in_a_comment_is_accepted(tmp_path, monkeypatch):
+    def past_check():
+        raise RuntimeError("past the import check")
+
+    monkeypatch.setattr(browser, "ensure", past_check)
+    spec = tmp_path / "x.spec.mjs"
+    spec.write_text(
+        "// wraps \"@playwright/test\"; never import from '@playwright/test' here\n"
+        'import { test } from "./foreman-fixtures.mjs";\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="past the import check"):
+        run(spec, tmp_path / "out", "http://127.0.0.1:1")
+
+
+def test_back_to_back_run_names_differ():
+    assert browser.run_name() != browser.run_name()
 
 
 @pytest.mark.browser
