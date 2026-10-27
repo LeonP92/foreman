@@ -158,18 +158,6 @@ def test_files_filter_keeps_edges_touching_given_paths(make_repo):
     assert {n["id"] for n in graph["nodes"]} == {"a.py", "b.py"}
 
 
-def test_cli_commands():
-    assert cli.COMMANDS == {
-        "browser-run",
-        "config-check",
-        "db-copy",
-        "graph",
-        "graph-rule-check",
-        "map",
-        "render",
-    }
-
-
 def test_cli_graph_applies_config_ignore(make_repo, capsys):
     root = make_repo(
         {

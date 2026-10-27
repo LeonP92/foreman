@@ -60,8 +60,8 @@ Do not continue the run.
 
 Every command runs through the launcher in `references/servers.md`, with an explicit
 environment that can't reach the real database. If setup made a throwaway secrets file
-(`<user config dir>/foreman/secrets/<repo name>-<8 hex>.env`; `foreman_throwaway.py <repo>` from
-`<root>/skills/setup/references/ci.md` prints its path), pass it to every launch with
+(`<user config dir>/foreman/secrets/<repo name>-<8 hex>.env`; `run.py throwaway <repo>` prints
+its path), pass it to every launch with
 `--env-file`.
 
 ## 3. Worktrees and data

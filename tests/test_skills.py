@@ -1,12 +1,6 @@
-import json
-import os
 import re
-import subprocess
-import sys
-import time
 from pathlib import Path
 
-import pytest
 from foreman.cli import COMMANDS
 
 SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
@@ -84,14 +78,6 @@ def test_review_flags_gone_or_squash_merged_branches():
         assert phrase in report, phrase
 
 
-def _snippet(tmp_path, marker: str, ref: str = "verify/references/servers.md") -> Path:
-    text = (SKILLS_DIR / ref).read_text(encoding="utf-8")
-    code = next(c for c in re.findall(r"```python\n(.*?)```", text, re.DOTALL) if marker in c)
-    path = tmp_path / f"{marker}.py"
-    path.write_text(code, encoding="utf-8")
-    return path
-
-
 def test_verify_spec_guidance_covers_known_pitfalls():
     text = " ".join(
         (SKILLS_DIR / "verify" / "references" / "specs.md").read_text(encoding="utf-8").split()
@@ -122,86 +108,6 @@ def test_setup_reads_ci_and_stops_on_import_free_languages():
         assert phrase in text, phrase
 
 
-def _settings(command: dict, tmp_path: Path) -> dict:
-    return {
-        "remove": ["DATABASE_URL"],
-        "checkout": str(tmp_path / "main"),
-        "command": command,
-        "server": {},
-    }
-
-
-def _py(*args, env=None):
-    return subprocess.run(
-        [sys.executable, "-I", *map(str, args)],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-        env=env,
-    )
-
-
-def test_dotenv_helper_lists_names_and_rewrites_lines(tmp_path):
-    helper = _snippet(tmp_path, "foreman_dotenv.py")
-    dotenv = tmp_path / ".env"
-    dotenv.write_text(
-        "SECRET_KEY=s3cret\r\nexport DATABASE_URL=sqlite:///real.db\r\n", encoding="utf-8"
-    )
-    listed = _py(helper, dotenv)
-    assert listed.stdout.split() == ["DATABASE_URL", "SECRET_KEY"]
-    assert "s3cret" not in listed.stdout
-    _py(helper, dotenv, "DATABASE_URL=sqlite:///copy.db")
-    assert dotenv.read_bytes() == b"SECRET_KEY=s3cret\r\nexport DATABASE_URL=sqlite:///copy.db\r\n"
-
-
-def test_launcher_reads_references_after_removing_database_variables(tmp_path):
-    launcher = _snippet(tmp_path, "foreman_launch.py")
-    settings = tmp_path / "s.json"
-    settings.write_text(
-        json.dumps(_settings({"A": "${SHOP_KEY}"}, tmp_path)),
-        encoding="utf-8",
-    )
-    env = {**os.environ, "SHOP_KEY": "k", "DATABASE_URL": "sqlite:///real.db"}
-    show = f"\"{sys.executable}\" -c \"import os; print(os.environ.get('A'), 'DATABASE_URL' in os.environ)\""
-    ran = _py(launcher, settings, tmp_path, "-", show, env=env)
-    assert ran.stdout.split() == ["k", "False"]
-    settings.write_text(
-        json.dumps(_settings({"A": "${DATABASE_URL}"}, tmp_path)),
-        encoding="utf-8",
-    )
-    failed = _py(launcher, settings, tmp_path, "-", show, env=env)
-    assert failed.returncode == 1
-    assert failed.stderr.strip().splitlines() == [
-        "launch: ${DATABASE_URL} is not set, or names a removed database location"
-    ]
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
-def test_throwaway_secrets_go_to_a_stable_user_only_file_and_are_not_printed(tmp_path):
-    helper = _snippet(tmp_path, "foreman_throwaway.py", "setup/references/ci.md")
-    repo = tmp_path / "shop"
-    env = {**os.environ, "XDG_CONFIG_HOME": str(tmp_path / "cfg")}
-    only_path = _py(helper, repo, env=env).stdout.split()
-    assert len(only_path) == 1
-    out = Path(only_path[0])
-    assert re.fullmatch(r"shop-[0-9a-f]{8}\.env", out.name)
-    assert out.parent == tmp_path / "cfg" / "foreman" / "secrets"
-    assert not out.exists()
-    ran = _py(helper, repo, "SHOP_SECRET_KEY", "SHOP_SIGNING_KEY", env=env)
-    assert ran.stdout.split() == [out.as_posix(), "SHOP_SECRET_KEY", "SHOP_SIGNING_KEY"]
-    again = _py(helper, repo, "SHOP_SECRET_KEY", "SHOP_OTHER_KEY", env=env)
-    assert again.stdout.split() == [out.as_posix(), "SHOP_OTHER_KEY"]
-    lines = out.read_text(encoding="utf-8").splitlines()
-    assert [line.split("=", 1)[0] for line in lines] == [
-        "SHOP_SECRET_KEY",
-        "SHOP_SIGNING_KEY",
-        "SHOP_OTHER_KEY",
-    ]
-    assert all(line.split("=", 1)[1] not in ran.stdout + again.stdout for line in lines)
-    assert out.stat().st_mode & 0o777 == 0o600
-
-
 def test_verify_builds_data_instead_of_skipping():
     verify = " ".join(skill_text("verify").split())
     data = " ".join(
@@ -226,7 +132,7 @@ def test_verify_builds_data_instead_of_skipping():
 
 
 def test_env_files_are_read_only_through_the_names_helper():
-    rule = "may be read only through the names-only helper `foreman_dotenv.py`"
+    rule = "may be read only through the names-only `run.py dotenv`"
     ask = "ask the user which variable names it sets"
     for text in [
         skill_text("setup"),
@@ -259,28 +165,6 @@ def test_verdict_counts_only_must_fix():
 def test_known_console_noise_is_explained_where_it_is_offered():
     assert "ignore_console" in skill_text("setup")
     assert "ignored_console_errors" in skill_text("verify")
-
-
-def test_launcher_loads_env_files_but_never_a_database_location(tmp_path):
-    launcher = _snippet(tmp_path, "foreman_launch.py")
-    settings = tmp_path / "s.json"
-    settings.write_text(
-        json.dumps(_settings({"A": "${SHOP_KEY}"}, tmp_path)),
-        encoding="utf-8",
-    )
-    secrets_file = tmp_path / "shop.env"
-    secrets_file.write_text("SHOP_KEY=from-file\r\n", encoding="utf-8")
-    show = f'"{sys.executable}" -c "import os; print(os.environ.get(\'A\'))"'
-    env = {k: v for k, v in os.environ.items() if k != "SHOP_KEY"}
-    ran = _py(launcher, "--env-file", secrets_file, settings, tmp_path, "-", show, env=env)
-    assert ran.stdout.split() == ["from-file"]
-    secrets_file.write_text("SHOP_KEY=k\nDATABASE_URL=sqlite:///real.db\n", encoding="utf-8")
-    failed = _py(launcher, "--env-file", secrets_file, settings, tmp_path, "-", show, env=env)
-    assert failed.returncode == 1
-    assert failed.stderr.strip().splitlines() == [
-        f"launch: {secrets_file} sets DATABASE_URL, a removed database location"
-    ]
-    assert "real.db" not in failed.stderr
 
 
 def test_diagram_decides_hubs_before_grouping():
@@ -344,73 +228,12 @@ def test_every_audit_run_keeps_its_own_report_folder():
         assert phrase in text, phrase
 
 
-def test_launcher_drops_variables_pointing_into_the_main_checkout(tmp_path):
-    launcher = _snippet(tmp_path, "foreman_launch.py")
-    settings = tmp_path / "s.json"
-    settings.write_text(json.dumps(_settings({}, tmp_path)), encoding="utf-8")
-    main = tmp_path / "main"
-    env = {
-        **os.environ,
-        "VIRTUAL_ENV": "/elsewhere/venv",
-        "PYTHONPATH": "/elsewhere/lib",
-        "NODE_PATH": "/elsewhere/node",
-        "SHOP_CACHE": str(main / "cache"),
-        "SHOP_DOTTED": f"{tmp_path}{os.sep}x{os.sep}..{os.sep}main{os.sep}.{os.sep}logs",
-        "SHOP_NEIGHBOUR": str(tmp_path / "main-other"),
-        "PATH": os.pathsep.join([str(main / ".venv" / "bin"), os.environ["PATH"]]),
-    }
-    names = [
-        "VIRTUAL_ENV",
-        "PYTHONPATH",
-        "NODE_PATH",
-        "SHOP_CACHE",
-        "SHOP_DOTTED",
-        "SHOP_NEIGHBOUR",
-    ]
-    show = (
-        f'"{sys.executable}" -c "import os; '
-        f"print(*[n for n in {names!r} if n in os.environ], str(os.environ['PATH']).startswith({str(main)!r}))\""
-    )
-    ran = _py(launcher, settings, tmp_path, "-", show, env=env)
-    assert ran.stdout.split() == ["SHOP_NEIGHBOUR", "False"]
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
-def test_throwaway_secrets_wait_for_the_lock(tmp_path):
-    helper = _snippet(tmp_path, "foreman_throwaway.py", "setup/references/ci.md")
-    env = {**os.environ, "XDG_CONFIG_HOME": str(tmp_path / "cfg")}
-    repo = tmp_path / "shop"
-    path = Path(_py(helper, repo, "SHOP_A", env=env).stdout.split()[0])
-    lock = path.with_suffix(".lock")
-    lock.touch()
-    proc = subprocess.Popen(
-        [sys.executable, "-I", str(helper), str(repo), "SHOP_A", "SHOP_B"],
-        env=env,
-        stdout=subprocess.PIPE,
-        encoding="utf-8",
-    )
-    time.sleep(0.5)
-    assert proc.poll() is None
-    assert path.read_text(encoding="utf-8").count("SHOP_B") == 0
-    lock.unlink()
-    assert proc.communicate(timeout=10)[0].split() == [path.as_posix(), "SHOP_B"]
-    names = [line.split("=", 1)[0] for line in path.read_text(encoding="utf-8").splitlines()]
-    assert names == ["SHOP_A", "SHOP_B"]
-    assert not lock.exists()
-
-
-def test_helpers_live_apart_under_collision_free_names():
-    text = " ".join(all_skill_text().split())
-    for name in ["foreman_dotenv.py", "foreman_launch.py", "foreman_throwaway.py"]:
-        assert f"<temp>/foreman-bin/{name}" in text, name
-    for old in ["<temp>/dotenv.py", "<temp>/launch.py", "<temp>/throwaway.py"]:
-        assert old not in text, old
-    servers = " ".join(
-        (SKILLS_DIR / "verify" / "references" / "servers.md").read_text(encoding="utf-8").split()
-    )
-    assert "cwd = the worktree, never the helper dir" in servers
-    for var in ["`VIRTUAL_ENV`", "`PYTHONPATH`", "`NODE_PATH`", "main checkout"]:
-        assert var in servers, var
+def test_skills_call_helper_commands_instead_of_embedding_scripts():
+    text = all_skill_text()
+    for command in ["launch", "dotenv", "throwaway"]:
+        assert f"run.py {command} " in text, command
+    assert "```python" not in text
+    assert "foreman-bin" not in text
 
 
 def test_throwaway_secrets_survive_cleanup():

@@ -4,12 +4,11 @@ A dev server usually starts children (a bundler, a reloader, workers). Stopping 
 process you launched leaves them running and holding the port or the worktree's files.
 Start each server as the leader of a new process group, then stop the whole group.
 
-## Helper scripts
+## Helper commands
 
-Save the helpers below (and setup's `foreman_throwaway.py`) in `<temp>/foreman-bin/`, outside
-the repo, under exactly these names: `foreman_dotenv.py`, `foreman_launch.py`. Their names
-can't shadow a module or script of the app's. Run app commands with cwd = the worktree, never
-the helper dir.
+`launch`, `dotenv` and `throwaway` are foreman commands
+(`python3 -I <root>/scripts/run.py <command>`), so nothing is saved next to the app;
+`launch` runs each command with cwd = the worktree it is given.
 
 ## Per-server values
 
@@ -26,33 +25,18 @@ In each worktree foreman makes, before running anything:
    worktree, as a plain file copy. Never print, quote or summarise its contents; note any
    that are missing.
 2. A copied file may point the app at the real database. Env files (`.env`, `.env.local`
-   and the like) may be read only through the names-only helper `foreman_dotenv.py` below, never
+   and the like) may be read only through the names-only `run.py dotenv`, never
    opened or printed otherwise; if the host blocks reading one, ask the user which
    variable names it sets. List the names each copy sets
-   with `python3 -I <temp>/foreman-bin/foreman_dotenv.py <worktree>/<file>` (names only, never values). For
-   every database-location name in that list, rewrite its line in the worktree's copy to
-   this server's value: `python3 -I <temp>/foreman-bin/foreman_dotenv.py <worktree>/<file> NAME=<value>`. If
+   with `python3 -I <root>/scripts/run.py dotenv <worktree>/<file>` (`names`, and the common
+   `database_locations` among them; never values). For every database-location name in
+   that list (plus `env_override` and any other the repo names as one), rewrite its line in
+   the worktree's copy to this server's value:
+   `python3 -I <root>/scripts/run.py dotenv <worktree>/<file> NAME=<value>`. If
    the config gives no value for it (neither `[env]` nor `env_override` sets it), stop
    and say which file sets which name: the copy must decide, not the framework's
    precedence rules.
 3. Run `[commands] install`, then `[commands] build`, through the launcher below.
-
-```python
-import re, sys
-
-# foreman_dotenv.py <file>: the names it sets. <file> NAME=value ...: rewrite those lines.
-LINE = re.compile(r"^(export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=[^\r\n]*", re.M)
-path, *pairs = sys.argv[1:]
-text = open(path, encoding="utf-8", newline="").read()
-if not pairs:
-    print("\n".join(sorted({m[2] for m in LINE.finditer(text)})))
-else:
-    values = dict(pair.split("=", 1) for pair in pairs)
-    text = LINE.sub(
-        lambda m: f"{m[1] or ''}{m[2]}={values[m[2]]}" if m[2] in values else m[0], text
-    )
-    open(path, "w", encoding="utf-8", newline="").write(text)
-```
 
 ## The environment every command gets
 
@@ -64,8 +48,9 @@ Every command foreman runs in a worktree (`install`, `build`, tests, `create`, `
    and any whose value is a path inside it; `PATH` keeps its other entries. Otherwise
    a worktree's commands run the main checkout's code or packages.
 2. Remove every variable that names a database location: `DATABASE_URL`,
-   `DATABASE_PATH`, `DB_URL`, `DB_PATH`, `env_override`, and any other that
-   `.env.example`, `[env]`, `[server] env` or the repo's docs name as one.
+   `DATABASE_PATH`, `DB_URL` and `DB_PATH` always, plus the settings' `remove` list:
+   `env_override` and any other that `.env.example`, `[env]`, `[server] env` or the repo's
+   docs name as one.
 3. Apply `[env]`; for the server also `[server] env` on top; then, whenever
    `env_override` is set (always for `command`, optionally for `file`), that variable
    set to this server's filled-in `url_template`, so `migrate`, `seed` and `start` reach
@@ -80,98 +65,29 @@ Write the settings for each side to `<temp>/<side>-env.json`, with `checkout` th
 checkout's absolute path:
 
 ```json
-{"remove": ["DATABASE_URL"], "checkout": "/home/me/shop",
- "command": {"DATABASE_URL": "sqlite:///data/app.db", "SECRET_KEY": "${SHOP_SECRET_KEY}"},
- "server": {"DATABASE_URL": "sqlite:///data/app.db", "SECRET_KEY": "${SHOP_SECRET_KEY}",
+{"remove": ["SHOP_DB"], "checkout": "/home/me/shop",
+ "command": {"SHOP_DB": "sqlite:////tmp/fm-1/app.db", "SECRET_KEY": "${SHOP_SECRET_KEY}"},
+ "server": {"SHOP_DB": "sqlite:////tmp/fm-1/app.db", "SECRET_KEY": "${SHOP_SECRET_KEY}",
             "APP_URL": "http://127.0.0.1:50123"}}
 ```
 
 ## Launcher
 
-Save this as `<temp>/foreman-bin/foreman_launch.py`. Run a command and wait for
-it with `python3 -I <temp>/foreman-bin/foreman_launch.py <settings> <worktree> - "<command>"`; it exits with
-the command's status. Start a server with a log file instead of `-`, and `[server] start`
-with `{port}` filled in: it prints the server's PID and returns while the server keeps
-running in its own process group, so the whole tree can be stopped later.
+Run a command and wait for it with
+`python3 -I <root>/scripts/run.py launch <settings> <worktree> - "<command>"`; it prints the
+command's output, then `{"returncode": N}`, and exits with the command's status. Start a
+server with a log file instead of `-`, and `[server] start` with `{port}` filled in: it
+prints `{"pid": N}` and returns while the server keeps running in its own process group,
+so the whole tree can be stopped later.
 
 Put `--env-file <path>` (repeatable) before `<settings>` to load a file of `NAME=value`
 lines, such as the throwaway secrets file setup made outside the repo, into the
 environment before `${NAME}` is filled in. It never prints values, and a file that sets
 a removed database location is rejected with a one-line error naming the variable.
 
-```python
-# foreman_launch.py [--env-file F ...] <settings> <cwd> <log or -> <command>
-import json, os, re, subprocess, sys
-
-args, env_files = sys.argv[1:], []
-while args[0] == "--env-file":
-    env_files.append(args[1])
-    args = args[2:]
-SETTINGS, CWD, LOG, COMMAND = args
-settings = json.load(open(SETTINGS, encoding="utf-8"))
-values = settings["command" if LOG == "-" else "server"]
-
-
-def norm(path):
-    return os.path.normcase(os.path.normpath(path))  # Windows: slashes and case
-
-
-checkout = norm(settings["checkout"])
-
-
-def inside(value):
-    return norm(value) == checkout or norm(value).startswith(checkout.rstrip(os.sep) + os.sep)
-
-
-base = {
-    k: v
-    for k, v in os.environ.items()
-    if k not in settings["remove"]
-    and k not in ("VIRTUAL_ENV", "PYTHONPATH", "NODE_PATH")
-    and not inside(v)
-}
-# PATH often starts with the checkout's own tool folder (an activated venv): keep the rest.
-base["PATH"] = os.pathsep.join(p for p in os.environ["PATH"].split(os.pathsep) if not inside(p))
-for path in env_files:
-    text = open(path, encoding="utf-8").read()
-    for name, value in re.findall(r"^(?:export\s+)?([A-Za-z_]\w*)=([^\r\n]*)", text, re.M):
-        if name in settings["remove"]:
-            sys.exit(f"launch: {path} sets {name}, a removed database location")
-        base[name] = value
-
-
-def lookup(m):
-    if m[1] not in base:
-        sys.exit(f"launch: ${{{m[1]}}} is not set, or names a removed database location")
-    return base[m[1]]
-
-
-env = {**base, **{key: re.sub(r"\$\{(\w+)\}", lookup, value) for key, value in values.items()}}
-
-if LOG == "-":
-    sys.exit(subprocess.run(COMMAND, shell=True, cwd=CWD, env=env).returncode)
-group = (
-    {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-    if os.name == "nt"
-    else {"start_new_session": True}
-)
-log = open(LOG, "w", encoding="utf-8")
-proc = subprocess.Popen(
-    COMMAND,
-    shell=True,
-    cwd=CWD,
-    env=env,
-    stdout=log,
-    stderr=subprocess.STDOUT,
-    stdin=subprocess.DEVNULL,
-    **group,
-)
-print(proc.pid)
-```
-
-`shell=True` is deliberate: the commands are shell commands written by the repo. If a
-`${NAME}` isn't set, the launcher stops with a one-line message naming it; ask the user
-to export it or name the env file holding it rather than inventing a value.
+The commands are shell commands written by the repo, so the launcher runs them through
+the shell. If a `${NAME}` isn't set, it stops with a one-line message naming it; ask the
+user to export it or name the env file holding it rather than inventing a value.
 
 ## Stopping
 

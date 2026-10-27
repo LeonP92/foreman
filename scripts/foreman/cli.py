@@ -4,7 +4,7 @@ import posixpath
 import sys
 from pathlib import Path, PureWindowsPath
 
-from foreman import browser, codemap, config, db, graph, render, smells
+from foreman import browser, codemap, config, db, env, graph, render, smells
 from foreman.langs import rule
 
 
@@ -95,6 +95,19 @@ def _db_copy(args) -> tuple[dict, int]:
     return db.copy(args.src, args.dst), 0
 
 
+def _launch(args) -> tuple[dict, int]:
+    result = env.launch(args.settings, args.cwd, args.log, args.command, args.env_file)
+    return result, result.get("returncode", 0)
+
+
+def _dotenv(args) -> tuple[dict, int]:
+    return env.dotenv(args.file, args.pairs), 0
+
+
+def _throwaway(args) -> tuple[dict, int]:
+    return env.throwaway(args.repo, args.names), 0
+
+
 def _command(name, func):
     sub = _SUBPARSERS.add_parser(name)
     sub.set_defaults(func=func)
@@ -127,6 +140,21 @@ _db_parser = _SUBPARSERS.add_parser("db-copy")
 _db_parser.set_defaults(func=_db_copy)
 _db_parser.add_argument("src", type=Path)
 _db_parser.add_argument("dst", type=Path)
+_launch_parser = _SUBPARSERS.add_parser("launch")
+_launch_parser.set_defaults(func=_launch)
+_launch_parser.add_argument("--env-file", type=Path, action="append", default=[])
+_launch_parser.add_argument("settings", type=Path)
+_launch_parser.add_argument("cwd", type=Path)
+_launch_parser.add_argument("log")
+_launch_parser.add_argument("command")
+_dotenv_parser = _SUBPARSERS.add_parser("dotenv")
+_dotenv_parser.set_defaults(func=_dotenv)
+_dotenv_parser.add_argument("file", type=Path)
+_dotenv_parser.add_argument("pairs", nargs="*")
+_throwaway_parser = _SUBPARSERS.add_parser("throwaway")
+_throwaway_parser.set_defaults(func=_throwaway)
+_throwaway_parser.add_argument("repo", type=Path)
+_throwaway_parser.add_argument("names", nargs="*")
 COMMANDS = frozenset(_SUBPARSERS.choices)
 
 
