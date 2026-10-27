@@ -190,8 +190,11 @@ function render(group, keepEgo = false) {
     card.innerHTML = `<div class="card-top"><span class="card-label">${esc(it.label)}</span>`
       + (it.badge ? `<span class="badge lang">${esc(it.badge)}</span>` : "")
       + `</div><div class="card-sub">${esc(it.sub)}</div>${smellBadge(it.smells)}`;
-    card.addEventListener("click", ev => { ev.stopPropagation(); it.kind === "stub" ? open() : focusItem(it.id); });
-    if (it.kind === "group") card.addEventListener("dblclick", open);
+    card.addEventListener("click", ev => {
+      ev.stopPropagation();
+      if (it.kind === "group") clickedGroup = open;
+      it.kind === "stub" ? open() : focusItem(it.id);
+    });
     card.addEventListener("keydown", ev => {
       if (ev.key !== "Enter" && ev.key !== " ") return;
       ev.preventDefault();
@@ -504,9 +507,10 @@ initUI({
   // A group that matches only through one of its modules opens and focuses that module.
   onFilterEnter: q => {
     const it = q && items.find(x => matches(x, q));
-    if (!it) return;
-    if (it.kind === "module" || hit(it.id, q)) focusItem(it.id);
-    else showModule(groupById[it.id].nodes.find(id => hit(id, q)));
+    if (!it) return null;
+    const id = it.kind === "module" || hit(it.id, q) ? it.id : groupById[it.id].nodes.find(m => hit(m, q));
+    id === it.id ? focusItem(id) : showModule(id);
+    return matrixShown() ? drawer.querySelector("[data-ego]") : cards.get(id);
   },
 });
 // Menu counts are module imports under the kind of the group pair they belong to.
@@ -515,6 +519,11 @@ packageEdges.forEach(e => kindCounts[e.kind] = (kindCounts[e.kind] || 0) + e.cou
 edgeMenu(kindCounts);
 render(null);
 canvas.addEventListener("click", clearHighlight);
+// The drawer the first click opens can cover the card, so the second click of a double-click may land elsewhere:
+// open the group the first click hit, wherever the second one lands.
+let clickedGroup = null;
+document.addEventListener("click", ev => { if (ev.detail < 2) clickedGroup = null; }, true);
+document.addEventListener("dblclick", () => clickedGroup?.());
 canvas.addEventListener("scroll", hideTip);
 </script>
 </body>

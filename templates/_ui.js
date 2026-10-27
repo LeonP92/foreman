@@ -319,7 +319,8 @@ function closeDrawer() {
   if (was) relayout();
 }
 
-// dismiss: clears the view's selection (Esc, drawer close). onFilter(query) / onFilterEnter(query).
+// dismiss: clears the view's selection (Esc, drawer close). onFilter(query) / onFilterEnter(query); the latter
+// returns the element focus moves to (the first match), so N acts on it instead of typing into the filter.
 // neighbourhood: switches to the neighbourhood view (key N, the drawer's Neighbourhood button).
 // layout(instant): re-places the view in availableWidth(); animated when the drawer opens or closes,
 // snapped on resize (debounced, then one frame).
@@ -335,7 +336,7 @@ function initUI({dismiss, onFilter, onFilterEnter, layout, neighbourhood}) {
   document.getElementById("filter-key").textContent = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K";
   filter.addEventListener("input", () => onFilter(filter.value.trim().toLowerCase()));
   filter.addEventListener("keydown", ev => {
-    if (ev.key === "Enter") onFilterEnter(filter.value.trim().toLowerCase());
+    if (ev.key === "Enter") onFilterEnter(filter.value.trim().toLowerCase())?.focus();
     if (ev.key === "Escape" && filter.value) { ev.stopPropagation(); filter.value = ""; onFilter(""); }
   });
   document.addEventListener("keydown", ev => {

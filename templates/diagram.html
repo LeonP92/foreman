@@ -343,7 +343,12 @@ initUI({
     markMatrix((a, b) => ids.has(a) || ids.has(b), ids);
     twinEls.forEach(t => t.path.classList.add("dim"));
   },
-  onFilterEnter: q => { const found = q && matches(q); if (found && found.length) focusNode(found[0]); },
+  onFilterEnter: q => {
+    const found = q && matches(q);
+    if (!found || !found.length) return null;
+    focusNode(found[0]);
+    return matrixShown() ? drawer.querySelector("[data-ego]") : nodeEls.get(found[0].id);
+  },
 });
 const kindCounts = {twin: twinEls.length};
 DATA.edges.forEach(e => kindCounts[e.kind] = (kindCounts[e.kind] || 0) + 1);

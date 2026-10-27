@@ -137,3 +137,21 @@ test("map smell chip counts what the cap dropped", async ({ page }) => {
   await expect(page.locator("button.chip")).toHaveText("high · layering1(+3 more)");
   await expect(page.locator(".chip", { hasText: "smells" })).toHaveText("4 smells");
 });
+
+test("map double-click on a group drills in", async ({ page }) => {
+  // the drawer opening on the first click wraps the row, moving z away from the pointer
+  await page.goto("/wide.html");
+  await group(page, "z").dblclick();
+  await expect(page.locator("#crumbs")).toContainText("z");
+  await expect(page.locator("#crumb-all")).toBeVisible();
+});
+
+test("map filter enter focuses the first match so N opens its neighbourhood", async ({ page }) => {
+  await page.goto("/layered.html");
+  await page.locator("#filter").fill("svc");
+  await page.locator("#filter").press("Enter");
+  await expect(group(page, "svc")).toBeFocused();
+  await page.keyboard.press("n");
+  await expect(page.locator(".ego-bar")).toBeVisible();
+  await expect(page.locator("#filter")).toHaveValue("svc");
+});
