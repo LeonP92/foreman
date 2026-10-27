@@ -1,5 +1,5 @@
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from foreman.smells import THRESHOLDS
 DUPE_WINDOW = int(THRESHOLDS["duplicate_min_lines"])
 # Languages where `#` starts a comment; elsewhere (C/C++ preprocessor) `#` lines are code.
 _HASH_COMMENT_EXTENSIONS = frozenset(
-    [".py", ".pyi", ".rb", ".sh", ".bash", ".zsh", ".fish", ".pl", ".r", ".tf", ".yaml", ".yml"]
+    [".py", ".pyi", ".rb", ".sh", ".bash", ".zsh", ".fish", ".pl", ".r"]
 )
 _NOISE = re.compile(r"^([\s{}()\[\];,]*|(import|from|using|package|#\s*include|#\s*import)\b.*)$")
 
@@ -34,10 +34,17 @@ def _non_overlapping(locs: list[tuple[str, int]]) -> list[tuple[str, int]]:
 
 def find(root: Path, ignore: Sequence[str] = ()) -> dict:
     lines = {p: _normalised(p, t) for p, t in source_texts(root, ignore).items()}
+    def windows():
+        for path, norm in lines.items():
+            for k in range(len(norm) - DUPE_WINDOW + 1):
+                yield path, k, tuple(text for _, text in norm[k : k + DUPE_WINDOW])
+
+    # count hashes first, so only windows seen twice ever get a location list
+    seen = Counter(hash(window) for _, _, window in windows())
     groups = defaultdict(list)
-    for path, norm in lines.items():
-        for k in range(len(norm) - DUPE_WINDOW + 1):
-            groups[tuple(text for _, text in norm[k : k + DUPE_WINDOW])].append((path, k))
+    for path, k, window in windows():
+        if seen[hash(window)] > 1:
+            groups[window].append((path, k))
     locs = {}
     for members in groups.values():
         kept = _non_overlapping(members)
