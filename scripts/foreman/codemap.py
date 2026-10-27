@@ -190,7 +190,7 @@ def dismiss(data: dict, triage: dict) -> dict:
     entries = triage.get("dismissed") if isinstance(triage, dict) else None
     if not isinstance(entries, list):
         raise ValueError("triage: 'dismissed' must be a list")  # noqa: TRY004 - CLI maps bad input to ValueError
-    drop: set[tuple[int, str]] = set()
+    reasons: dict[int, str] = {}
     for i, e in enumerate(entries):
         if not (
             isinstance(e, dict)
@@ -222,8 +222,8 @@ def dismiss(data: dict, triage: dict) -> dict:
             raise ValueError(
                 f"{where}: {len(found)} listed {e['kind']} smells match; add a title: {titles}"
             )
-        drop.update((j, e["reason"]) for j in found)
-    reasons = dict(drop)
+        for j in found:
+            reasons.setdefault(j, e["reason"])  # first reason wins
     kept = [s for j, s in enumerate(data["smells"]) if j not in reasons]
     gone = [{**data["smells"][j], "reason": r} for j, r in sorted(reasons.items())]
     dismissed = Counter(data.get("dismissed", {}))

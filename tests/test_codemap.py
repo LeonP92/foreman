@@ -394,6 +394,13 @@ def test_dismiss_matches_one_smell_by_title():
     assert "Long function: `run` in a.py" in str(err.value)
 
 
+def test_dismiss_keeps_the_first_reason_for_a_smell():
+    entry = {"kind": "oversize", "nodes": ["a.py"], "title": "Large file: a.py"}
+    triage = {"dismissed": [{**entry, "reason": "generated"}, {**entry, "reason": "vendored"}]}
+    data = codemap.dismiss(_oversize_map(), triage)
+    assert [s["reason"] for s in data["dismissed_smells"]] == ["generated"]
+
+
 @pytest.mark.skipif(os.name == "nt", reason="bytes arguments are POSIX-only")
 def test_a_file_name_that_is_not_utf8_is_skipped(make_repo):
     root = make_repo({"a.py": "import b\n", "b.py": ""})
