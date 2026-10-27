@@ -34,6 +34,8 @@ DEFAULTS = {
 DB_KINDS = ("none", "file", "command")
 DB_REQUIRED = {"file": ("path",), "command": ("create", "env_override", "url_template")}
 ENV_PLACEHOLDERS = ("port", "url", "dir", "name")
+# Common names for where an app finds its database; verify removes them before any command runs.
+DB_LOCATION_VARS = ("DATABASE_URL", "DATABASE_PATH", "DB_URL", "DB_PATH")
 # {placeholder} filled in per server, or ${NAME} read from the agent's environment at run time
 _ENV_REFERENCE = re.compile(r"(\$?)\{([^{}]*)\}")
 
@@ -69,7 +71,7 @@ def check(data: dict) -> list[str]:
             problems.append(f"unknown table [{table}]")
         elif table == "env":
             found = _type_problem("[env]", values, {})
-            problems += [found] if found else _env_problems("env", values)
+            problems += [found] if found else _env_problems("env", values, data)
         elif not isinstance(values, dict):
             problems.append(f"[{table}] must be a table")
         elif table == "graph":
@@ -84,17 +86,23 @@ def check(data: dict) -> list[str]:
                     if found:
                         problems.append(found)
                     elif (table, key) == ("server", "env"):
-                        problems += _env_problems("server.env", value)
+                        problems += _env_problems("server.env", value, data)
     problems += _semantic_problems(data)
     return problems
 
 
-def _env_problems(prefix: str, env: dict) -> list[str]:
+def _env_problems(prefix: str, env: dict, data: dict) -> list[str]:
     problems = []
+    db_vars = {*DB_LOCATION_VARS, _get(data, "database", "env_override")}
     for key, value in env.items():
         for dollar, name in _ENV_REFERENCE.findall(value):
             if dollar and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
                 problems.append(f"{prefix}.{key}: ${{{name}}} is not an environment variable name")
+            elif dollar and name in db_vars:
+                problems.append(
+                    f"{prefix}.{key}: ${{{name}}} names a database location; commands must use"
+                    " their own copy, so build the value from {dir} or {name} instead"
+                )
             elif not dollar and name not in ENV_PLACEHOLDERS:
                 problems.append(f"{prefix}.{key}: unknown placeholder {{{name}}}")
     return problems

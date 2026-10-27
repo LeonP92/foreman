@@ -27,9 +27,9 @@ has each `/` replaced by `-`.
 
 1. **Changed files.** The branch is the one the user named, else the current one; the base
    is `BASE = git merge-base <repo.base> <branch>`, never the tip of `repo.base` (if
-   `BASE` equals the branch tip, the branch is merged: say so and use `BASE^`). List files
-   with `git diff --name-only BASE <branch>`. If the branch
-   isn't checked out, add a temporary worktree (`git worktree add --detach <temp> <branch>`,
+   `BASE` equals the branch tip: nothing to review, or already merged and `BASE^` is the
+   base, as the review skill decides). List files with `git diff --name-only BASE
+   <branch>`. If the branch isn't checked out, add a temporary worktree (`git worktree add --detach <temp> <branch>`,
    with `<temp>` under the system temp directory, outside the repo) rather than switching
    branches.
 2. **Import edges, from the code.** Run

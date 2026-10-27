@@ -31,7 +31,7 @@ is fine and means defaults). Unknown tables and keys are errors.
 | `graph.<name>` | Import rule for a language without a built-in graph (needs an import rule; setup writes one): `extensions`, `pattern` (regex, group 1 is the import), `resolve` (candidate paths using `{dir}`, `{1}`, `{1\|path}`). |
 
 `create`, `migrate`, `seed`, `drop` and `url_template` may use two placeholders, filled in
-per server:
+per server (every server gets both, whatever the database kind):
 
 - `{dir}`: the server's own directory, for file paths (`sqlite:///{dir}/app.db`). Unrelated to `{dir}` in `[graph.*] resolve`, which is the importing file's folder.
 - `{name}`: a unique database name, `foreman_<base|branch>_<6 lowercase hex>` (letters,
@@ -48,7 +48,9 @@ per-server database variable. Values in `[env]` and `[server] env` may use:
 - `{dir}` and `{name}`, as above.
 - `${NAME}`: the value of `NAME` in the environment foreman runs in, read when the
   command starts; foreman never prints or stores it. Never put a secret's value in the
-  config: export it in your shell and reference it as `${NAME}`.
+  config: export it in your shell and reference it as `${NAME}`. A reference to a
+  database location (`DATABASE_URL`, `DATABASE_PATH`, `DB_URL`, `DB_PATH` or
+  `env_override`) is an error: those are removed so commands only reach their own copy.
 
 ## Example: web app with a file database
 

@@ -118,3 +118,37 @@ def test_inconsistent_copy_is_removed_and_refused(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="inconsistent"):
         copy(tmp_path / "a.db", tmp_path / "b.db")
     assert not (tmp_path / "b.db").exists()
+
+
+def _orphan_wal(folder):
+    """A WAL database with its -wal left behind and no -shm, as after an app died mid-run."""
+    with closing(sqlite3.connect(folder / "live.db")) as writer:
+        writer.execute("pragma journal_mode=wal")
+        writer.execute("create table t(x)")
+        writer.execute("insert into t values (5)")
+        writer.commit()
+        for suffix in ("", "-wal"):
+            shutil.copy2(folder / f"live.db{suffix}", folder / f"orphan.db{suffix}")
+    return folder / "orphan.db"
+
+
+@pytest.mark.parametrize("read_only", [False, True])
+def test_wal_without_shm_is_read_from_a_private_copy(tmp_path, read_only):
+    if read_only and os.name == "nt":
+        pytest.skip("POSIX directory permissions")
+    folder = tmp_path / "src"
+    folder.mkdir()
+    src = _orphan_wal(folder)
+    for name in ("live.db", "live.db-wal", "live.db-shm"):
+        (folder / name).unlink(missing_ok=True)
+    before = {name: size for name, (size, _) in _sidecars(src).items()}
+    assert before.keys() == {"orphan.db", "orphan.db-wal"}
+    if read_only:
+        folder.chmod(0o555)
+    try:
+        copy(src, tmp_path / "b.db")
+    finally:
+        folder.chmod(0o755)
+    assert {name: size for name, (size, _) in _sidecars(src).items()} == before
+    with closing(sqlite3.connect(tmp_path / "b.db")) as out:
+        assert out.execute("select x from t").fetchall() == [(5,)]

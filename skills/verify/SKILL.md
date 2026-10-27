@@ -60,22 +60,21 @@ environment that can't reach the real database.
 ## 3. Worktrees and data
 
 1. The base is `BASE = git merge-base <repo.base> <branch>`, never the tip of
-   `repo.base` (an already merged branch would be compared with itself); if `BASE` equals
-   the branch tip, say so and use `BASE^`. Make a temp folder under the system temp
-   directory, outside the repo, and add two worktrees there:
-   `git worktree add --detach <temp>/base <BASE>` and the same for the branch. Pick a
-   free port for each (bind a socket to port 0, read it back) and prepare each worktree
-   as `references/servers.md` says: copy `[repo] copy` files, run `install`, `build`.
+   `repo.base`; if `BASE` equals the branch tip, there is nothing to review, or it was
+   already merged and `BASE^` is the base, as the review skill decides. Make a temp folder
+   under the system temp directory, outside the repo, and add two worktrees there:
+   `git worktree add --detach <temp>/base <BASE>` and the same for the branch. Pick each
+   server's port, `{name}` and `{dir}`, and prepare each worktree (copy `[repo] copy`
+   files and fix their database lines, `install`, `build`), as `references/servers.md`
+   says.
 2. Build both databases with the **base** code, so "existing data" is genuinely pre-change
    (phase 1 records):
    - `file`: `python3 -I <root>/scripts/run.py db-copy <repo>/<path> <temp>/base/<path>`
      (if the original doesn't exist, start empty). In the base worktree run `migrate`,
      `seed`, and create the records the test list needs. Then copy that file to the branch
      worktree with `db-copy` the same way.
-   - `command`: for each server make a fresh `{name}`, `foreman_<base|branch>_<6 lowercase
-     hex>` (letters, digits and underscores only), and a fresh empty folder for `{dir}`.
-     Run `create`, `migrate`, `seed` and your record set-up from the **base** worktree
-     with that server's settings.
+   - `command`: run `create`, `migrate`, `seed` and your record set-up from the **base**
+     worktree with that server's settings.
 3. Migrate the branch's database with the **branch** code: run `migrate` in the branch
    worktree.
 4. Records you only discover you need while exploring (step 4) are phase 2: write them

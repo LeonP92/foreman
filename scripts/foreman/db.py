@@ -3,6 +3,7 @@
 import os
 import shutil
 import sqlite3
+import tempfile
 from contextlib import closing
 from pathlib import Path
 
@@ -14,14 +15,11 @@ def _is_sqlite(path: Path) -> bool:
         return f.read(len(SQLITE_HEADER)) == SQLITE_HEADER
 
 
-def _read_only_uri(src: Path) -> str:
+def _needs_private_copy(src: Path) -> bool:
     with src.open("rb") as f:
         wal_mode = f.read(19)[18:] == b"\x02"
-    # Even a read-only connection creates missing -wal/-shm files beside a WAL database. With no
-    # -wal file no connection is open, so the file is complete and can be read as immutable.
-    # An app that opens it and checkpoints mid-copy could tear the read; copy() checks for that.
-    immutable = wal_mode and not src.with_name(src.name + "-wal").exists()
-    return f"{src.resolve().as_uri()}?{'immutable=1' if immutable else 'mode=ro'}"
+    # Even a read-only connection creates a missing -wal or -shm beside a WAL database.
+    return wal_mode and not all(src.with_name(src.name + s).exists() for s in ("-wal", "-shm"))
 
 
 def _consistent(path: Path) -> bool:
@@ -41,15 +39,23 @@ def copy(src: Path, dst: Path) -> dict:
             raise ValueError(f"{dst.as_posix()}: exists and is not a SQLite database")
         # The backup API reads through SQLite, so WAL pages and live writers are seen consistently.
         # Read-only, so closing never checkpoints the source or deletes its -wal/-shm files.
-        try:
-            with (
-                closing(sqlite3.connect(_read_only_uri(src), uri=True)) as source,
-                closing(sqlite3.connect(dst)) as target,
-            ):
-                source.backup(target)
-        except sqlite3.Error as exc:
-            raise ValueError(f"{src.as_posix()} -> {dst.as_posix()}: {exc}") from None
-        # catches a read torn by an app writing during an immutable read
+        with tempfile.TemporaryDirectory() as private:
+            uri = f"{src.resolve().as_uri()}?mode=ro"
+            if _needs_private_copy(src):
+                # Read a byte copy instead, so SQLite never opens anything in the source folder.
+                for name in (src.name, src.name + "-wal"):
+                    if (src.parent / name).exists():
+                        shutil.copyfile(src.parent / name, Path(private) / name)
+                uri = (Path(private) / src.name).as_uri()
+            try:
+                with (
+                    closing(sqlite3.connect(uri, uri=True)) as source,
+                    closing(sqlite3.connect(dst)) as target,
+                ):
+                    source.backup(target)
+            except sqlite3.Error as exc:
+                raise ValueError(f"{src.as_posix()} -> {dst.as_posix()}: {exc}") from None
+        # catches a byte copy torn by an app writing while it was taken
         if not _consistent(dst):
             dst.unlink()
             raise ValueError(

@@ -50,10 +50,11 @@ possibly dead code. Each kind's rule, threshold and severity are in
 
 Only against the base server; there is no comparison. Follow the verify skill for data
 (copies only, refuse if `[database]` can't isolate), preparing the worktree (copy, install,
-build) and its environment, the server on a free port, login, and stopping the whole process tree. Pick 3–8 main pages from the repo's routes
-(the router files, page folders or URL config), one test each, titled by page (`cart`,
-`order-history`). For each page: it loads, no console errors, no 4xx/5xx responses, and
-Tab moves a visible focus through its controls. Run
+build) and its environment, the server on a free port, login, and stopping the whole
+process tree. Pick 3–8 main pages from the repo's routes (the router files, page folders
+or URL config), one test each, titled by page (`cart`, `order-history`). For each page:
+it loads, no console errors, no 4xx/5xx responses, and Tab moves a visible focus through
+its controls. Run
 `python3 -I <root>/scripts/run.py browser-run --spec <spec> --out .foreman/reports/audit/smoke --base http://127.0.0.1:<port>`
 with no `--branch`. Each problem is a finding with steps, expected, actual and screenshot.
 

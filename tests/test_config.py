@@ -153,3 +153,19 @@ def test_doc_examples_are_valid(tmp_path):
 )
 def test_env_placeholder_problems(tmp_path, text, expected):
     assert check_toml(tmp_path, text) == [expected]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '[env]\nA = "${DATABASE_URL}"',
+        (
+            '[database]\nkind = "command"\ncreate = "c"\nenv_override = "SHOP_DB"\n'
+            'url_template = "u"\n[server.env]\nA = "${SHOP_DB}"'
+        ),
+    ],
+)
+def test_env_may_not_read_a_database_location(tmp_path, text):
+    problems = check_toml(tmp_path, text)
+    assert len(problems) == 1
+    assert "names a database location" in problems[0]

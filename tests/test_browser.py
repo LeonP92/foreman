@@ -90,7 +90,7 @@ def test_spec_mentioning_playwright_in_a_comment_is_accepted(tmp_path, monkeypat
 def test_load_errors_are_reported_not_read_as_clean():
     report = {
         "suites": [],
-        "errors": [{"message": "SyntaxError: Unexpected token '}'\n  at x.mjs:3"}],
+        "errors": [{"message": "\x1b[31mSyntaxError\x1b[39m: Unexpected token '}'\n  at x.mjs:3"}],
     }
     with pytest.raises(
         ValueError, match=r"^spec failed to load: SyntaxError: Unexpected token '}'$"

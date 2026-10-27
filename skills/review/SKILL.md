@@ -23,8 +23,10 @@ the change works and what needs their judgement, and drill in only if they want 
 The branch is the one the user named, else the current one. You review what the branch
 has committed against `BASE = git merge-base <repo.base> <branch>`, never the tip of
 `repo.base`: a branch already merged (or squash-merged) would otherwise be compared with
-itself. If `BASE` equals the branch tip, the branch is already merged: say so in the
-report and use `BASE^` (the merge-base's first parent) as `BASE`. Diff with
+itself. If `BASE` equals the branch tip, check `git rev-list --first-parent <repo.base>`:
+if the tip is on it, the branch has no commits of its own and there is nothing to review
+(say so and stop); otherwise it was already merged (say so in the report and use `BASE^`,
+the merge-base's first parent, as `BASE`). Diff with
 `git diff BASE <branch>`; anything run on the base (tests in step 4, verify, the diagram)
 uses a worktree at `BASE`. The report names both SHAs. If the branch isn't checked out,
 or the working tree has uncommitted changes, work in a temporary worktree of the branch

@@ -27,7 +27,7 @@ _DIRECT_IMPORT = re.compile(
     r"""|require\(['"]@playwright/test['"]\)""",
     re.MULTILINE,
 )
-_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 ERROR_LINES = 5
 
 
@@ -132,7 +132,8 @@ def _failure(error: dict) -> dict:
 
 def parse_results(report: dict) -> list[dict]:
     if report.get("errors"):
-        raise ValueError(f"spec failed to load: {report['errors'][0]['message'].splitlines()[0]}")
+        message = _ANSI.sub("", report["errors"][0]["message"])
+        raise ValueError(f"spec failed to load: {message.splitlines()[0]}")
     tests = []
     suites = list(report.get("suites", []))
     while suites:
