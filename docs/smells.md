@@ -52,8 +52,9 @@ number at least `max(hub_floor = 8, repo p95)`, counting non-test modules and ru
 (not type-only) imports only. A module many import that depends on little (a stable
 definitions module) is never a hub, and neither is a composition root nothing imports (a
 page, a route table, app config). `medium`, or `low` for an entry point (see deadcode).
-`conftest.py` and a package `__init__.py` that only re-exports (imports, `__all__`) are never
-hubs. A change to a hub reaches everything around it, so it is the riskiest place to edit.
+`conftest.py` and files that only re-export are never hubs: a package `__init__.py` (imports,
+`__all__`), a JS/TS barrel (`export … from`, `export *`) and a Ruby index that only
+`autoload`s. A change to a hub reaches everything around it, so it is the riskiest place to edit.
 
 **cochange** — two files that changed in the same commits but don't import each other:
 hidden coupling. Needs at least `cochange_min_both = 5` shared commits and confidence of at

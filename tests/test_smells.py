@@ -390,6 +390,24 @@ def test_hubs_skip_tests_conftest_and_facades_and_cap_entry_points():
     ]
 
 
+def test_facades_only_re_export(make_repo):
+    files = {
+        "pkg/__init__.py": "from .a import A\n__all__ = ['A']\n",
+        "web/index.ts": "// public API\nexport * from './a';\nexport { b,\n  c } from \"./b\";\n",
+        "web/types.ts": "export type { T } from './t'\n",
+        "web/app.ts": "export * from './a';\nexport const x = 1;\n",
+        "lib/shop.rb": "module Shop\n  autoload :Cart, 'shop/cart'\nend\n",
+        "lib/cart.rb": "autoload :Tax, 'shop/tax'\ndef total; end\n",
+    }
+    root = make_repo(files)
+    assert smells.facades(root, sorted(files)) == {
+        "pkg/__init__.py",
+        "web/index.ts",
+        "web/types.ts",
+        "lib/shop.rb",
+    }
+
+
 def test_path_loaded_files_are_entry_points(make_repo):
     files = {
         "app/migrations/0001_init.py": "",

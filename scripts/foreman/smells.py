@@ -11,7 +11,7 @@ from collections.abc import Collection, Iterable, Sequence
 from pathlib import Path
 from typing import TypedDict
 
-from foreman.files import NON_SOURCE_EXTENSIONS, is_ignored, read_text
+from foreman.files import NON_SOURCE_EXTENSIONS, is_ignored, language, read_text
 from foreman.langs import go_package
 from foreman.metrics import percentiles
 
@@ -479,17 +479,38 @@ def _only_imports(tree: ast.Module) -> bool:
     )
 
 
+# what a JS/TS barrel or a Ruby autoload index may hold besides re-exports
+_JS_REEXPORT = re.compile(
+    r"""//[^\n]*|/\*.*?\*/|\bexport\s+(?:type\s+)?(?:\*(?:\s+as\s+\w+)?|\{[^}]*\})"""
+    r"""\s*from\s*['"][^'"]+['"]\s*;?""",
+    re.DOTALL,
+)
+_RUBY_AUTOLOAD = re.compile(
+    r"""^\s*(?:#.*|module\s+[\w:]+|end|autoload\s*\(?\s*:\w+\s*,\s*['"][^'"]+['"]\s*\)?)?\s*$""",
+    re.MULTILINE,
+)
+
+
+def _is_facade(root: Path, path: str) -> bool:
+    name = posixpath.basename(path)
+    if name == "__init__.py":
+        try:
+            return _only_imports(ast.parse(read_text(root / path) or ""))
+        except SyntaxError:
+            return False
+    if language(path) == "javascript":
+        text = read_text(root / path) or ""
+        return "export" in text and not _JS_REEXPORT.sub("", text).strip()
+    if name.endswith(".rb"):
+        text = read_text(root / path) or ""
+        return "autoload" in text and not _RUBY_AUTOLOAD.sub("", text).strip()
+    return False
+
+
 def facades(root: Path, files: Sequence[str]) -> frozenset[str]:
-    """Package `__init__.py` files whose body only re-exports (imports, `__all__`, a docstring)."""
-    found = set()
-    for path in files:
-        if posixpath.basename(path) == "__init__.py":
-            try:
-                if _only_imports(ast.parse(read_text(root / path) or "")):
-                    found.add(path)
-            except SyntaxError:
-                pass
-    return frozenset(found)
+    """Files whose body only re-exports: a package `__init__.py` (imports, `__all__`, a
+    docstring), a JS/TS barrel (`export … from`, `export *`), a Ruby autoload-only index."""
+    return frozenset(p for p in files if _is_facade(root, p))
 
 
 def entry_points(root: Path, files: Sequence[str], globs: Sequence[str] = ()) -> frozenset[str]:
