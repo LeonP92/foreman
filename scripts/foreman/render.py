@@ -15,7 +15,7 @@ DIAGRAM_SMELLS = {"scatter": (3, None), "twin": (2, 2), "hub": (1, 1)}
 HUB_MIN_NEIGHBOURS = 5
 _MAP_STRING_FIELDS = {
     "groups": ("id", "label"),
-    "nodes": ("id", "label", "group"),
+    "nodes": ("id", "label", "group", "lang"),
     "edges": ("from", "to", "kind"),
     "smells": ("kind", "severity", "title", "evidence"),
 }

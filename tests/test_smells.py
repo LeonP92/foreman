@@ -172,6 +172,9 @@ def test_entry_points_are_not_dead_code(make_repo):
             "bin/tool.js": "",
             "pkg/__init__.py": "",
             "pkg/run.py": "",
+            "tools/run.py": 'def main():\n    pass\n\n\nif __name__ == "__main__":\n    main()\n',
+            "tools/lib.py": "def main():\n    pass\n",
+            "hooks/check.js": "#!/usr/bin/env node\nconsole.log(1)\n",
         }
     )
     files = sorted(
@@ -180,5 +183,11 @@ def test_entry_points_are_not_dead_code(make_repo):
         if p.is_file() and ".git" not in p.parts
     )
     assert smells.entry_points(root, files) == frozenset(
-        ["lib/start.js", "bin/tool.js", "pkg/run.py", "cmd/app"]
+        ["lib/start.js", "bin/tool.js", "pkg/run.py", "cmd/app", "tools/run.py", "hooks/check.js"]
     )
+
+
+def test_file_smells_cover_ungraphed_sources():
+    files = [("a.rb", 10), ("b.rb", 10)]
+    found = _detect(files=files, blocks=[_block(8, "a.rb", "b.rb")], churn={"a.rb": 1})
+    assert [(s["kind"], s["nodes"]) for s in found] == [("duplicate", ["a.rb", "b.rb"])]

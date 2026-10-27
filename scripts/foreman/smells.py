@@ -1,15 +1,16 @@
 """Repo-wide structural smells from the import graph, git history, sizes and duplicates."""
 
+import ast
 import fnmatch
 import json
 import posixpath
 import re
 import tomllib
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from pathlib import Path
 from typing import TypedDict
 
-from foreman.files import is_ignored, read_text
+from foreman.files import NON_SOURCE_EXTENSIONS, is_ignored, read_text
 from foreman.langs import go_package
 from foreman.metrics import percentiles
 
@@ -62,7 +63,18 @@ def folder_parts(node: dict) -> list[str]:
     return [] if folder in ("", ".") else folder.split("/")
 
 
-def _node_of(path: str, ids: set[str]) -> str | None:
+def map_nodes(graph: dict, metrics: dict) -> dict[str, str]:
+    """Node id -> language: graph nodes, plus measured files in languages with no import graph."""
+    nodes = {n["id"]: n["lang"] for n in graph["nodes"]}
+    for f in metrics["files"]:
+        # same rule as the graph's `unsupported`: extension-less files (LICENSE) are not source
+        ext = posixpath.splitext(f["path"])[1]
+        if ext and _node_of(f["path"], nodes.keys()) is None:
+            nodes[f["path"]] = ext
+    return dict(sorted(nodes.items()))
+
+
+def _node_of(path: str, ids: Collection[str]) -> str | None:
     node = go_package(path) if path.endswith(".go") else path
     return node if node in ids else None
 
@@ -135,8 +147,7 @@ def _hubs(graph: dict) -> list[Found]:
     ]
 
 
-def _cochange(graph: dict, history: dict) -> list[Found]:
-    ids = {n["id"] for n in graph["nodes"]}
+def _cochange(ids: Collection[str], graph: dict, history: dict) -> list[Found]:
     linked = {(e["from"], e["to"]) for e in graph["edges"]}
     found = []
     for p in history["pairs"]:
@@ -162,8 +173,7 @@ def _cochange(graph: dict, history: dict) -> list[Found]:
     return found
 
 
-def _hotspots(graph: dict, history: dict, metrics: dict) -> list[Found]:
-    ids = {n["id"] for n in graph["nodes"]}
+def _hotspots(ids: Collection[str], history: dict, metrics: dict) -> list[Found]:
     churn = history["churn"]
     measured = [f for f in metrics["files"] if f["path"] in churn]
     min_churn = max(
@@ -184,8 +194,7 @@ def _hotspots(graph: dict, history: dict, metrics: dict) -> list[Found]:
     return found
 
 
-def _oversize(graph: dict, metrics: dict) -> list[Found]:
-    ids = {n["id"] for n in graph["nodes"]}
+def _oversize(ids: Collection[str], metrics: dict) -> list[Found]:
     fs, fn = metrics["stats"]["file_lines"], metrics["stats"]["function_lines"]
     found: list[Found] = []
     for f in metrics["files"]:
@@ -207,8 +216,7 @@ def _oversize(graph: dict, metrics: dict) -> list[Found]:
     return found
 
 
-def _duplicates(graph: dict, dupes: dict) -> list[Found]:
-    ids = {n["id"] for n in graph["nodes"]}
+def _duplicates(ids: Collection[str], dupes: dict) -> list[Found]:
     found = []
     for b in dupes["blocks"]:
         locs = b["locations"]
@@ -252,14 +260,15 @@ def detect(
     layers: Sequence[dict],
     entry_points: frozenset[str] = frozenset(),
 ) -> list[Smell]:
+    ids = map_nodes(graph, metrics).keys()
     return [
         *_ranked("cycle", _cycles(graph)),
         *_ranked("layering", _layering(graph, layers)),
         *_ranked("hub", _hubs(graph)),
-        *_ranked("cochange", _cochange(graph, history)),
-        *_ranked("hotspot", _hotspots(graph, history, metrics)),
-        *_ranked("oversize", _oversize(graph, metrics)),
-        *_ranked("duplicate", _duplicates(graph, dupes)),
+        *_ranked("cochange", _cochange(ids, graph, history)),
+        *_ranked("hotspot", _hotspots(ids, history, metrics)),
+        *_ranked("oversize", _oversize(ids, metrics)),
+        *_ranked("duplicate", _duplicates(ids, dupes)),
         *_ranked("deadcode", _deadcode(graph, entry_points)),
     ]
 
@@ -281,6 +290,20 @@ def _strings(value) -> Iterable[str]:
     return []
 
 
+def _runs_as_main(text: str) -> bool:
+    """A module-level `if __name__ == "__main__":` block."""
+    if "__main__" not in text:
+        return False
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return False
+    return any(
+        isinstance(node, ast.If) and ast.unparse(node.test) == "__name__ == '__main__'"
+        for node in tree.body
+    )
+
+
 def entry_points(root: Path, files: Sequence[str]) -> frozenset[str]:
     """Nodes a manifest or `package main` names as a program start."""
     found = set()
@@ -299,8 +322,15 @@ def entry_points(root: Path, files: Sequence[str]) -> frozenset[str]:
                     found.update(
                         posixpath.join(base, module + suffix) for suffix in (".py", "/__init__.py")
                     )
-        elif name.endswith(".go") and not name.endswith("_test.go"):
-            if re.search(r"^package\s+main\b", read_text(root / path) or "", re.MULTILINE):
+        elif posixpath.splitext(name)[1] not in NON_SOURCE_EXTENSIONS:
+            text = read_text(root / path) or ""
+            if text.startswith("#!") or (name.endswith(".py") and _runs_as_main(text)):
+                found.add(path)
+            elif (
+                name.endswith(".go")
+                and not name.endswith("_test.go")
+                and re.search(r"^package\s+main\b", text, re.MULTILINE)
+            ):
                 found.add(go_package(path))
     return frozenset(found) & frozenset(
         [*files, *(go_package(f) for f in files if f.endswith(".go"))]

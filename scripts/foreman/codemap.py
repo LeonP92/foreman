@@ -43,7 +43,8 @@ def build(root: Path, config: dict) -> dict:
     lines: Counter[str] = Counter()
     for f in measured["files"]:
         lines[go_package(f["path"]) if f["path"].endswith(".go") else f["path"]] += f["lines"]
-    group_of = _groups(g["nodes"])
+    langs = smells.map_nodes(g, measured)
+    group_of = _groups([{"id": i, "lang": lang} for i, lang in langs.items()])
     member = {n: i for i, c in enumerate(g["cycles"]) for n in c}
     cyclic = {
         (e["from"], e["to"])
@@ -64,12 +65,13 @@ def build(root: Path, config: dict) -> dict:
         ],
         "nodes": [
             {
-                "id": n["id"],
-                "label": posixpath.basename(n["id"]) or n["id"],
-                "group": group_of[n["id"]],
-                "lines": lines[n["id"]],
+                "id": i,
+                "label": posixpath.basename(i) or i,
+                "group": group_of[i],
+                "lang": lang,
+                "lines": lines[i],
             }
-            for n in g["nodes"]
+            for i, lang in langs.items()
         ],
         "edges": [
             {"from": e["from"], "to": e["to"], "kind": _edge_kind(e, cyclic, layers)}

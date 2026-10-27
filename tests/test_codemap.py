@@ -51,7 +51,13 @@ def test_map_groups_descend_from_single_src_dir(make_repo):
         {"id": "src/a", "label": "src/a", "nodes": ["src/a/x.py"]},
         {"id": "src/b", "label": "src/b", "nodes": ["src/b/y.py", "src/b/z.py"]},
     ]
-    assert data["nodes"][0] == {"id": "src/a/x.py", "label": "x.py", "group": "src/a", "lines": 1}
+    assert data["nodes"][0] == {
+        "id": "src/a/x.py",
+        "label": "x.py",
+        "group": "src/a",
+        "lang": "python",
+        "lines": 1,
+    }
 
 
 def test_map_validates_and_renders(make_repo, tmp_path):
@@ -96,6 +102,20 @@ def test_malformed_map_is_problems_not_exceptions():
         "smells": [],
     }
     assert render.validate(bad) == [
-        "nodes #0: must be an object with string id, label, group",
+        "nodes #0: must be an object with string id, label, group, lang",
         "'edges' must be a list",
     ]
+
+
+def test_ungraphed_sources_are_map_nodes(make_repo):
+    body = "\n".join(f"total += price * {i}" for i in range(10))
+    root = make_repo({"a.rb": body, "lib/b.rb": body, "c.py": "", "LICENSE": "x\n"})
+    data = codemap.build(root, _config())
+    nodes = {n["id"]: n["lang"] for n in data["nodes"]}
+    assert nodes == {"a.rb": ".rb", "lib/b.rb": ".rb", "c.py": "python"}
+    assert [s["nodes"] for s in data["smells"] if s["kind"] == "duplicate"] == [
+        ["a.rb", "lib/b.rb"]
+    ]
+    assert [s["nodes"] for s in data["smells"] if s["kind"] == "deadcode"] == [["c.py"]]
+    assert data["unsupported"] == {".rb": 2}
+    assert render.validate(data) == []
