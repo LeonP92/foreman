@@ -17,7 +17,10 @@ class Rule(TypedDict):
 
 
 def validate(name: str, rule: dict) -> list[str]:
+    if not isinstance(rule, dict):
+        return ["must be a table"]
     errors = [f"missing key {key!r}" for key in KEYS if key not in rule]
+    errors += [f"unknown key {key!r}" for key in rule if key not in KEYS]
     if name in BUILTINS:
         errors.append(f"{name!r} is a built-in language")
     for key in ("extensions", "resolve"):
