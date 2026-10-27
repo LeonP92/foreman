@@ -1,5 +1,8 @@
+import functools
+import http.server
 import os
 import subprocess
+import threading
 
 import pytest
 
@@ -52,3 +55,21 @@ def make_repo(tmp_path):
         return tmp_path
 
     return make
+
+
+@pytest.fixture
+def serve():
+    """Serves a directory over HTTP on a free port; returns its base URL."""
+    servers = []
+
+    def start(directory):
+        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        servers.append(server)
+        return f"http://127.0.0.1:{server.server_address[1]}"
+
+    yield start
+    for server in servers:
+        server.shutdown()
+        server.server_close()

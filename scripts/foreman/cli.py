@@ -4,7 +4,7 @@ import posixpath
 import sys
 from pathlib import Path, PureWindowsPath
 
-from foreman import codemap, config, graph, render
+from foreman import browser, codemap, config, db, graph, render
 from foreman.langs import rule
 
 
@@ -69,6 +69,14 @@ def _map(args) -> tuple[dict, int]:
     }, 0
 
 
+def _browser_run(args) -> tuple[dict, int]:
+    return browser.run(args.spec, args.out, args.base, args.branch), 0
+
+
+def _db_copy(args) -> tuple[dict, int]:
+    return db.copy(args.src, args.dst), 0
+
+
 def _command(name, func):
     sub = _SUBPARSERS.add_parser(name)
     sub.set_defaults(func=func)
@@ -89,6 +97,16 @@ _render_parser = _SUBPARSERS.add_parser("render")
 _render_parser.set_defaults(func=_render)
 _render_parser.add_argument("data", type=Path)
 _render_parser.add_argument("out", type=Path)
+_browser_parser = _SUBPARSERS.add_parser("browser-run")
+_browser_parser.set_defaults(func=_browser_run)
+_browser_parser.add_argument("--spec", type=Path, required=True)
+_browser_parser.add_argument("--out", type=Path, required=True)
+_browser_parser.add_argument("--base", required=True)
+_browser_parser.add_argument("--branch")
+_db_parser = _SUBPARSERS.add_parser("db-copy")
+_db_parser.set_defaults(func=_db_copy)
+_db_parser.add_argument("src", type=Path)
+_db_parser.add_argument("dst", type=Path)
 COMMANDS = frozenset(_SUBPARSERS.choices)
 
 
