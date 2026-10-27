@@ -38,15 +38,20 @@ run the UI pass).
    `python3 -I <root>/scripts/run.py map --root <temp> --config <repo>/.foreman/config.toml --out <run>`
    (both paths absolute). It prints the map path, group and module counts, the ranked
    smells (at most 20 per kind), `dropped` (how many more each kind had), `counts` (every
-   smell by kind and severity, before that cap), and `unsupported`: file extensions that
-   need an import rule.
-3. **Triage the candidates.** The map's smells are candidates, not findings. Take
-   all highs first (never capped), then every medium before any low, each in the map's
-   order, until the budget of 60 total including highs (more only if the user asks); if
-   highs alone exceed 60, triage all highs and report the rest as not triaged. For each, read the files involved and apply the checklist
-   in [`references/triage.md`](references/triage.md): mark it CONFIRMED or DISMISSED with a
-   one-line reason and evidence (`file:line`). Write a suggested next step for each
-   confirmed one. Thresholds are relative to this repo's own spread, not fixed numbers.
+   smell by kind and severity, before that cap), `unsupported` (file extensions that need
+   an import rule), `triage` and `not_triaged`.
+3. **Triage the candidates.** The map's smells are candidates, not findings. `triage` is
+   the order to read them in: one item per file (or file pair/set) carrying all its smells;
+   every high item first (never capped), then medium and low items round-robin across kinds,
+   biggest first within a kind, up to 60 items in all (more only if the user asks).
+   `not_triaged` counts by kind what is left. For each item read the files involved and
+   apply the checklist in [`references/triage.md`](references/triage.md): mark each smell
+   CONFIRMED or DISMISSED with a one-line reason and evidence (`file:line`). Burden of
+   proof: CONFIRM only when you can state a concrete cost — who is hurt and how (a change
+   that must touch N places, a bug class, a layer rule the repo states). Otherwise DISMISS
+   with the reason, including "no checklist type fits, and no concrete cost found". No case,
+   no finding. Write a suggested next step for each confirmed one. Thresholds are relative
+   to this repo's own spread, not fixed numbers.
 4. **Re-render without the dismissed.** Write `<run>/triage.json` as
    `{"dismissed": [{"kind": …, "nodes": […], "title": …, "reason": …}]}`, with `kind`,
    `nodes` and `title` as the map lists them, then run
@@ -91,7 +96,7 @@ counts confirmed smells only.
    the evidence (`file:line`), and a suggested next step (split a file, move an import
    behind an interface, delete it).
 3. **Appendix:** every dismissal (kind, modules, reason, evidence), and per kind how many
-   were not triaged.
+   were not triaged (`not_triaged`).
 
 ```
 ## Audit: main @ 3f2a9c1

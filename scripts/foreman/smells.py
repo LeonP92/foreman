@@ -32,6 +32,7 @@ THRESHOLDS: dict[str, int | float] = {
     "bulk_commit_share": 0.2,
 }
 MAX_PER_KIND = 20
+TRIAGE_BUDGET = 60
 # A team chose these boundaries, so every break is listed.
 UNCAPPED = frozenset(["cycle", "layering"])
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
@@ -111,6 +112,37 @@ def cap(found: list[Smell]) -> tuple[list[Smell], dict[str, int]]:
     return shown, {
         k: n - MAX_PER_KIND for k, n in seen.items() if n > MAX_PER_KIND and k not in UNCAPPED
     }
+
+
+def triage_order(
+    shown: list[Smell], counts: dict[str, dict[str, int]]
+) -> tuple[list[dict], dict[str, int]]:
+    """Triage items within the budget, in order, and per kind how many smells are left untriaged.
+
+    An item is one node set with all its smells. Every high item comes first; then the rest
+    round-robin across kinds so one big kind can't starve the others.
+    """
+    items: dict[tuple[str, ...], dict] = {}
+    for position, s in enumerate(shown):
+        key = tuple(sorted(s["nodes"]))
+        item = items.setdefault(key, {"nodes": list(key), "smells": [], "rank": (3, 0)})
+        item["smells"].append({k: s[k] for k in ("kind", "severity", "title")})
+        # the map lists each kind worst and biggest first, so the first worst smell leads
+        if (rank := (SEVERITY_RANK[s["severity"]], position)) < item["rank"]:
+            item.update(rank=rank, kind=s["kind"], severity=s["severity"])
+    ordered = sorted(items.values(), key=lambda i: i["rank"])
+    picked = [i for i in ordered if i["severity"] == "high"]
+    queues: dict[str, list[dict]] = {}
+    for i in ordered:
+        if i["severity"] != "high":
+            queues.setdefault(i["kind"], []).append(i)
+    while len(picked) < TRIAGE_BUDGET and any(queues.values()):
+        for queue in queues.values():
+            if queue and len(picked) < TRIAGE_BUDGET:
+                picked.append(queue.pop(0))
+    triaged = Counter(s["kind"] for i in picked for s in i["smells"])
+    left = {k: n for k, sev in counts.items() if (n := sum(sev.values()) - triaged[k])}
+    return [{k: v for k, v in i.items() if k != "rank"} for i in picked], dict(sorted(left.items()))
 
 
 def _cycles(graph: dict) -> list[Found]:

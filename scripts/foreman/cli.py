@@ -4,7 +4,7 @@ import posixpath
 import sys
 from pathlib import Path, PureWindowsPath
 
-from foreman import browser, codemap, config, db, graph, render
+from foreman import browser, codemap, config, db, graph, render, smells
 from foreman.langs import rule
 
 
@@ -71,6 +71,10 @@ def _map(args) -> tuple[dict, int]:
     (args.out / "map.json").write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
     html = render.write(data, args.out / "map.html")
     summary = {"groups": len(data["groups"]), "nodes": len(data["nodes"])}
+    if not args.dismiss:
+        summary["triage"], summary["not_triaged"] = smells.triage_order(
+            data["smells"], data["counts"]
+        )
     return {
         "html": html.as_posix(),
         **summary,

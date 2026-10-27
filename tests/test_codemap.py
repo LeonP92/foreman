@@ -287,6 +287,7 @@ def test_map_counts_every_smell_and_what_the_cap_dropped(make_repo, tmp_path, ca
         assert result["dropped"] == {"deadcode": 3}
         assert result["counts"] == {"deadcode": {"low": 23}}
         assert len(result["smells"]) == 20
+    assert len(printed["triage"]) == 20 and printed["not_triaged"] == {"deadcode": 3}
 
 
 @pytest.mark.slow

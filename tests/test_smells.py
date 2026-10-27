@@ -376,3 +376,45 @@ def test_facades_are_init_files_holding_only_imports(make_repo):
     }
     root = make_repo(files)
     assert smells.facades(root, sorted(files)) == frozenset(["a/__init__.py", "c/__init__.py"])
+
+
+def _smell(kind, severity, *nodes):
+    return {"kind": kind, "severity": severity, "nodes": list(nodes), "title": f"{kind} {nodes}"}
+
+
+def test_triage_takes_every_high_then_round_robins_kinds_within_the_budget():
+    shown = [
+        _smell("cycle", "high", "a.py", "b.py"),
+        *[_smell("duplicate", "medium", f"d{i}.py", f"e{i}.py") for i in range(40)],
+        *[_smell("cochange", "low", f"c{i}.py", f"x{i}.py") for i in range(40)],
+        _smell("hotspot", "medium", "big.py"),
+        _smell("oversize", "low", "big.py"),
+    ]
+    counts = {
+        "cycle": {"high": 1},
+        "duplicate": {"medium": 45},
+        "cochange": {"low": 40},
+        "hotspot": {"medium": 1},
+        "oversize": {"low": 1},
+    }
+    items, left = smells.triage_order(shown, counts)
+    assert len(items) == smells.TRIAGE_BUDGET
+    assert [(i["kind"], i["nodes"][0]) for i in items[:6]] == [
+        ("cycle", "a.py"),
+        ("duplicate", "d0.py"),
+        ("hotspot", "big.py"),
+        ("cochange", "c0.py"),
+        ("duplicate", "d1.py"),
+        ("cochange", "c1.py"),
+    ]
+    # one item per file carries all its smells
+    assert [s["kind"] for s in items[2]["smells"]] == ["hotspot", "oversize"]
+    assert left == {"cochange": 11, "duplicate": 16}
+
+
+def test_triage_never_caps_highs():
+    shown = [_smell("layering", "high", f"a{i}.py", "b.py") for i in range(70)]
+    shown.append(_smell("deadcode", "low", "z.py"))
+    items, left = smells.triage_order(shown, {"layering": {"high": 70}, "deadcode": {"low": 1}})
+    assert len(items) == 70 and {i["kind"] for i in items} == {"layering"}
+    assert left == {"deadcode": 1}

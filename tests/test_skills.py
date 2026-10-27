@@ -455,8 +455,11 @@ def test_audit_triages_candidates_before_reporting():
         "map --out <run> --dismiss <run>/triage.json",
         "candidates · C confirmed · D dismissed · U not triaged (budget)",
         "counts confirmed smells only",
-        "all highs first (never capped), then every medium before any low",
-        "if highs alone exceed 60, triage all highs and report the rest as not triaged",
+        "every high item first (never capped), then medium and low items round-robin across kinds",
+        "one item per file (or file pair/set)",
+        "`not_triaged`",
+        "CONFIRM only when you can state a concrete cost",
+        "no checklist type fits, and no concrete cost found",
     ]:
         assert phrase in text, phrase
     triage = " ".join(
@@ -476,5 +479,11 @@ def test_audit_triages_candidates_before_reporting():
         "migrations",
         "per-locale",
         "file:line",
+        "concrete cost",
+        "its own test",
+        "type-only",
+        "sibling implementations",
+        "composition roots",
+        "hotspot",
     ]:
         assert phrase in triage, phrase
