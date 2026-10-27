@@ -172,7 +172,7 @@ function layout(first = new Set(), sel = null) {
     to[n.id] = {x: LEFT + lane * LANE_GAP, y: TOP + rows[lane]++ * GAP}; });
   const step = now => {
     if (me !== frame) return;
-    const t = Math.min(1, (now - start) / 200), k = t * (2 - t);
+    const t = Math.max(0, Math.min(1, (now - start) / 200)), k = t * (2 - t);
     DATA.nodes.forEach(({id}) => { const a = from[id] || to[id], b = to[id];
       pos[id] = {x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k}; });
     pairCount = {};

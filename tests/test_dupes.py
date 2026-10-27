@@ -32,3 +32,9 @@ def test_whitespace_differences_still_match(make_repo):
 
 def test_block_does_not_overlap_itself(make_repo):
     assert find(make_repo({"a.py": "x = 1\n" * 12}))["blocks"] == []
+
+
+def test_c_preprocessor_lines_are_not_comments(make_repo):
+    defines = "\n".join(f"#define LIMIT_{i} ({i} * 4)" for i in range(10))
+    blocks = find(make_repo({"a.c": defines, "b.c": defines}))["blocks"]
+    assert [b["lines"] for b in blocks] == [10]

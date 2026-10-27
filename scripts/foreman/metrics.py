@@ -3,19 +3,7 @@ import math
 from collections.abc import Sequence
 from pathlib import Path
 
-from foreman.files import list_files, read_text
-from foreman.graph import NON_SOURCE_EXTENSIONS
-
-
-def source_texts(root: Path, ignore: Sequence[str] = ()) -> dict[str, str]:
-    texts = {}
-    for path in list_files(root, ignore):
-        if Path(path).suffix in NON_SOURCE_EXTENSIONS:
-            continue
-        text = read_text(root / path)
-        if text is not None:
-            texts[path] = text
-    return texts
+from foreman.files import source_texts
 
 
 def percentiles(values: Sequence[int]) -> dict[str, int]:

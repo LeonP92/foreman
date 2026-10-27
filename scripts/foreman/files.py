@@ -20,6 +20,45 @@ SKIP_DIRS = frozenset(
         "target",
     ]
 )
+NON_SOURCE_EXTENSIONS = frozenset(
+    [
+        ".md",
+        ".rst",
+        ".txt",
+        ".json",
+        ".jsonc",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".lock",
+        ".csv",
+        ".tsv",
+        ".xml",
+        ".html",
+        ".htm",
+        ".css",
+        ".scss",
+        ".sass",
+        ".less",
+        ".svg",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".ico",
+        ".webp",
+        ".pdf",
+        ".sql",
+        ".env",
+        ".example",
+        ".sample",
+        ".gitignore",
+        ".gitattributes",
+        ".editorconfig",
+    ]
+)
 LANGUAGES = {
     ".py": "python",
     ".ts": "javascript",
@@ -82,3 +121,14 @@ def read_text(path: Path) -> str | None:
         return data.decode("utf-8-sig").replace("\r\n", "\n")
     except UnicodeDecodeError:
         return None
+
+
+def source_texts(root: Path, ignore: Sequence[str] = ()) -> dict[str, str]:
+    texts = {}
+    for path in list_files(root, ignore):
+        if Path(path).suffix in NON_SOURCE_EXTENSIONS:
+            continue
+        text = read_text(root / path)
+        if text is not None:
+            texts[path] = text
+    return texts

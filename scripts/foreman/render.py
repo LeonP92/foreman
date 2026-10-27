@@ -66,6 +66,8 @@ def _diagram(data: dict) -> list[str]:
     errs = _shape_problems(data)
     if errs:
         return errs
+    if not data["nodes"]:
+        errs.append("nodes must not be empty")
     ids = set()
     for n in data["nodes"]:
         nid = n.get("id")
@@ -135,7 +137,7 @@ def _smell_problems(smells: list, ids: set, edges: list) -> list[str]:
                 e.get("to") if e.get("from") == hub else e.get("from")
                 for e in edges
                 if hub in (e.get("from"), e.get("to"))
-            }
+            } - {hub}
             if len(near) < HUB_MIN_NEIGHBOURS:
                 errs.append(
                     f"{name}: hub has {len(near)} neighbours in the graph; "

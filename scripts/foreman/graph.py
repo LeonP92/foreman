@@ -4,49 +4,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TypedDict
 
-from foreman.files import language, list_files, read_text
+from foreman.files import NON_SOURCE_EXTENSIONS, language, list_files, read_text
 from foreman.langs import go, go_package, javascript, make_index, python, rule
 from foreman.langs.rule import Rule
 
-NON_SOURCE_EXTENSIONS = frozenset(
-    [
-        ".md",
-        ".rst",
-        ".txt",
-        ".json",
-        ".jsonc",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".ini",
-        ".cfg",
-        ".lock",
-        ".csv",
-        ".tsv",
-        ".xml",
-        ".html",
-        ".htm",
-        ".css",
-        ".scss",
-        ".sass",
-        ".less",
-        ".svg",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".ico",
-        ".webp",
-        ".pdf",
-        ".sql",
-        ".env",
-        ".example",
-        ".sample",
-        ".gitignore",
-        ".gitattributes",
-        ".editorconfig",
-    ]
-)
 BUILTINS = {"python": python, "javascript": javascript, "go": go}
 
 

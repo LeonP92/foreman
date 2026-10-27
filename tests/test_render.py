@@ -135,3 +135,24 @@ def test_cli_render_rejects_non_object(tmp_path, capsys, content):
     data.write_text(content, encoding="utf-8")
     assert main(["render", str(data), str(tmp_path / "d.html")]) == 1
     assert capsys.readouterr().err.count("\n") == 1
+
+
+def test_rejects_empty_nodes():
+    assert "nodes must not be empty" in render.validate({**_data(), "nodes": [], "edges": []})
+
+
+def test_hub_self_edge_is_not_a_neighbour():
+    hub = {
+        "id": "h",
+        "label": "h",
+        "lane": "core",
+        "status": "changed",
+        "summary": {"added": ["x"]},
+    }
+    leaves = [
+        {"id": f"n{i}", "label": f"n{i}", "lane": "core", "status": "affected"} for i in range(4)
+    ]
+    edges = [{"from": "h", "to": f"n{i}", "kind": "call"} for i in range(4)]
+    edges.append({"from": "h", "to": "h", "kind": "call"})
+    errs = render.validate(_data([hub, *leaves], edges, [_smell("hub", ["h"])]))
+    assert any("hub has 4 neighbours" in e for e in errs)

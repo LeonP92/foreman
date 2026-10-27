@@ -3,18 +3,22 @@ from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
 
-from foreman.metrics import source_texts
+from foreman.files import source_texts
 
 DUPE_WINDOW = 8
-_COMMENT = ("#", "//")
-_NOISE = re.compile(r"^([\s{}()\[\];,]*|(import|from|using|#include|package)\b.*)$")
+# Languages where `#` starts a comment; elsewhere (C/C++ preprocessor) `#` lines are code.
+_HASH_COMMENT_EXTENSIONS = frozenset(
+    [".py", ".pyi", ".rb", ".sh", ".bash", ".zsh", ".fish", ".pl", ".r", ".tf", ".yaml", ".yml"]
+)
+_NOISE = re.compile(r"^([\s{}()\[\];,]*|(import|from|using|package)\b.*)$")
 
 
-def _normalised(text: str) -> list[tuple[int, str]]:
+def _normalised(path: str, text: str) -> list[tuple[int, str]]:
+    comments = ("#", "//") if Path(path).suffix.lower() in _HASH_COMMENT_EXTENSIONS else ("//",)
     lines = []
     for number, raw in enumerate(text.split("\n"), 1):
         line = " ".join(raw.split())
-        if line and not line.startswith(_COMMENT):
+        if line and not line.startswith(comments):
             lines.append((number, line))
     return lines
 
@@ -28,7 +32,7 @@ def _non_overlapping(locs: list[tuple[str, int]]) -> list[tuple[str, int]]:
 
 
 def find(root: Path, ignore: Sequence[str] = ()) -> dict:
-    lines = {p: _normalised(t) for p, t in source_texts(root, ignore).items()}
+    lines = {p: _normalised(p, t) for p, t in source_texts(root, ignore).items()}
     groups = defaultdict(list)
     for path, norm in lines.items():
         for k in range(len(norm) - DUPE_WINDOW + 1):
