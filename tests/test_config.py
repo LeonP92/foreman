@@ -30,6 +30,8 @@ to = "apps/**"
 except = ["apps/plugins/**"]
 [verify]
 ignore_console = ["^Event stream reconnecting"]
+[audit]
+entry_points = ["plugins/*.py"]
 [graph.ruby]
 extensions = [".rb"]
 pattern = "require '(.*)'"
@@ -65,6 +67,7 @@ def test_missing_file_gives_defaults(tmp_path):
         ("[[rules.layers]]\nfrom = 'a/**'", "rules.layers entry needs"),
         ('[graph.python]\nextensions = [".py"]', "[graph.python]: missing key"),
         ("[verify]\nignore_console = ['(']", "verify.ignore_console: '(' does not compile"),
+        ('[audit]\nentry_points = "x"', "audit.entry_points must be a list of strings"),
     ],
 )
 def test_problems(tmp_path, text, expected):

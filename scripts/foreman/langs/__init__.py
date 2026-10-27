@@ -8,6 +8,7 @@ from foreman.files import read_text
 
 @dataclass(frozen=True)
 class RepoIndex:
+    root: Path
     files: frozenset[str]
     go_module: str | None
     go_packages: frozenset[str]
@@ -21,6 +22,7 @@ def make_index(root: Path, files: list[str]) -> RepoIndex:
         r"^module\s+(\S+)", read_text(go_mod) or "", re.MULTILINE
     )
     return RepoIndex(
+        root=root,
         files=frozenset(files),
         go_module=match.group(1) if match else None,
         go_packages=frozenset(go_package(f) for f in files if f.endswith(".go")),

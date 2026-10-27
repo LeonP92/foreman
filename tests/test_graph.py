@@ -194,3 +194,20 @@ def test_files_not_in_the_listing_are_reported_missing(make_repo, capsys):
     assert graph["missing"] == ["a.py c.py", "gone.py"]
     assert [n["id"] for n in graph["nodes"]] == ["a.py", "b.py"]
     assert build(root)["missing"] == []
+
+
+def test_python_import_through_a_reexporting_package_reaches_the_submodule(make_repo):
+    root = make_repo(
+        {
+            "shop/__init__.py": "from .pricing import Price as Cost\nfrom shop.tax import rate\n",
+            "shop/pricing.py": "",
+            "shop/tax.py": "",
+            "app.py": "from shop import Cost, rate\n",
+        }
+    )
+    edges = {(e["from"], e["to"]) for e in build(root)["edges"] if e["from"] == "app.py"}
+    assert edges == {
+        ("app.py", "shop/__init__.py"),
+        ("app.py", "shop/pricing.py"),
+        ("app.py", "shop/tax.py"),
+    }

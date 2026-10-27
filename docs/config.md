@@ -27,6 +27,7 @@ is fine and means defaults). Unknown tables and keys are errors.
 | `database.env_override` | Env var that points the server at its database. Required for `command`. Optional for `file`, together with `url_template`: then `migrate`, `seed` and the server get it pointing at the server's own copy. |
 | `database.url_template` | Value for that env var, usually with `{dir}` or `{name}`. Required for `command`; optional for `file` (`sqlite:///{dir}/app.db`), set with `env_override` or not at all; for `file` it must contain `{dir}` or `{name}`, so it can never point at the real file. |
 | `verify.ignore_console` | Regexes for known console noise (a warning the app logs on every page). `browser-run` lists matching console errors under `ignored_console_errors` instead of `console_errors`, so they are kept but never count as a finding. Each must compile. |
+| `audit.entry_points` | Globs for files a framework loads by path, so nothing imports them (plugin folders, scripts a tool config names). The audit never calls them dead code and flags them at most `low` as hubs. Migrations (`**/migrations/**`, `**/alembic/versions/**`, and the `versions` folder an `alembic.ini`-style `script_location` names) are always included. |
 | `rules.docs` | Repo docs that state design rules. |
 | `rules.layers` | Edges that must not exist: `[{from = "glob", to = "glob"}]`. An optional `except = ["glob", …]` lists targets under `to` that `from` may still import. |
 | `graph.<name>` | Import rule for a language without a built-in graph (needs an import rule; setup writes one): `extensions`, `pattern` (regex, group 1 is the import), `resolve` (candidate paths using `{dir}`, `{1}`, `{1\|path}`). |
@@ -88,6 +89,9 @@ seed = "npm run seed"
 
 [verify]
 ignore_console = ["^Event stream reconnecting"]
+
+[audit]
+entry_points = ["src/plugins/*.ts"]
 
 [rules]
 docs = ["docs/architecture.md"]

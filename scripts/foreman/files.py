@@ -51,6 +51,8 @@ NON_SOURCE_EXTENSIONS = frozenset(
         ".webp",
         ".pdf",
         ".sql",
+        ".tf",
+        ".tfvars",
         ".env",
         ".example",
         ".sample",

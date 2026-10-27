@@ -15,6 +15,7 @@ def _detect(
     blocks=(),
     layers=(),
     entry_points=(),
+    facades=(),
 ):
     ids = sorted({*nodes, *(n for e in edges for n in e), *(n for c in cycles for n in c)})
     graph = {
@@ -32,7 +33,13 @@ def _detect(
         },
     }
     return smells.detect(
-        graph, history, metrics, {"blocks": list(blocks)}, list(layers), frozenset(entry_points)
+        graph,
+        history,
+        metrics,
+        {"blocks": list(blocks)},
+        list(layers),
+        frozenset(entry_points),
+        frozenset(facades),
     )
 
 
@@ -212,3 +219,59 @@ def test_same_name_modules_are_cochange():
         "cochange",
     )
     assert [s["nodes"] for s in found] == [["a/index.ts", "b/index.ts"]]
+
+
+def test_test_pairs_and_nested_test_subjects_are_not_cochange():
+    pairs = [
+        _pair(9, 1.0, "tests/test_a.py", "tests/test_b.py"),
+        _pair(9, 1.0, "shop/cart.py", "tests/unit/shop/test_cart.py"),
+        _pair(9, 1.0, "web/src/cart.ts", "web/__tests__/cart.ts"),
+        _pair(9, 1.0, "web/src/cart.ts", "web/src/cart.test.ts"),
+    ]
+    nodes = [p[k] for p in pairs for k in ("a", "b")]
+    assert _kinds(_detect(nodes, pairs=pairs), "cochange") == []
+
+
+def test_hubs_skip_tests_conftest_and_facades_and_cap_entry_points():
+    hubs = ["conftest.py", "tests/test_big.py", "pkg/__init__.py", "main.py", "mig/x.py", "h.py"]
+    edges = [(h, f"n{i}.py") for h in hubs for i in range(8)]
+    found = _kinds(
+        _detect(edges=edges, entry_points=["mig/x.py"], facades=["pkg/__init__.py"]), "hub"
+    )
+    assert sorted((s["nodes"][0], s["severity"]) for s in found) == [
+        ("h.py", "medium"),
+        ("main.py", "low"),
+        ("mig/x.py", "low"),
+    ]
+
+
+def test_path_loaded_files_are_entry_points(make_repo):
+    files = {
+        "app/migrations/0001_init.py": "",
+        "alembic/versions/a1.py": "",
+        "db/alembic.ini": "[alembic]\nscript_location = %(here)s/schema\n",
+        "db/schema/versions/b2.py": "",
+        "db/schema/env.py": "",
+        "plugins/extra.py": "",
+        "lib/helper.py": "",
+    }
+    root = make_repo(files)
+    assert smells.entry_points(root, sorted(files), ["plugins/*.py"]) == frozenset(
+        [
+            "app/migrations/0001_init.py",
+            "alembic/versions/a1.py",
+            "db/schema/versions/b2.py",
+            "plugins/extra.py",
+        ]
+    )
+
+
+def test_facades_are_init_files_holding_only_imports(make_repo):
+    files = {
+        "a/__init__.py": '"""Pkg."""\nfrom .x import X\n__all__ = ["X"]\n',
+        "b/__init__.py": "from .x import X\n\ndef helper():\n    pass\n",
+        "c/__init__.py": "",
+        "d/mod.py": "import os\n",
+    }
+    root = make_repo(files)
+    assert smells.facades(root, sorted(files)) == frozenset(["a/__init__.py", "c/__init__.py"])

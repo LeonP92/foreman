@@ -33,6 +33,8 @@ ENTRY_NAMES = frozenset(
     ["__init__.py", "__main__.py", "main.py", "cli.py", "manage.py", "conftest.py", "setup.py"]
 )
 ENTRY_GLOBS = ("index.*", "*.config.*")
+# Files a framework loads by path, so nothing imports them; `[audit] entry_points` adds more.
+PATH_LOADED_GLOBS = ("**/migrations/**", "**/alembic/versions/**")
 TEST_DIRS = frozenset(["test", "tests", "__tests__", "spec"])
 
 
@@ -136,7 +138,7 @@ def _layering(graph: dict, layers: Sequence[dict]) -> list[Found]:
     return found
 
 
-def _hubs(graph: dict) -> list[Found]:
+def _hubs(graph: dict, entry_points: frozenset[str], facades: frozenset[str]) -> list[Found]:
     near: dict[str, set[str]] = {n["id"]: set() for n in graph["nodes"]}
     for e in graph["edges"]:
         near[e["from"]].add(e["to"])
@@ -146,13 +148,16 @@ def _hubs(graph: dict) -> list[Found]:
     return [
         (
             len(v),
-            "medium",
+            "low" if n in entry_points or _is_entry(n) else "medium",
             [n],
             f"Hub: {n}",
             f"{len(v)} neighbours; repo p95 is {p95}, floor {floor}",
         )
         for n, v in near.items()
         if len(v) >= max(floor, p95)
+        and not _is_test(n)
+        and posixpath.basename(n) != "conftest.py"
+        and n not in facades
     ]
 
 
@@ -169,6 +174,7 @@ def _cochange(ids: Collection[str], graph: dict, history: dict) -> list[Found]:
             or p["conf"] < THRESHOLDS["cochange_min_conf"]
             or (a, b) in linked
             or (b, a) in linked
+            or (_is_test(p["a"]) and _is_test(p["b"]))
             or (_subject(p["a"]) == _subject(p["b"]) and _is_test(p["a"]) != _is_test(p["b"]))
         ):
             continue
@@ -268,12 +274,13 @@ def detect(
     dupes: dict,
     layers: Sequence[dict],
     entry_points: frozenset[str] = frozenset(),
+    facades: frozenset[str] = frozenset(),
 ) -> list[Smell]:
     ids = map_nodes(graph, metrics).keys()
     return [
         *_ranked("cycle", _cycles(graph)),
         *_ranked("layering", _layering(graph, layers)),
-        *_ranked("hub", _hubs(graph)),
+        *_ranked("hub", _hubs(graph, entry_points, facades)),
         *_ranked("cochange", _cochange(ids, graph, history)),
         *_ranked("hotspot", _hotspots(ids, history, metrics)),
         *_ranked("oversize", _oversize(ids, metrics)),
@@ -313,12 +320,43 @@ def _runs_as_main(text: str) -> bool:
     )
 
 
-def entry_points(root: Path, files: Sequence[str]) -> frozenset[str]:
-    """Nodes a manifest or `package main` names as a program start."""
+def _only_imports(tree: ast.Module) -> bool:
+    return all(
+        isinstance(node, ast.Import | ast.ImportFrom)
+        or (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant))
+        or (isinstance(node, ast.Assign) and ast.unparse(node.targets[0]) == "__all__")
+        for node in tree.body
+    )
+
+
+def facades(root: Path, files: Sequence[str]) -> frozenset[str]:
+    """Package `__init__.py` files whose body only re-exports (imports, `__all__`, a docstring)."""
     found = set()
     for path in files:
+        if posixpath.basename(path) == "__init__.py":
+            try:
+                if _only_imports(ast.parse(read_text(root / path) or "")):
+                    found.add(path)
+            except SyntaxError:
+                pass
+    return frozenset(found)
+
+
+def entry_points(root: Path, files: Sequence[str], globs: Sequence[str] = ()) -> frozenset[str]:
+    """Nodes a manifest or `package main` names as a program start, or a framework loads by path."""
+    found = set()
+    globs = [*PATH_LOADED_GLOBS, *globs]
+    for path in files:
         folder, name = posixpath.split(path)
-        if name == "package.json":
+        if name.endswith(".ini"):
+            # alembic.ini style: the migration scripts live in <script_location>/versions
+            location = re.search(
+                r"^script_location\s*=\s*(\S+)", read_text(root / path) or "", re.MULTILINE
+            )
+            if location:
+                where = posixpath.join(folder, location[1].removeprefix("%(here)s/"))
+                globs.append(posixpath.join(where, "versions", "*.py"))
+        elif name == "package.json":
             data = _load(root / path, json.loads)
             for target in [*_strings(data.get("main")), *_strings(data.get("bin"))]:
                 found.add(posixpath.normpath(posixpath.join(folder, target)))
@@ -341,6 +379,7 @@ def entry_points(root: Path, files: Sequence[str]) -> frozenset[str]:
                 and re.search(r"^package\s+main\b", text, re.MULTILINE)
             ):
                 found.add(go_package(path))
+    found.update(go_package(f) if f.endswith(".go") else f for f in files if is_ignored(f, globs))
     return frozenset(found) & frozenset(
         [*files, *(go_package(f) for f in files if f.endswith(".go"))]
     )

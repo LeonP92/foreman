@@ -74,13 +74,15 @@ def build(root: Path, config: dict) -> dict:
     layers = config.get("rules", {}).get("layers", [])
     g = graph.build(root, None, ignore, config["graph"])
     measured = metrics.measure(root, ignore)
+    files = list_files(root, ignore)
     found = smells.detect(
         g,
         history.analyse(root, ignore),
         measured,
         dupes.find(root, ignore),
         layers,
-        smells.entry_points(root, list_files(root, ignore)),
+        smells.entry_points(root, files, config["audit"]["entry_points"]),
+        smells.facades(root, files),
     )
     lines: Counter[str] = Counter()
     for f in measured["files"]:

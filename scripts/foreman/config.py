@@ -30,6 +30,7 @@ DEFAULTS = {
     },
     "rules": {"docs": [], "layers": []},
     "verify": {"ignore_console": []},
+    "audit": {"entry_points": []},
     "graph": {},
 }
 DB_KINDS = ("none", "file", "command")

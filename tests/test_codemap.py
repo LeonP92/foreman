@@ -263,3 +263,12 @@ def test_map_rejects_bad_layer_and_packages():
         "package a->zz: imports must be a positive integer",
         "package a->zz: kind must be one of ['cycle', 'forbidden', 'import']",
     ]
+
+
+def test_configured_entry_points_and_infra_files(make_repo):
+    root = make_repo(
+        {"plugins/extra.py": "", "lonely.py": "", "infra/main.tf": 'resource "x" "y" {}\n'}
+    )
+    data = codemap.build(root, {**DEFAULTS, "audit": {"entry_points": ["plugins/*.py"]}})
+    assert [s["nodes"] for s in data["smells"] if s["kind"] == "deadcode"] == [["lonely.py"]]
+    assert "infra/main.tf" not in {n["id"] for n in data["nodes"]}

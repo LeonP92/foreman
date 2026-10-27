@@ -1,6 +1,8 @@
 import ast
+import functools
 import posixpath
 
+from foreman.files import read_text
 from foreman.langs import RepoIndex
 
 
@@ -40,12 +42,36 @@ def _first(bases: list[str], name: str | None, index: RepoIndex) -> str | None:
     return None
 
 
+@functools.cache
+def _reexports(init: str, index: RepoIndex) -> dict[str, str]:
+    """Name -> submodule file for each `from .sub import Name` at the top of a package `__init__.py`."""
+    try:
+        tree = ast.parse(read_text(index.root / init) or "")
+    except SyntaxError:
+        return {}
+    found = {}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            bases = _bases(init, node.level, node.module, index)
+            for a in node.names:
+                target = _first(bases, a.name, index)
+                if target and target != init:
+                    found[a.asname or a.name] = target
+    return found
+
+
 def _targets(path: str, node: ast.AST, index: RepoIndex) -> list[str]:
     if isinstance(node, ast.Import):
         found = [_first(_bases(path, 0, a.name, index), None, index) for a in node.names]
     elif isinstance(node, ast.ImportFrom):
         bases = _bases(path, node.level, node.module, index)
-        found = [_first(bases, a.name, index) for a in node.names]
+        found = []
+        for a in node.names:
+            target = _first(bases, a.name, index)
+            found.append(target)
+            # one level only: the package's own re-export, not what that submodule re-exports
+            if target and target.endswith("__init__.py"):
+                found.append(_reexports(target, index).get(a.name))
     else:
         return []
     return [f for f in found if f]

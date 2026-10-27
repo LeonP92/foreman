@@ -67,6 +67,10 @@ Fill each table from what you read:
 - `[verify]` `ignore_console`: regexes for console errors the app logs on every page of
   the base branch (a known warning). Offer one only for an error you saw on every page
   you explored; leave the list empty otherwise.
+- `[audit]` `entry_points`: globs for files a framework loads by path, so nothing imports
+  them: plugin folders, scripts or handlers a tool config names by path (`alembic.ini`
+  `script_location`, task or CI configs). Migrations are covered already. Propose each glob
+  beside the loader that uses it.
 - `[rules]` the docs that state design rules, and `layers`: translate every layering rule
   the docs state ("the UI never imports the database layer") into
   `{from = "<glob>", to = "<glob>"}` pairs. A stated exception ("X must not import Y
