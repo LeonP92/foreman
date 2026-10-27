@@ -34,3 +34,18 @@ def test_skills_are_agent_neutral():
     text = all_skill_text()
     for term in ["mcp__", "${CLAUDE_", "Bash tool", "Read tool", "TodoWrite", "subagent_type"]:
         assert term not in text
+
+
+def skill_text(skill: str) -> str:
+    return (SKILLS_DIR / skill / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_change_skills_compare_against_the_merge_base():
+    for skill in ["review", "verify", "diagram"]:
+        assert "git merge-base" in skill_text(skill), skill
+
+
+def test_every_skill_forbids_touching_what_it_did_not_create():
+    rule = "Never delete or modify anything you didn't create in this run"
+    for skill in SKILLS:
+        assert rule in " ".join(skill_text(skill).split()), skill

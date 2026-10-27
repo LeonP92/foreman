@@ -16,8 +16,9 @@ The diagram is a fixed HTML template filled from one JSON file. You write only t
 - If `.foreman/config.toml` is missing or `config-check` fails, run the setup skill first.
 - Rules: never commit, push, or edit product code; never point anything at real data; pass
   credentials only through files or environment variables and never print them; clean up
-  every worktree, server (whole process tree), and temp file you create; end with
-  "Not checked:" and why.
+  every worktree, server (whole process tree), and temp file you create. Never delete or
+  modify anything you didn't create in this run — including ignored files and folders.
+  End with "Not checked:" and why.
 
 Output: `.foreman/reports/<branch>/diagram/data.json` and `diagram.html`, where `<branch>`
 has each `/` replaced by `-`.
@@ -25,7 +26,9 @@ has each `/` replaced by `-`.
 ## Steps
 
 1. **Changed files.** The branch is the one the user named, else the current one; the base
-   is `repo.base`. List files with `git diff --name-only <base>...<branch>`. If the branch
+   is `BASE = git merge-base <repo.base> <branch>`, never the tip of `repo.base` (if
+   `BASE` equals the branch tip, the branch is merged: say so and use `BASE^`). List files
+   with `git diff --name-only BASE <branch>`. If the branch
    isn't checked out, add a temporary worktree (`git worktree add --detach <temp> <branch>`,
    with `<temp>` under the system temp directory, outside the repo) rather than switching
    branches.
@@ -34,7 +37,7 @@ has each `/` replaced by `-`.
    `--root <worktree> --config <repo>/.foreman/config.toml`). It returns the changed files
    plus everything one import away, the edges between them, cycles through them, and
    `unsupported` extensions. Never add an import edge from memory.
-   - Run the same command on a worktree of the base. A cycle in both is pre-existing; say
+   - Run the same command on a worktree at `BASE`. A cycle in both is pre-existing; say
      so in `notes`. Say in `notes` which cycles are type-only (`type_only` edges).
    - Files of a language with no import rule: read their imports directly and say so in
      `notes` ("`.rb` imports read by hand; needs an import rule — setup writes one").

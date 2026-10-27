@@ -5,6 +5,9 @@ minute. Everything below it is there to drill into, never required reading.
 
 ## Top block
 
+Title it with the branch and both SHAs: `Review: <branch> (<branch sha>) vs merge-base
+<BASE sha>`, adding "already merged" when `BASE` had to step back to its first parent.
+
 - **Verdict:** `ship` or `fix N first`, where N is the number of Must fix findings (plus
   any Should fix you judge blocks the merge; say why).
 - **Findings:** counts by severity, `M must / S should / N nice`.

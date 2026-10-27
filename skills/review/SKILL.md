@@ -16,12 +16,17 @@ the change works and what needs their judgement, and drill in only if they want 
 - If `.foreman/config.toml` is missing or `config-check` fails, run the setup skill first.
 - Rules: never commit, push, or edit product code; never point anything at real data; pass
   credentials only through files or environment variables and never print them; clean up
-  every worktree, server (whole process tree), and temp file you create; end with
-  "Not checked:" and why.
+  every worktree, server (whole process tree), and temp file you create. Never delete or
+  modify anything you didn't create in this run — including ignored files and folders.
+  End with "Not checked:" and why.
 
-The branch is the one the user named, else the current one; the base is `repo.base`. You
-review what the branch has committed, against its merge-base with the base
-(`git diff <base>...<branch>`). If the branch isn't checked out, or the working tree has
+The branch is the one the user named, else the current one. You review what the branch
+has committed against `BASE = git merge-base <repo.base> <branch>`, never the tip of
+`repo.base`: a branch already merged (or squash-merged) would otherwise be compared with
+itself. If `BASE` equals the branch tip, the branch is already merged: say so in the
+report and use `BASE^` (the merge-base's first parent) as `BASE`. Diff with
+`git diff BASE <branch>`; anything run on the base (tests in step 4, verify, the diagram)
+uses a worktree at `BASE`. The report names both SHAs. If the branch isn't checked out, or the working tree has
 uncommitted changes, work in a temporary worktree of the branch (`git worktree add --detach
 <temp> <branch>`, with `<temp>` under the system temp directory, outside the repo; then
 `[commands] install`). Report:

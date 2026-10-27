@@ -16,8 +16,9 @@ says about itself, asks the user only for what is missing, and writes
   folder; every command prints JSON.
 - Rules: never commit, push, or edit product code; never point anything at real data; pass
   credentials only through files or environment variables and never print them; clean up
-  every worktree, server (whole process tree), and temp file you create; end with
-  "Not checked:" and why.
+  every worktree, server (whole process tree), and temp file you create. Never delete or
+  modify anything you didn't create in this run — including ignored files and folders.
+  End with "Not checked:" and why.
 
 ## 1. Read the repo, in this order
 
@@ -81,8 +82,8 @@ guess. Then write `.foreman/config.toml` (without any `[graph.*]` rule yet) and 
 `python3 -I <root>/scripts/run.py config-check`. Fix each problem it lists and re-run until
 it reports `"ok": true`.
 
-Make sure `.foreman/reports/` is in the repo's `.gitignore`; add the line if it is missing
-and tell the user. Don't commit: the user decides whether to commit the config (committing
+If `.foreman/reports/` isn't ignored yet, ask the user whether to add it to `.gitignore`
+or, to keep it local, `.git/info/exclude`; change neither without a yes. Don't commit: the user decides whether to commit the config (committing
 it lets teammates share it).
 
 ## 4. Languages without a built-in graph

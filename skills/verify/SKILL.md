@@ -16,8 +16,9 @@ from the base branch and one built from the change, each on its own copy of the 
 - If `.foreman/config.toml` is missing or `config-check` fails, run the setup skill first.
 - Rules: never commit, push, or edit product code; never point anything at real data; pass
   credentials only through files or environment variables and never print them; clean up
-  every worktree, server (whole process tree), and temp file you create; end with
-  "Not checked:" and why.
+  every worktree, server (whole process tree), and temp file you create. Never delete or
+  modify anything you didn't create in this run — including ignored files and folders.
+  End with "Not checked:" and why.
 
 Output: `.foreman/reports/<branch>/verify/`, where `<branch>` has each `/` replaced by
 `-`. Needs Node 20 or newer; `browser-run` installs its own Playwright.
@@ -26,7 +27,8 @@ Output: `.foreman/reports/<branch>/verify/`, where `<branch>` has each `/` repla
 
 Find the main flow, in this order, and say which source you used: what the user passed
 (a ticket, a sentence); the PR description via `gh pr view <branch>` if `gh` is installed
-and signed in; the branch's commit messages (`git log <base>..<branch>`); the diff alone.
+and signed in; the branch's commit messages (`git log BASE..<branch>`, `BASE` as in
+step 3); the diff alone.
 
 Write the list before touching a browser: the main flow plus 2–3 edge cases it implies
 (invalid input, data created before the change, a user with less access). Give each item a
@@ -56,9 +58,11 @@ variables removed; see `references/servers.md`.
 
 ## 3. Worktrees and data
 
-1. Make a temp folder under the system temp directory, outside the repo, and add two
-   worktrees there: `git worktree add --detach <temp>/base <base>` and the same for the
-   branch. Run `[commands] install` in each.
+1. The base is `BASE = git merge-base <repo.base> <branch>`, never the tip of
+   `repo.base` (an already merged branch would be compared with itself); if `BASE` equals
+   the branch tip, say so and use `BASE^`. Make a temp folder under the system temp
+   directory, outside the repo, and add two worktrees there:
+   `git worktree add --detach <temp>/base <BASE>` and the same for the branch. Run `[commands] install` in each.
 2. Build both databases with the **base** code, so "existing data" is genuinely pre-change:
    - `file`: `python3 -I <root>/scripts/run.py db-copy <repo>/<path> <temp>/base/<path>`
      (if the original doesn't exist, start empty). In the base worktree run `migrate`,
