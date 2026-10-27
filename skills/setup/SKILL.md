@@ -119,7 +119,8 @@ Only once `config-check` passes, run `python3 -I <root>/scripts/run.py graph`. P
 JavaScript/TypeScript and Go are built in. Each extension listed under `unsupported` needs
 an import rule; write one at a time:
 
-1. Read 3–5 files with that extension and note how they import each other.
+1. Read 3–5 files with that extension and note how they import each other; leave lazy-load
+   directives out of the pattern ([`references/rules.md`](references/rules.md)).
 2. Append `[graph.<language>]` to `.foreman/config.toml` with `extensions`, a `pattern`
    (regex; group 1 is the imported name) and `resolve` (candidate paths using `{dir}`,
    `{1}`, `{1|path}`).
