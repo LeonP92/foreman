@@ -100,14 +100,8 @@ CAPPED = {
             for sev, node in [("medium", "app/main.py"), ("low", "lib/util.py")]
         ),
     ],
-    "dropped": {"layering": 3, "hub": 2},
-    "dropped_by_severity": {"layering": {"high": 3}, "hub": {"low": 2}},
-    "dismissed": {"layering": 2, "hub": 1, "deadcode": 4},
-    "dismissed_by_severity": {
-        "layering": {"high": 2},
-        "hub": {"medium": 1},
-        "deadcode": {"low": 4},
-    },
+    "dropped": {"layering": {"high": 3}, "hub": {"low": 2}},
+    "dismissed": {"layering": {"high": 2}, "hub": {"medium": 1}, "deadcode": {"low": 4}},
 }
 
 # One layer of three: with the drawer open it wraps, sending z -> x round the gutter.

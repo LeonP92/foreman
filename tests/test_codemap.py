@@ -234,7 +234,7 @@ def test_map_counts_every_smell_and_what_the_cap_dropped(make_repo, tmp_path, ca
     printed = json.loads(capsys.readouterr().out)
     data = json.loads((out / "map.json").read_text(encoding="utf-8"))
     for result in (printed, data):
-        assert result["dropped"] == {"deadcode": 3}
+        assert result["dropped"] == {"deadcode": {"low": 3}}
         assert result["counts"] == {"deadcode": {"low": 23}}
         assert len(result["smells"]) == 20
     assert len(printed["triage"]) == 20 and printed["not_triaged"] == {"deadcode": 3}
@@ -274,17 +274,15 @@ def test_map_dismiss_drops_triaged_smells_and_keeps_counts(make_repo, tmp_path, 
     printed = json.loads(capsys.readouterr().out)
     data = json.loads((out / "map.json").read_text(encoding="utf-8"))
     for result in (printed, data):
-        assert result["dismissed"] == {"deadcode": 1}
-        assert result["dropped"] == {"deadcode": 3}
+        assert result["dismissed"] == {"deadcode": {"low": 1}}
+        assert result["dropped"] == {"deadcode": {"low": 3}}
         assert result["counts"] == {"deadcode": {"low": 23}}
         assert ["m00.py"] not in [s["nodes"] for s in result["smells"]]
         assert len(result["smells"]) == 19
-    assert data["dismissed_by_severity"] == {"deadcode": {"low": 1}}
-    assert data["dropped_by_severity"] == {"deadcode": {"low": 3}}
-    assert '"dismissed": {"deadcode": 1}' in (out / "map.html").read_text(encoding="utf-8")
+    assert '"dismissed": {"deadcode": {"low": 1}}' in (out / "map.html").read_text(encoding="utf-8")
     # the same triage again is a no-op
     assert main(["map", "--out", str(out), "--dismiss", path]) == 0
-    assert json.loads(capsys.readouterr().out)["dismissed"] == {"deadcode": 1}
+    assert json.loads(capsys.readouterr().out)["dismissed"] == {"deadcode": {"low": 1}}
 
 
 def test_map_dismiss_rejects_unknown_kind_or_nodes(make_repo, tmp_path, capsys):
@@ -341,7 +339,7 @@ def test_dismiss_matches_one_smell_by_title():
     entry = {"kind": "oversize", "nodes": ["a.py"], "reason": "generated"}
     data = codemap.dismiss(_oversize_map(), {"dismissed": [{**entry, "title": "Large file: a.py"}]})
     assert [s["title"] for s in data["smells"]] == ["Long function: `run` in a.py"]
-    assert data["dismissed"] == {"oversize": 1}
+    assert data["dismissed"] == {"oversize": {"low": 1}}
     with pytest.raises(ValueError, match="2 listed oversize smells match") as err:
         codemap.dismiss(_oversize_map(), {"dismissed": [entry]})
     assert "Long function: `run` in a.py" in str(err.value)

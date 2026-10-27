@@ -37,8 +37,8 @@ run the UI pass).
 2. **Map it.** Run
    `python3 -I <root>/scripts/run.py map --root <temp> --config <repo>/.foreman/config.toml --out <run>`
    (both paths absolute). It prints the map path, group and module counts, the ranked
-   smells (at most 20 per kind), `dropped` (how many more each kind had), `counts` (every
-   smell by kind and severity, before that cap), `unsupported` (file extensions that need
+   smells (at most 20 per kind), `dropped` (how many more each kind had, by severity),
+   `counts` (every smell by kind and severity, before that cap), `unsupported` (file extensions that need
    an import rule), `triage` and `not_triaged`.
 3. **Triage the candidates.** The map's smells are candidates, not findings. `triage` is
    the order to read them in: one item per file (or file pair/set) carrying all its smells,
@@ -60,7 +60,7 @@ run the UI pass).
    `nodes` and `title` as the map lists them (a `layering` smell's nodes are its `from` and
    `to` files), then run
    `python3 -I <root>/scripts/run.py map --out <run> --dismiss <run>/triage.json`. It
-   rewrites the map without them and counts them per kind under `dismissed`; fix any
+   rewrites the map without them and counts them by kind and severity under `dismissed`; fix any
    entry it rejects and re-run.
 5. **UI smoke (optional).** If the repo has a UI and `[server]` is set, see below.
 6. **Write the report** and remove the worktree.

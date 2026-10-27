@@ -462,11 +462,12 @@ function showSmells(list, button, more, gone) {
 const chips = document.getElementById("chips");
 const bySev = (counts, kind, severity) => ((counts || {})[kind] || {})[severity] || 0;
 // Smells past the per-kind cap: counted by codemap, not listed.
-const dropped = (kind, severity) => bySev(DATA.dropped_by_severity, kind, severity);
+const dropped = (kind, severity) => bySev(DATA.dropped, kind, severity);
 // Smells triage read and dismissed as false positives: counted, not listed.
-const dismissed = (kind, severity) => bySev(DATA.dismissed_by_severity, kind, severity);
-const sum = counts => Object.values(counts || {}).reduce((a, n) => a + n, 0);
-const smellTotal = DATA.smells.length + sum(DATA.dropped);
+const dismissed = (kind, severity) => bySev(DATA.dismissed, kind, severity);
+// counts are per kind and severity; the chips show totals
+const total = counts => Object.values(counts || {}).flatMap(Object.values).reduce((a, n) => a + n, 0);
+const smellTotal = DATA.smells.length + total(DATA.dropped);
 const dismissedNote = n => n ? `<span class="quiet">(+${n} dismissed)</span>` : "";
 const forbidden = DATA.edges.filter(e => e.kind === "forbidden").length;
 const unsupported = Object.entries(DATA.unsupported).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1));
@@ -474,7 +475,7 @@ const NO_RULE_TEXT = "Files in these languages are still on the map and checked 
 chips.insertAdjacentHTML("beforeend", `<span class="chip"><b>${DATA.groups.length}</b> groups</span>`
   + `<span class="chip"><b>${DATA.nodes.length.toLocaleString()}</b> modules</span>`
   + `<span class="chip"><b>${DATA.edges.length.toLocaleString()}</b> imports</span>`
-  + (smellTotal || sum(DATA.dismissed) ? `<span class="chip"><b>${smellTotal}</b> smells${dismissedNote(sum(DATA.dismissed))}</span>` : "")
+  + (smellTotal || total(DATA.dismissed) ? `<span class="chip"><b>${smellTotal}</b> smells${dismissedNote(total(DATA.dismissed))}</span>` : "")
   + forbiddenChip(forbidden)
   + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${esc(n)})`).join(", ")} — run setup to graph them</span>` : "")
   + `<span class="sep"></span>` + (DATA.smells.length ? "" : NO_SMELLS));
@@ -482,7 +483,7 @@ const chipLists = {};
 const chipList = (kind, severity) => chipLists[`${kind} ${severity}`] ||= {kind, severity, list: []};
 DATA.smells.forEach(s => chipList(s.kind, s.severity).list.push(s));
 // A kind and severity whose smells were all past the cap or dismissed still gets a chip, with nothing to show.
-[DATA.dropped_by_severity, DATA.dismissed_by_severity].forEach(counts =>
+[DATA.dropped, DATA.dismissed].forEach(counts =>
   Object.entries(counts || {}).forEach(([kind, sevs]) => Object.keys(sevs).forEach(sev => chipList(kind, sev))));
 Object.values(chipLists).sort((x, y) => bySeverity(x, y) || (x.kind < y.kind ? -1 : 1)).forEach(({kind, severity, list}) => {
   const more = dropped(kind, severity), gone = dismissed(kind, severity);
