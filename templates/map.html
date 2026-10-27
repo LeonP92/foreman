@@ -72,7 +72,6 @@ const SIZE = {group: [248, 64], module: [212, 48], stub: [180, 44]};
 const GAP = {group: [72, 44], module: [20, 14]}, PAD = 32, TOP = 58, STUB_GAP = 72;
 const STUB = "\u0000";
 const KIND = {import: "imports", cycle: "import cycle", forbidden: "forbidden layer crossing"};
-const SEV_RANK = {low: 1, medium: 2, high: 3};
 const SMELL_TEXT = {
   cycle: "Modules that import each other at runtime; none can change or load alone.",
   layering: "Imports that cross a layer boundary the rules forbid.",
@@ -96,24 +95,13 @@ const groupLines = g => g.nodes.reduce((sum, id) => sum + byId[id].lines, 0);
 const mainLang = g => { const c = {}; g.nodes.forEach(id => c[byId[id].lang] = (c[byId[id].lang] || 0) + 1);
   return Object.keys(c).sort((a, b) => c[b] - c[a])[0]; };
 const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
-const sevWord = s => `<span class="sev-word sev-${esc(s.severity)}"><span class="dot"></span>${esc(s.severity)}</span>`;
-const smellBadge = list => !list ? ""
-  : `<span class="smell-badge sev-${list[0].severity}" title="${esc(list.map(s => `${s.severity} ${s.kind}: ${s.title}`).join("\n"))}">${list.length > 1 ? list.length : "!"}</span>`;
 
 document.title = DATA.title;
 document.getElementById("title").innerHTML = fmt(DATA.title);
 document.getElementById("notes").innerHTML = fmt(DATA.notes || "");
 
 const canvas = document.getElementById("canvas"), stage = document.getElementById("stage");
-const svg = document.getElementById("g"), NS = "http://www.w3.org/2000/svg";
-const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag);
-  for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
-const defs = el("defs", {}), regions = el("g", {});
-for (const k of ["import", "cycle", "forbidden"]) {
-  const m = el("marker", {id: "a-" + k, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 11, markerHeight: 11,
-    markerUnits: "userSpaceOnUse", orient: "auto-start-reverse"}, defs);
-  el("path", {d: "M0,1 L10,5 L0,9 z", class: "ah-" + k}, m);
-}
+const defs = markerDefs(["import", "cycle", "forbidden"], 11), regions = el("g", {});
 
 // Collapses module edges onto what the view shows: groups in the package view, modules + stubs inside a group.
 function aggregate(viewOf) {
@@ -132,7 +120,7 @@ function aggregate(viewOf) {
 const packageEdges = aggregate(id => byId[id].group);
 
 let view = null, items = [], edges = [], focused = null, near = new Set(), boxW = 0;
-const cards = new Map(), pos = {};
+const cards = new Map();
 
 function itemsFor(group) {
   if (!group) return DATA.groups.map(g => ({id: g.id, kind: "group", label: g.label,
@@ -236,10 +224,7 @@ function layout(instant = false) {
   };
   region(left, gridW, gridH, view ? `${view} · ${plural(boxes.length, "module")}` : plural(boxes.length, "group"));
   if (stubs.length) region(PAD, sw, stubH, "Linked groups");
-  const from = instant ? to : {...pos};
-  animate(k => {
-    items.forEach(({id}) => { const a = from[id] || to[id], b = to[id];
-      pos[id] = {x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k}; });
+  slide(to, instant, () => {
     const pairs = {};
     edges.forEach(e => e.path.setAttribute("d", edgePath(e.a, e.b, pairs)));
     cards.forEach((card, id) => { card.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
@@ -356,9 +341,9 @@ chips.insertAdjacentHTML("beforeend", `<span class="chip"><b>${DATA.groups.lengt
   + `<span class="chip"><b>${DATA.nodes.length.toLocaleString()}</b> modules</span>`
   + `<span class="chip"><b>${DATA.edges.length.toLocaleString()}</b> imports</span>`
   + (DATA.smells.length ? `<span class="chip"><b>${DATA.smells.length}</b> smells</span>` : "")
-  + (forbidden ? `<span class="chip alert"><b>${forbidden}</b> forbidden</span>` : `<span class="quiet">No forbidden crossings</span>`)
+  + forbiddenChip(forbidden)
   + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${esc(n)})`).join(", ")} — run setup to graph them</span>` : "")
-  + `<span class="sep"></span>` + (DATA.smells.length ? "" : `<span class="quiet">No structural smells found</span>`));
+  + `<span class="sep"></span>` + (DATA.smells.length ? "" : NO_SMELLS));
 const kinds = {};
 DATA.smells.forEach(s => (kinds[s.kind] ||= []).push(s));
 Object.entries(kinds).map(([k, list]) => [k, list.sort(bySeverity)])

@@ -69,7 +69,6 @@ let W = 272;
 const BADGE = {added:"new", changed:"changed", removed:"removed", affected:"affected"};
 const KIND = {import:"imports", call:"calls / renders", impl:"implements / subclasses",
   cycle:"import cycle", forbidden:"forbidden layer crossing"};
-const SEV_RANK = {low:1, medium:2, high:3};
 const SMELL_TEXT = {
   scatter: "One concept is spread across these modules; the next change to it touches all of them.",
   twin: "Two implementations of the same rule that must change together.",
@@ -79,28 +78,19 @@ const SMELLS = DATA.smells || [];
 const byId = Object.fromEntries(DATA.nodes.map(n => [n.id, n]));
 const labelOf = id => byId[id].label;
 const smellsOf = id => SMELLS.filter(s => s.nodes.includes(id));
-const sevWord = s => `<span class="sev-word sev-${esc(s.severity)}"><span class="dot"></span>${esc(s.severity)}</span>`;
 
 document.title = DATA.title;
 document.getElementById("title").innerHTML = fmt(DATA.title);
 document.getElementById("notes").innerHTML = fmt(DATA.notes || "");
 
 const canvas = document.getElementById("canvas"), stage = document.getElementById("stage");
-const svg = document.getElementById("g"), NS = "http://www.w3.org/2000/svg";
-const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag);
-  for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
 
-const pos = {}, perLane = DATA.lanes.map(l => DATA.nodes.filter(n => n.lane === l).length);
+const perLane = DATA.lanes.map(l => DATA.nodes.filter(n => n.lane === l).length);
 const height = TOP + Math.max(...perLane) * PITCH - (PITCH - H) + 32;
 stage.style.height = height + "px";
 svg.setAttribute("height", height);
 
-const defs = el("defs", {});
-for (const k of ["import", "call", "cycle", "forbidden"]) {
-  const m = el("marker", {id:"a-"+k, viewBox:"0 0 10 10", refX:9, refY:5, markerWidth:8, markerHeight:8,
-    markerUnits:"userSpaceOnUse", orient:"auto-start-reverse"}, defs);
-  el("path", {d:"M0,1 L10,5 L0,9 z", class:"ah-"+k}, m);
-}
+const defs = markerDefs(["import", "call", "cycle", "forbidden"], 8);
 const mi = el("marker", {id:"a-impl", viewBox:"0 0 12 12", refX:11, refY:6, markerWidth:10, markerHeight:10,
   markerUnits:"userSpaceOnUse", orient:"auto"}, defs);
 el("path", {d:"M1,1 L11,6 L1,11 z", class:"ah-impl"}, mi);
@@ -154,10 +144,7 @@ function layout(instant = false) {
   const to = {};
   [...DATA.nodes].sort((a, b) => rank(a) - rank(b)).forEach(n => { const lane = DATA.lanes.indexOf(n.lane);
     to[n.id] = {x: PAD + lane * (W + GAP), y: TOP + rows[lane]++ * PITCH}; });
-  const from = instant ? to : {...pos};
-  animate(k => {
-    DATA.nodes.forEach(({id}) => { const a = from[id] || to[id], b = to[id];
-      pos[id] = {x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k}; });
+  slide(to, instant, () => {
     pairCount = {};
     edgeEls.forEach(e => e.path.setAttribute("d", edgePath(e.a, e.b)));
     twinEls.forEach(w => w.path.setAttribute("d", edgePath(...w.s.nodes)));
@@ -238,9 +225,9 @@ const forbidden = DATA.edges.filter(e => e.kind === "forbidden").length;
 chips.innerHTML = `<span class="chip"><b>${DATA.nodes.length}</b> nodes</span>`
   + `<span class="chip"><b>${DATA.edges.length}</b> edges</span>`
   + (SMELLS.length ? `<span class="chip"><b>${SMELLS.length}</b> smells</span>` : "")
-  + (forbidden ? `<span class="chip alert"><b>${forbidden}</b> forbidden</span>` : `<span class="quiet">No forbidden crossings</span>`)
+  + forbiddenChip(forbidden)
   + `<span class="sep"></span>`
-  + (SMELLS.length ? "" : `<span class="quiet">No structural smells found</span>`);
+  + (SMELLS.length ? "" : NO_SMELLS);
 [...SMELLS].sort((x, y) => SEV_RANK[y.severity] - SEV_RANK[x.severity]).forEach(s => {
   const b = document.createElement("button");
   b.type = "button";
@@ -261,11 +248,7 @@ DATA.nodes.forEach(n => {
   card.style.height = H + "px";
   card.innerHTML = `<div class="card-top"><span class="card-label" title="${esc(n.label)}">${esc(n.label)}</span>`
     + `<span class="badge">${BADGE[n.status]}</span></div><div class="card-sub">${esc(n.sub || "")}</div>`;
-  const mine = smellsOf(n.id);
-  if (mine.length) {
-    const worst = mine.reduce((w, s) => SEV_RANK[s.severity] > SEV_RANK[w.severity] ? s : w);
-    card.insertAdjacentHTML("beforeend", `<span class="smell-badge sev-${worst.severity}" title="${esc(mine.map(s => `${s.severity} ${s.kind}: ${s.title}`).join("\n"))}">${mine.length > 1 ? mine.length : "!"}</span>`);
-  }
+  card.insertAdjacentHTML("beforeend", smellBadge(smellsOf(n.id)));
   card.addEventListener("click", ev => { ev.stopPropagation(); focusNode(n); });
   card.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); focusNode(n); } });
   nodeEls.set(n.id, card);

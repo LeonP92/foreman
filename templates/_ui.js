@@ -1,8 +1,37 @@
 // Shared foreman UI: escaping, theme toggle, filter keys, drawer, focus animation.
 // Text from DATA is escaped; `backticks` become <code>.
-// Requires: #canvas, #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme.
+// Requires: #canvas, #g (the edge <svg>), #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme.
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+const SEV_RANK = {low: 1, medium: 2, high: 3};
+const sevWord = s => `<span class="sev-word sev-${esc(s.severity)}"><span class="dot"></span>${esc(s.severity)}</span>`;
+// Card corner badge: worst severity's colour, "!" or the count, every smell in the tooltip.
+function smellBadge(list) {
+  if (!list || !list.length) return "";
+  const worst = list.reduce((w, s) => SEV_RANK[s.severity] > SEV_RANK[w.severity] ? s : w);
+  return `<span class="smell-badge sev-${worst.severity}" title="${esc(list.map(s => `${s.severity} ${s.kind}: ${s.title}`).join("\n"))}">${list.length > 1 ? list.length : "!"}</span>`;
+}
+const forbiddenChip = n => n ? `<span class="chip alert"><b>${n}</b> forbidden</span>` : `<span class="quiet">No forbidden crossings</span>`;
+const NO_SMELLS = `<span class="quiet">No structural smells found</span>`;
+
+const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("g");
+function el(tag, attrs, parent = svg) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+}
+// A <defs> with a filled arrowhead `#a-<kind>` per kind, sized in canvas px so thick edges don't inflate it.
+function markerDefs(kinds, size) {
+  const defs = el("defs", {});
+  for (const k of kinds) {
+    const m = el("marker", {id: "a-" + k, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: size, markerHeight: size,
+      markerUnits: "userSpaceOnUse", orient: "auto-start-reverse"}, defs);
+    el("path", {d: "M0,1 L10,5 L0,9 z", class: "ah-" + k}, m);
+  }
+  return defs;
+}
+
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)");
 const THEME_KEY = "foreman-theme";
 
@@ -17,6 +46,18 @@ function animate(step, ms = 200) {
     if (t < 1) requestAnimationFrame(tick);
   };
   tick(start);
+}
+
+// Card positions by id. slide() eases them to `to` (or snaps when instant), calling redraw() each frame so
+// edges stay attached while cards move.
+const pos = {};
+function slide(to, instant, redraw) {
+  const from = instant ? to : {...pos};
+  animate(k => {
+    for (const id in to) { const a = from[id] || to[id], b = to[id];
+      pos[id] = {x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k}; }
+    redraw();
+  });
 }
 
 const drawer = document.getElementById("drawer");
