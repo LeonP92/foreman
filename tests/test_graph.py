@@ -154,7 +154,7 @@ def test_files_filter_keeps_edges_touching_given_paths(make_repo):
 
 
 def test_cli_commands():
-    assert cli.COMMANDS == {"graph", "graph-rule-check", "render"}
+    assert cli.COMMANDS == {"graph", "graph-rule-check", "map", "render"}
 
 
 def test_cli_graph_applies_config_ignore(make_repo, capsys):

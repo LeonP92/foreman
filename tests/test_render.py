@@ -109,7 +109,7 @@ def test_cli_render_malformed_has_no_traceback(tmp_path, capsys):
 
 
 def test_unknown_kind_is_rejected():
-    assert render.validate({"kind": "pie"}) == ["kind must be one of ['diagram'], got 'pie'"]
+    assert render.validate({"kind": "pie"}) == ["kind must be one of ['diagram', 'map'], got 'pie'"]
 
 
 def test_cli_render_writes_file(tmp_path, capsys):

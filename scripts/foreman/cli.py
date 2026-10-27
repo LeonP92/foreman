@@ -4,7 +4,7 @@ import posixpath
 import sys
 from pathlib import Path, PureWindowsPath
 
-from foreman import config, graph, render
+from foreman import codemap, config, graph, render
 from foreman.langs import rule
 
 
@@ -17,16 +17,20 @@ def _load(args) -> dict:
     return config.load_or_default(args.root / args.config)
 
 
-def _graph(args) -> tuple[dict, int]:
+def _load_with_rules(args) -> dict:
     cfg = _load(args)
-    rules = cfg["graph"]
-    for name, r in rules.items():
+    for name, r in cfg["graph"].items():
         errors = rule.validate(name, r)
         if errors:
             raise ValueError(f"rule {name!r}: {'; '.join(errors)}")
+    return cfg
+
+
+def _graph(args) -> tuple[dict, int]:
+    cfg = _load_with_rules(args)
     # PureWindowsPath accepts both separators, so `src\a.py` and `./a.py` match repo ids
     paths = args.files and [posixpath.normpath(PureWindowsPath(p).as_posix()) for p in args.files]
-    result = graph.build(args.root, paths, cfg["repo"]["ignore"], rules)
+    result = graph.build(args.root, paths, cfg["repo"]["ignore"], cfg["graph"])
     return dict(result), 0
 
 
@@ -48,6 +52,20 @@ def _render(args) -> tuple[dict, int]:
     return {"path": render.write(data, args.out).as_posix()}, 0
 
 
+def _map(args) -> tuple[dict, int]:
+    data = codemap.build(args.root, _load_with_rules(args))
+    args.out.mkdir(parents=True, exist_ok=True)
+    (args.out / "map.json").write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
+    html = render.write(data, args.out / "map.html")
+    summary = {"groups": len(data["groups"]), "nodes": len(data["nodes"])}
+    return {
+        "html": html.as_posix(),
+        **summary,
+        "smells": data["smells"],
+        "unsupported": data["unsupported"],
+    }, 0
+
+
 def _command(name, func):
     sub = _SUBPARSERS.add_parser(name)
     sub.set_defaults(func=func)
@@ -60,6 +78,7 @@ _PARSER = _Parser(prog="foreman")
 _SUBPARSERS = _PARSER.add_subparsers(dest="command", required=True)
 _command("graph", _graph).add_argument("--files", nargs="+")
 _command("graph-rule-check", _graph_rule_check).add_argument("--name", required=True)
+_command("map", _map).add_argument("--out", type=Path, required=True)
 _render_parser = _SUBPARSERS.add_parser("render")
 _render_parser.set_defaults(func=_render)
 _render_parser.add_argument("data", type=Path)

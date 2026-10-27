@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Codebase map</title>
+<style>
+  :root { --bg:#fff; --fg:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111827; --fg:#e5e7eb; --muted:#9ca3af; --line:#374151; } }
+  body { margin:0; padding:10px 16px; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  h1 { font-size:16px; margin:0 0 4px; }
+  h2 { font-size:13px; margin:16px 0 4px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .notes { font-size:12px; color:var(--muted); }
+  .sev { font-size:11px; font-weight:700; text-transform:uppercase; }
+  code { font:12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<h1 id="title"></h1>
+<p class="notes" id="notes"></p>
+<h2>Groups</h2><ul id="groups"></ul>
+<h2>Smells</h2><ul id="smells"></ul>
+<script>
+const DATA = /*__DATA__*/null;
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+const SEV = {low:"#ca8a04", medium:"#ea580c", high:"#be123c"};
+document.title = DATA.title;
+document.getElementById("title").innerHTML = fmt(DATA.title);
+document.getElementById("notes").innerHTML = fmt(DATA.notes || "");
+document.getElementById("groups").innerHTML = DATA.groups
+  .map(g => `<li>${esc(g.label)} (${g.nodes.length} modules)</li>`).join("");
+document.getElementById("smells").innerHTML = DATA.smells.length
+  ? DATA.smells.map(s => `<li><span class="sev" style="color:${SEV[s.severity]}">${esc(s.severity)}</span> ${esc(s.kind)}: ${fmt(s.title)} — ${fmt(s.evidence)}</li>`).join("")
+  : "<li>none found</li>";
+</script>
+</body>
+</html>
