@@ -184,6 +184,24 @@ def test_env_may_not_read_a_database_location(tmp_path, text):
     assert "names a database location" in problems[0]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        '[env]\nDATABASE_URL = "sqlite:///data/app.db"',
+        '[server]\nstart = "run {port}"\nenv = { DB_PATH = "data/app.db" }',
+        (
+            '[database]\nkind = "command"\ncreate = "c"\nenv_override = "SHOP_DB"\n'
+            'url_template = "db://{name}"\n[env]\nSHOP_DB = "db://shop"'
+        ),
+    ],
+)
+def test_env_may_not_set_a_database_location(tmp_path, text):
+    problems = check_toml(tmp_path, text)
+    assert len(problems) == 1
+    assert "set the database location with database.env_override + url_template" in problems[0]
+    assert check_toml(tmp_path, re.sub(r'(data/app\.db|db://shop)"', r'{dir}/x"', text)) == []
+
+
 def test_file_database_may_have_a_per_server_url(tmp_path):
     file_db = '[database]\nkind = "file"\npath = "data/app.db"\n'
     pair = 'env_override = "APP_DB"\nurl_template = "sqlite:///{dir}/app.db"\n'

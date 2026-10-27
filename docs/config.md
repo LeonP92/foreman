@@ -54,6 +54,8 @@ per-server database variable. Values in `[env]` and `[server] env` may use:
   config: export it in your shell and reference it as `${NAME}`. A reference to a
   database location (`DATABASE_URL`, `DATABASE_PATH`, `DB_URL`, `DB_PATH` or
   `env_override`) is an error: those are removed so commands only reach their own copy.
+  Setting one of them in `[env]` or `[server] env` is an error too unless the value
+  contains `{dir}` or `{name}`; use `database.env_override` + `url_template` instead.
 
 ## Example: web app with a file database
 
@@ -71,7 +73,6 @@ test = "npm test"
 test_targeted = "npm test -- {paths}"
 
 [env]
-DATABASE_URL = "sqlite:///data/app.db"
 SECRET_KEY = "${SHOP_SECRET_KEY}"
 
 [server]
@@ -87,6 +88,8 @@ kind = "file"
 path = "data/app.db"
 migrate = "npm run migrate"
 seed = "npm run seed"
+env_override = "DATABASE_URL"
+url_template = "sqlite:///{dir}/app.db"
 
 [verify]
 ignore_console = ["^Event stream reconnecting"]

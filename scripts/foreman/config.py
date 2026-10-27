@@ -103,6 +103,11 @@ def _env_problems(prefix: str, env: dict, data: dict) -> list[str]:
     problems = []
     db_vars = {*DB_LOCATION_VARS, _get(data, "database", "env_override")}
     for key, value in env.items():
+        if key in db_vars and not re.search(r"\{(dir|name)\}", value):
+            problems.append(
+                f"{prefix}.{key}: set the database location with"
+                " database.env_override + url_template"
+            )
         for dollar, name in _ENV_REFERENCE.findall(value):
             if dollar and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
                 problems.append(f"{prefix}.{key}: ${{{name}}} is not an environment variable name")
