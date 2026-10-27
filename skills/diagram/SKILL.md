@@ -46,13 +46,19 @@ has each `/` replaced by `-`.
      `notes` ("`.rb` imports read by hand; needs an import rule — setup writes one").
 3. **Call and implements edges, from reading the diff.** `call` for who calls or renders
    the new or changed code, `impl` for subclassing or satisfying an interface. Templates,
-   prompts and config are nodes too; connect them with `call` edges labelled by the
-   relation (`renders`, `loads`).
+   prompts and config are nodes too (`graph` doesn't read markup files, so add them by
+   hand); connect them with `call` edges labelled by the relation (`renders`, `loads`).
 4. **Forbidden edges.** An edge is `forbidden` only when it matches a pair in the repo's
-   `[rules] layers` and its target isn't in that pair's `except`. Name the rule and the doc it comes from in `notes`. No rule, no
-   forbidden edge.
+   `[rules] layers` and its target isn't in that pair's `except`. Name the rule and the
+   doc it comes from in `notes`. No rule, no forbidden edge.
 5. **Nodes.** Every changed module, class or interface, plus unchanged ones exactly one hop
    from a changed node. Drop everything else, including tests. Every node needs an edge.
+   If there are more than 20 unchanged one-hop neighbours, group them: one `affected`
+   node per package directory, id the directory (`core/`), label `core/ — 12 modules`,
+   and one `affected` summary line naming them ("12 modules: a.py, b.py, …"). Edges
+   into a group's members become one edge per changed node and kind, labelled with the
+   count ("3 imports"). Affected summaries may be mechanical ("imported by
+   `checkout/cart.py`").
 6. **Smells.** See below.
 7. **Render.** Write `data.json`, then run
    `python3 -I <root>/scripts/run.py render <dir>/data.json <dir>/diagram.html`. It lists

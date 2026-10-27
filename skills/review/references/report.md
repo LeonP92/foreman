@@ -8,8 +8,9 @@ minute. Everything below it is there to drill into, never required reading.
 Title it with the branch and both SHAs: `Review: <branch> (<branch sha>) vs merge-base
 <BASE sha>`, adding "already merged" when `BASE` had to step back to its first parent.
 
-- **Verdict:** `ship` or `fix N first`, where N is the number of Must fix findings (plus
-  any Should fix you judge blocks the merge; say why).
+- **Verdict:** `fix N first`, where N is exactly the number of Must fix findings, or
+  `ship` when there are none. Should fix and Nice to have never change the verdict; if
+  one would block the merge, it is a Must fix.
 - **Findings:** counts by severity, `M must / S should / N nice`.
 - **Tests:** passed / run, or which command failed.
 - **Browser:** items passing on branch / items run, and how many bugs base reproduced;

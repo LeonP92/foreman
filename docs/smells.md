@@ -56,3 +56,9 @@ places, else `low`. Duplicates get fixed in one copy and not the others.
 **deadcode** — a module nothing imports that isn't a test, a known entry point (manifest
 scripts, `main`, `cli`, a shebang, an `if __name__ == "__main__"` block, `package main`) or a
 config file. Always `low`, and only a candidate: dynamic loading can hide its users.
+
+## Known limits
+
+Templates and markup files aren't part of the import graph in v0.1, so a template that
+only gets rendered can't take part in `cycle`, `layering`, `hub` or `deadcode`. The
+diagram skill adds template nodes by hand; full template graphing is planned.

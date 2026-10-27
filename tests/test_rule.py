@@ -87,3 +87,24 @@ def test_cli_rule_check_exit_codes(make_repo, capsys):
         err = capsys.readouterr().err
         assert f"invalid rule {name}: " in err
         assert err.splitlines()[1].startswith("  ")
+
+
+def test_rule_check_and_graph_count_the_same_files(make_repo, capsys):
+    root = make_repo(
+        {
+            "lib/a.rb": "require_relative 'b'\n",
+            "lib/b.rb": "",
+            "vendor/c.rb": "require_relative 'd'\n",
+            ".foreman/config.toml": (
+                "[repo]\nignore = ['vendor/**']\n"
+                "[graph.ruby]\nextensions = ['.rb']\n"
+                "pattern = '''^require_relative\\s+'(.+?)''''\nresolve = ['{dir}/{1}.rb']\n"
+            ),
+        }
+    )
+    cli.main(["graph-rule-check", "--name", "ruby", "--root", str(root)])
+    checked = json.loads(capsys.readouterr().out)
+    cli.main(["graph", "--root", str(root)])
+    graphed = json.loads(capsys.readouterr().out)
+    assert checked["files"] == sum(n["lang"] == "ruby" for n in graphed["nodes"]) == 2
+    assert checked["matches"] == 1

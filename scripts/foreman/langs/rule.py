@@ -1,5 +1,6 @@
 import posixpath
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TypedDict
 
@@ -64,8 +65,8 @@ def imports(path: str, text: str, index: RepoIndex, rule: Rule) -> list[tuple[st
     return [(target, False) for target in found if target]
 
 
-def check(root: Path, rule: Rule) -> dict:
-    files = list_files(root)
+def check(root: Path, rule: Rule, ignore: Sequence[str] = ()) -> dict:
+    files = list_files(root, ignore)
     index = make_index(root, files)
     covered = [p for p in files if posixpath.splitext(p)[1] in rule["extensions"]]
     matches = resolved = 0

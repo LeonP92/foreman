@@ -148,3 +148,21 @@ def test_throwaway_secrets_go_to_a_user_only_file_and_are_not_printed(tmp_path):
     assert [line.split("=", 1)[0] for line in lines] == ["SHOP_SECRET_KEY", "SHOP_SIGNING_KEY"]
     assert all(line.split("=", 1)[1] not in ran.stdout for line in lines)
     assert out.stat().st_mode & 0o777 == 0o600
+
+
+def test_diagram_groups_large_neighbourhoods():
+    text = " ".join(skill_text("diagram").split())
+    for phrase in [
+        "more than 20 unchanged one-hop neighbours",
+        "per package directory",
+        "labelled with the count",
+    ]:
+        assert phrase in text, phrase
+
+
+def test_verdict_counts_only_must_fix():
+    text = " ".join(
+        (SKILLS_DIR / "review" / "references" / "report.md").read_text(encoding="utf-8").split()
+    )
+    assert "N is exactly the number of Must fix findings" in text
+    assert "never change the verdict" in text

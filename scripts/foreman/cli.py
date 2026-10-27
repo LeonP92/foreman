@@ -35,7 +35,8 @@ def _graph(args) -> tuple[dict, int]:
 
 
 def _graph_rule_check(args) -> tuple[dict, int]:
-    rules = _load(args, gate_graph=False)["graph"]
+    cfg = _load(args, gate_graph=False)
+    rules = cfg["graph"]
     if not isinstance(rules, dict):
         raise ValueError("[graph] must be a table")  # noqa: TRY004 - CLI maps bad input to ValueError
     if args.name not in rules:
@@ -44,7 +45,7 @@ def _graph_rule_check(args) -> tuple[dict, int]:
     if problems:
         lines = "".join(f"\n  {p}" for p in problems)
         raise ValueError(f"invalid rule {args.name}: {len(problems)} problem(s){lines}")
-    result = rule.check(args.root, rules[args.name])
+    result = rule.check(args.root, rules[args.name], cfg["repo"]["ignore"])
     return result, 0 if result["ok"] else 1
 
 
