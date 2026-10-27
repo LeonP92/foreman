@@ -14,20 +14,20 @@ class _Parser(argparse.ArgumentParser):
 
 
 def _load(args) -> dict:
-    return config.load_or_default(args.root / args.config)
-
-
-def _load_with_rules(args) -> dict:
-    cfg = _load(args)
-    for name, r in cfg["graph"].items():
-        errors = rule.validate(name, r)
-        if errors:
-            raise ValueError(f"rule {name!r}: {'; '.join(errors)}")
+    cfg = config.load_or_default(args.root / args.config)
+    problems = config.check(cfg)
+    if problems:
+        raise ValueError(f"invalid config: {len(problems)} problems — run config-check")
     return cfg
 
 
+def _config_check(args) -> tuple[dict, int]:
+    problems = config.check(config.load_or_default(args.path))
+    return {"ok": not problems, "problems": problems}, 1 if problems else 0
+
+
 def _graph(args) -> tuple[dict, int]:
-    cfg = _load_with_rules(args)
+    cfg = _load(args)
     # PureWindowsPath accepts both separators, so `src\a.py` and `./a.py` match repo ids
     paths = args.files and [posixpath.normpath(PureWindowsPath(p).as_posix()) for p in args.files]
     result = graph.build(args.root, paths, cfg["repo"]["ignore"], cfg["graph"])
@@ -38,9 +38,6 @@ def _graph_rule_check(args) -> tuple[dict, int]:
     rules = _load(args)["graph"]
     if args.name not in rules:
         raise ValueError(f"no rule [graph.{args.name}] in {args.config}")
-    errors = rule.validate(args.name, rules[args.name])
-    if errors:
-        raise ValueError(f"rule {args.name!r}: {'; '.join(errors)}")
     result = rule.check(args.root, rules[args.name])
     return result, 0 if result["ok"] else 1
 
@@ -53,7 +50,7 @@ def _render(args) -> tuple[dict, int]:
 
 
 def _map(args) -> tuple[dict, int]:
-    data = codemap.build(args.root, _load_with_rules(args))
+    data = codemap.build(args.root, _load(args))
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "map.json").write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
     html = render.write(data, args.out / "map.html")
@@ -79,6 +76,9 @@ _SUBPARSERS = _PARSER.add_subparsers(dest="command", required=True)
 _command("graph", _graph).add_argument("--files", nargs="+")
 _command("graph-rule-check", _graph_rule_check).add_argument("--name", required=True)
 _command("map", _map).add_argument("--out", type=Path, required=True)
+_config_parser = _SUBPARSERS.add_parser("config-check")
+_config_parser.set_defaults(func=_config_check)
+_config_parser.add_argument("--path", type=Path, default=Path(".foreman/config.toml"))
 _render_parser = _SUBPARSERS.add_parser("render")
 _render_parser.set_defaults(func=_render)
 _render_parser.add_argument("data", type=Path)
