@@ -20,8 +20,11 @@ The diagram is a fixed HTML template filled from one JSON file. You write only t
   modify anything you didn't create in this run — including ignored files and folders.
   End with "Not checked:" and why.
 
-Output: `.foreman/reports/<branch>/diagram/data.json` and `diagram.html`, where `<branch>`
-has each `/` replaced by `-`.
+Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
+`<branch>` has each `/` replaced by `-` and `<stamp>` is the UTC start time as
+`%Y%m%dT%H%M%SZ`. Never write into an earlier run's folder; when done, write the stamp
+alone to `.foreman/reports/<branch>/latest`. Output: `<run>/diagram/data.json` and `diagram.html` (inside a
+review, the review's `<run>`).
 
 ## Steps
 

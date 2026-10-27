@@ -33,8 +33,13 @@ or the working tree has uncommitted changes, work in a temporary worktree of the
 (`git worktree add --detach <temp> <branch>`, with `<temp>` under the system temp
 directory, outside the repo). Prepare every worktree you add (copy `[repo] copy` files,
 then `install`, `build`) and run every command in it through the launcher, as
-`<root>/skills/verify/references/servers.md` says. Report:
-`.foreman/reports/<branch>/review.md`, where `<branch>` has each `/` replaced by `-`.
+`<root>/skills/verify/references/servers.md` says.
+
+Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
+`<branch>` has each `/` replaced by `-` and `<stamp>` is the UTC start time as
+`%Y%m%dT%H%M%SZ`. Never write into an earlier run's folder; when done, write the stamp
+alone to `.foreman/reports/<branch>/latest`. Report: `<run>/review.md`; verify and the diagram write
+into the same `<run>`.
 
 ## Steps
 
@@ -49,9 +54,12 @@ then `install`, `build`) and run every command in it through the launcher, as
    (`docs/architecture.md`, "Layers"). A repo with no stated rules gets only checks that
    hold everywhere: no new import cycle, no secret in code, no user input reaching SQL,
    HTML or a shell unescaped, no new route without the access check its neighbours have.
-4. **Tests.** First the tests that cover the changed code (`test_targeted` with `{paths}`
-   filled in, or `test` if empty), then the full checks: `lint`, `typecheck`, `test`,
-   `e2e`, skipping empty ones. Record each command and its result. On a failure, keep the
+4. **Tests.** First the tests that cover the changed code, separately per suite: never mix
+   suites that need different setup (browser e2e tests and unit tests, say) in one
+   command. Unit-test files go to `test_targeted` with `{paths}` filled in (or `test` if
+   empty); a changed e2e test runs through `e2e`. Then the full checks: `lint`,
+   `typecheck`, `test`, `e2e`, skipping empty ones. Record each command and its result,
+   one row per command. On a failure, keep the
    lines that show why, and run that test on the base too: a failure on both is
    pre-existing; report it, but not as this change's fault.
 5. **Verify.** If the diff touches anything a user sees (templates, components, styles,

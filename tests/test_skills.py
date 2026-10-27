@@ -252,3 +252,28 @@ def test_diagram_decides_hubs_before_grouping():
         "ungrouped neighbour count",
     ]:
         assert phrase in text, phrase
+
+
+def test_every_change_run_keeps_its_own_report_folder():
+    for skill in ["review", "verify", "diagram"]:
+        text = " ".join(skill_text(skill).split())
+        for phrase in [
+            "`<run> = .foreman/reports/<branch>/<stamp>/`",
+            "`%Y%m%dT%H%M%SZ`",
+            "Never write into an earlier run's folder",
+            "`.foreman/reports/<branch>/latest`",
+        ]:
+            assert phrase in text, (skill, phrase)
+    assert ".foreman/reports/<branch>/verify" not in all_skill_text()
+
+
+def test_review_runs_targeted_tests_per_suite():
+    text = " ".join(skill_text("review").split())
+    assert "separately per suite" in text
+    assert "one row per command" in text
+
+
+def test_exploration_output_is_kept():
+    specs = (SKILLS_DIR / "verify" / "references" / "specs.md").read_text(encoding="utf-8")
+    assert "--out <run>/explore" in specs
+    assert "`<run>/explore/`" in skill_text("verify")

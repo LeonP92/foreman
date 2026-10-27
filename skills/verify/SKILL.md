@@ -20,8 +20,11 @@ from the base branch and one built from the change, each on its own copy of the 
   modify anything you didn't create in this run — including ignored files and folders.
   End with "Not checked:" and why.
 
-Output: `.foreman/reports/<branch>/verify/`, where `<branch>` has each `/` replaced by
-`-`. Needs Node 20 or newer; `browser-run` installs its own Playwright.
+Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
+`<branch>` has each `/` replaced by `-` and `<stamp>` is the UTC start time as
+`%Y%m%dT%H%M%SZ`. Never write into an earlier run's folder; when done, write the stamp
+alone to `.foreman/reports/<branch>/latest`. Output: `<run>/verify/` (inside a review, the review's
+`<run>`). Needs Node 20 or newer; `browser-run` installs its own Playwright.
 
 ## 1. Test list first
 
@@ -83,8 +86,8 @@ server's last output lines and stop.
 
 ## 5. One Playwright spec
 
-Read `references/specs.md` first: how to explore the app safely, and the pitfalls that
-make a base/branch comparison lie. Write one spec, for example `.foreman/reports/<branch>/verify/verify.spec.mjs`:
+Read `references/specs.md` first: how to explore the app safely (output kept in
+`<run>/explore/`), and the pitfalls that make a base/branch comparison lie. Write one spec, for example `<run>/verify/verify.spec.mjs`:
 
 ```js
 import { test, expect } from "./foreman-fixtures.mjs";
@@ -113,7 +116,7 @@ test("apply-coupon", async ({ page }) => {
   says so).
 
 Run it:
-`python3 -I <root>/scripts/run.py browser-run --spec <spec> --out .foreman/reports/<branch>/verify --base http://127.0.0.1:<base port> --branch http://127.0.0.1:<branch port>`.
+`python3 -I <root>/scripts/run.py browser-run --spec <spec> --out <run>/verify --base http://127.0.0.1:<base port> --branch http://127.0.0.1:<branch port>`.
 Set any credential the spec reads (the `[login]` password) in that command's environment,
 loaded from a file; never type it into the spec, the command line or the transcript.
 

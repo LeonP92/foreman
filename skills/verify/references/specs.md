@@ -3,9 +3,9 @@
 ## Exploring first
 
 To learn the running app (labels, routes, what a page shows) before writing the final
-spec, write a throwaway spec (`explore.spec.mjs` in the same output folder) and run it
-through `browser-run` like the real one; its screenshots and results stay in the reports
-folder. If you use a browser tool instead, run it from a folder outside the repo and
+spec, write a throwaway spec (`<run>/explore/explore.spec.mjs`) and run it through
+`browser-run` like the real one, with `--out <run>/explore`. Its screenshots and results
+are kept there, apart from the real run's, for the report to point at. If you use a browser tool instead, run it from a folder outside the repo and
 afterwards remove only the files it created there.
 
 A console error that shows on every base page you explored (say, a page that streams

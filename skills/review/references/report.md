@@ -37,7 +37,8 @@ Design findings add **Rule:** the rule and where it is written.
 
 ## Below the findings
 
-1. **Tests:** a table of command → result, with the failure lines of anything that failed.
+1. **Tests:** a table of command → result, one row per command (targeted runs per suite
+   included), with the failure lines of anything that failed.
 2. **Browser:** the test list and where it came from, the data set up, a table of
    item → base / branch, and the output folder.
 3. **Diagram:** the path, and the smells with their evidence.
@@ -50,7 +51,7 @@ Design findings add **Rule:** the rule and where it is written.
 
 Verdict: fix 1 first · 1 must / 1 should / 0 nice · tests 412/412 ·
 browser 2/2 pass on branch (base reproduced 1 bug) · 1 smell ·
-diagram: .foreman/reports/feature-coupon-limits/diagram/diagram.html
+diagram: .foreman/reports/feature-coupon-limits/20261027T091500Z/diagram/diagram.html
 
 Coupons can now carry a usage limit. Checkout counts uses and refuses a coupon once
 the limit is reached; the admin form gains a "Max uses" field.
@@ -84,7 +85,7 @@ the limit is reached; the admin form gains a "Max uses" field.
 | expired-coupon | pass | pass |
 
 ### Diagram
-.foreman/reports/feature-coupon-limits/diagram/diagram.html
+.foreman/reports/feature-coupon-limits/20261027T091500Z/diagram/diagram.html
 - twin (medium): the limit check in `checkout/coupons.py` and the SQL in
   `reports/usage.sql`; no parity test.
 
