@@ -30,7 +30,7 @@ is fine and means defaults). Unknown tables and keys are errors.
 `create`, `migrate`, `seed`, `drop` and `url_template` may use two placeholders, filled in
 per server:
 
-- `{dir}`: the server's own directory, for file paths (`sqlite:///{dir}/app.db`).
+- `{dir}`: the server's own directory, for file paths (`sqlite:///{dir}/app.db`). Unrelated to `{dir}` in `[graph.*] resolve`, which is the importing file's folder.
 - `{name}`: a unique database name, `foreman_<base|branch>_<6 lowercase hex>` (letters,
   digits and underscores only), for database servers (`postgresql:///{name}`).
 

@@ -41,16 +41,9 @@ run the UI pass).
 
 ## Smells the map finds
 
-| Kind | Means |
-|---|---|
-| `cycle` | modules that import each other, directly or round a loop |
-| `layering` | an import a `[rules] layers` pair forbids |
-| `hub` | a module with far more importers or imports than the repo's norm |
-| `cochange` | files that usually change in the same commits but don't import each other: hidden coupling |
-| `hotspot` | a large file that changes often |
-| `oversize` | a file or function far larger than the repo's norm |
-| `duplicate` | near-identical blocks in different files |
-| `deadcode` | a module nothing imports that isn't an entry point; a candidate only, since dynamic loading can hide its users |
+Cycles, layering breaks, hubs, hidden coupling, hotspots, oversized files, duplication and
+possibly dead code. Each kind's rule, threshold and severity are in
+[`docs/smells.md`](../../docs/smells.md).
 
 ## UI smoke
 

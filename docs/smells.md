@@ -1,0 +1,57 @@
+# Smells
+
+foreman reports two families. Diagram smells are judged by the agent for one change and
+must carry evidence. Audit smells are computed by `python3 scripts/run.py map` from the
+import graph, git history, file sizes and duplicate scan. Audit thresholds are relative to
+the repo's own spread (percentiles) with a fixed floor, so a small repo isn't flagged for
+being small. Each audit kind lists at most 20 smells, ranked by severity then size.
+
+## Diagram smells
+
+Severity is the agent's call: `high` when it already caused or will likely cause a bug,
+`medium` when the next change here pays for it, `low` when inherent or already guarded.
+
+**scatter** — one concept (a field, a rule, a flag) had to change in 3 or more modules.
+Spread like this is where a change silently misses a spot.
+
+**twin** — exactly 2 implementations of one rule that must change together, such as server
+and client validation. Twins drift; the evidence says whether a parity test guards them.
+
+**hub** — one changed node with at least 5 neighbours (`HUB_MIN_NEIGHBOURS`) in the graph;
+`render` rejects fewer. Diagram `hub` is measured within the change; audit `hub` below is
+measured against the whole repo, so the two can disagree.
+
+## Audit smells
+
+**cycle** — modules that import each other at runtime. Severity `high` when the loop spans
+two or more top-level directories, otherwise `medium`. Cycles make modules impossible to
+test, load or change alone.
+
+**layering** — an import that a `[rules] layers` pair forbids (for example `src/ui/**`
+importing `src/db/**`). Always `high`: it breaks a boundary the team chose.
+
+**hub** — a module whose neighbours (importers plus imports) number at least
+`max(hub_floor = 8, repo p95)`. Always `medium`. A change to a hub reaches everything around
+it, so it is the riskiest place to edit.
+
+**cochange** — two files that changed in the same commits but don't import each other:
+hidden coupling. Needs at least `cochange_min_both = 5` shared commits and confidence of at
+least `cochange_min_conf = 0.6`; `medium` from `cochange_medium_conf = 0.8`, else `low`. A
+test and the file it tests are ignored.
+
+**hotspot** — a large file that changes often. Changed in at least
+`max(hotspot_min_churn = 5, repo p90)` commits and at least the repo's p75 in lines. Always
+`medium`. Files that are both big and busy hold most of a repo's defects.
+
+**oversize** — a file or function far above the repo's norm, always `low`. A file must exceed
+the repo p95 and be at least `oversize_file_median_ratio = 3` times the median and at least
+`oversize_file_floor = 300` lines. A function must exceed the repo p95 and be at least
+`oversize_function_floor = 60` lines (function sizes are measured for Python only).
+
+**duplicate** — near-identical blocks in different places. `medium` when a block is at least
+`duplicate_medium_lines = 20` lines or repeated in at least `duplicate_medium_locations = 3`
+places, else `low`. Duplicates get fixed in one copy and not the others.
+
+**deadcode** — a module nothing imports that isn't a test, a known entry point (manifest
+scripts, `main`, `cli`, a shebang, an `if __name__ == "__main__"` block, `package main`) or a
+config file. Always `low`, and only a candidate: dynamic loading can hide its users.
