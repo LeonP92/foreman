@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
 
+from foreman.env import lock
 from foreman.render import TEMPLATES
 
 PLAYWRIGHT_VERSION = "1.64.1"
@@ -92,20 +93,23 @@ def ensure() -> Path:
     package = cache / "node_modules" / "@playwright" / "test"
     if _installed_version(package / "package.json") != PLAYWRIGHT_VERSION:
         cache.mkdir(parents=True, exist_ok=True)
-        # --prefix stops npm from walking up to an ancestor project. npm may be a .cmd shim run by
-        # cmd.exe on Windows; that is safe here because every argument is fixed.
-        _check(
-            [
-                _tool("npm"),
-                "install",
-                "--prefix",
-                str(cache),
-                "--no-audit",
-                "--no-fund",
-                f"@playwright/test@{PLAYWRIGHT_VERSION}",
-            ],
-            INSTALL_TIMEOUT,
-        )
+        with lock(cache / "install.lock", INSTALL_TIMEOUT):
+            # a parallel run may have installed it while this one waited
+            if _installed_version(package / "package.json") != PLAYWRIGHT_VERSION:
+                # --prefix stops npm from walking up to an ancestor project. npm may be a .cmd
+                # shim run by cmd.exe on Windows; safe here because every argument is fixed.
+                _check(
+                    [
+                        _tool("npm"),
+                        "install",
+                        "--prefix",
+                        str(cache),
+                        "--no-audit",
+                        "--no-fund",
+                        f"@playwright/test@{PLAYWRIGHT_VERSION}",
+                    ],
+                    INSTALL_TIMEOUT,
+                )
     cli = package / "cli.js"
     _check(
         [node, str(cli), "install", "chromium", *(["--with-deps"] if os.environ.get("CI") else [])],

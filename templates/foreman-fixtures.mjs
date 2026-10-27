@@ -26,7 +26,12 @@ export const test = base.extend({
     const consoleErrors = [], badResponses = [];
     page.on("console", m => { if (m.type() === "error") consoleErrors.push(m.text()); });
     page.on("pageerror", e => consoleErrors.push(String(e)));
-    page.on("response", r => { if (r.status() >= 400) badResponses.push(`${r.status()} ${r.url()}`); });
+    // origin + path only: a query string or fragment may carry a token
+    page.on("response", r => {
+      if (r.status() < 400) return;
+      const url = new URL(r.url());
+      badResponses.push(`${r.status()} ${r.request().method()} ${url.origin}${url.pathname}`);
+    });
     await use(page);
     // Evidence first: a crashed or closed page must not lose it.
     await testInfo.attach("foreman", {

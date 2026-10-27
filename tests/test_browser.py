@@ -1,5 +1,7 @@
 import json
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -156,6 +158,34 @@ def test_corrupt_cached_package_is_reinstalled(tmp_path, monkeypatch):
     assert [c[:2] for c in calls][1] == ["npm", "install"]
 
 
+def test_install_waits_for_a_parallel_install(tmp_path, monkeypatch):
+    package = tmp_path / "node_modules" / "@playwright" / "test"
+    package.mkdir(parents=True)
+    lock = tmp_path / "install.lock"
+    lock.touch()
+    calls = []
+    monkeypatch.setattr(browser, "cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(browser.shutil, "which", lambda name: name)
+    monkeypatch.setattr(
+        browser.subprocess,
+        "run",
+        lambda args, **kw: (
+            calls.append(args) or subprocess.CompletedProcess(args, 0, "v24.1.0", "")
+        ),
+    )
+
+    def other_run_finishes():
+        time.sleep(0.3)
+        version = {"version": browser.PLAYWRIGHT_VERSION}
+        (package / "package.json").write_text(json.dumps(version), encoding="utf-8")
+        lock.unlink()
+
+    threading.Thread(target=other_run_finishes).start()
+    browser.ensure()
+    assert [c[1] for c in calls] == ["--version", str(package / "cli.js")]
+    assert not lock.exists()
+
+
 def test_timeout_is_a_one_line_os_error(monkeypatch):
     def hang(args, **kw):
         raise subprocess.TimeoutExpired(args, kw["timeout"])
@@ -171,9 +201,11 @@ def test_back_to_back_run_names_differ():
 
 @pytest.mark.browser
 def test_run_base_vs_branch(tmp_path, serve):
-    r = run(SPEC, tmp_path, serve(SITE / "base"), serve(SITE / "branch"))
+    base_url = serve(SITE / "base")
+    r = run(SPEC, tmp_path, base_url, serve(SITE / "branch"))
     assert {t["project"]: t["status"] for t in r["tests"]} == {"base": "failed", "branch": "passed"}
-    assert any("404" in b for t in r["tests"] if t["project"] == "base" for b in t["bad_responses"])
+    base = next(t for t in r["tests"] if t["project"] == "base")
+    assert base["bad_responses"] == [f"404 GET {base_url}/missing.js"]
     assert (tmp_path / "total-shows-3-branch.png").exists()
     assert r["spec"] == (tmp_path / "total.spec.mjs").as_posix()
     assert (tmp_path / "total.spec.mjs").exists()
