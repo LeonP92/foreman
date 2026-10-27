@@ -49,8 +49,10 @@ test("problems only hides import edges", async ({ page }) => {
   await page.goto("/layered.html");
   await page.locator("#edges").click();
   await page.locator('[data-set="problems"]').click();
-  await expect(page.locator("path.edge.import").first()).toBeHidden();
-  await expect(page.locator("path.edge.forbidden")).toBeVisible();
+  // display, not visibility: a straight vertical edge has an empty bounding box
+  await expect(page.locator("path.edge.import")).toHaveCSS("display", "none");
+  await expect(page.locator("path.edge.forbidden")).not.toHaveCSS("display", "none");
+  await expect(page.locator("path.edge.cycle")).not.toHaveCSS("display", "none");
 });
 
 test("map neighbourhood puts dependents left and dependencies right", async ({ page }) => {

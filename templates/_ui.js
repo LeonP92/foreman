@@ -39,13 +39,17 @@ function markerDefs(kinds, size) {
   return defs;
 }
 // Edge emphasis: state(e) is "out" / "in" (lit, coloured by direction), "on", "dim" or "" for each
-// {path, kind, text?} (text: the edge's label, if any). Direction colours bring up the on-canvas key.
+// {path, kind, text?} (text: the edge's label, if any). Problem edges keep their own colour when lit.
+// Direction colours bring up the on-canvas key.
 function markEdges(list, state) {
   let directed = false;
   for (const e of list) {
     if (!e.path) continue;  // never drawn (a map opened as a matrix)
-    const st = state(e), dir = st === "out" || st === "in", on = dir || st === "on";
-    directed ||= dir;
+    let st = state(e);
+    const towardsFocus = st === "out" || st === "in";
+    directed ||= towardsFocus;
+    if (towardsFocus && PROBLEM_KINDS.includes(e.kind)) st = "on";
+    const dir = st === "out" || st === "in", on = dir || st === "on";
     for (const node of [e.path, e.text]) if (node) { node.classList.toggle("on", on); node.classList.toggle("dim", st === "dim"); }
     e.path.classList.toggle("out", st === "out");
     e.path.classList.toggle("in", st === "in");
@@ -98,7 +102,8 @@ const hideEgoBar = () => { egoBar.hidden = true; document.body.classList.remove(
 
 const dirKey = Object.assign(document.createElement("div"), {className: "dir-key"});
 dirKey.innerHTML = `<span><svg width="26" height="8"><line class="edge on out" x1="0" y1="4" x2="26" y2="4"/></svg>outgoing</span>`
-  + `<span><svg width="26" height="8"><line class="edge on in" x1="0" y1="4" x2="26" y2="4"/></svg>incoming</span>`;
+  + `<span><svg width="26" height="8"><line class="edge on in" x1="0" y1="4" x2="26" y2="4"/></svg>incoming</span>`
+  + `<span><svg width="26" height="8"><line class="edge on forbidden" x1="0" y1="4" x2="26" y2="4"/></svg>problems keep their colour</span>`;
 document.querySelector(".view").appendChild(dirKey);
 
 // Floating tooltip for things a native title can't serve (keyboard focus): showTip(element, text) / hideTip().

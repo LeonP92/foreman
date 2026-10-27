@@ -19,14 +19,15 @@ MAP = {
         {"id": "app/main.py", "label": "main.py", "group": "app", "lang": "python", "lines": 20},
         {"id": "lib/util.py", "label": "util.py", "group": "lib", "lang": "python", "lines": 8},
     ],
-    "edges": [{"from": "app/main.py", "to": "lib/util.py", "kind": "import", "dir": "down"}],
+    "edges": [{"from": "app/main.py", "to": "lib/util.py", "kind": "import"}],
+    "packages": [{"from": "app", "to": "lib", "imports": 1, "kind": "import", "dir": "down"}],
     "smells": [],
     "unsupported": {},
 }
 
 
 def _map(groups: list[tuple[str, int]], edges: list[tuple[str, str, str, str]]) -> dict:
-    """One module per group; edges as (from group, to group, kind, dir)."""
+    """One module per group, so each edge is its group pair: (from group, to group, kind, dir)."""
     return {
         **MAP,
         "groups": [
@@ -37,8 +38,10 @@ def _map(groups: list[tuple[str, int]], edges: list[tuple[str, str, str, str]]) 
             for g, _ in groups
         ],
         "edges": [
-            {"from": f"{a}/m.py", "to": f"{b}/m.py", "kind": kind, "dir": d}
-            for a, b, kind, d in edges
+            {"from": f"{a}/m.py", "to": f"{b}/m.py", "kind": kind} for a, b, kind, _ in edges
+        ],
+        "packages": [
+            {"from": a, "to": b, "imports": 1, "kind": kind, "dir": d} for a, b, kind, d in edges
         ],
     }
 
@@ -52,7 +55,8 @@ LAYERED = _map(
     [("app", 0), ("svc", 1), ("core", 2)],
     [
         ("app", "svc", "import", "down"),
-        ("svc", "core", "import", "down"),
+        # a module cycle inside a downward pair: still a problem
+        ("svc", "core", "cycle", "down"),
         ("core", "app", "forbidden", "up"),
     ],
 )

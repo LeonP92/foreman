@@ -180,6 +180,7 @@ def _map_data():
             {"id": "src/a.py", "label": "a.py", "group": "src", "lang": "python", "lines": 3}
         ],
         "edges": [],
+        "packages": [],
         "smells": [],
         "unsupported": {".rb": 2},
     }

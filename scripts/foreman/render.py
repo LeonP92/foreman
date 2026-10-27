@@ -16,7 +16,8 @@ HUB_MIN_NEIGHBOURS = 5
 _MAP_STRING_FIELDS = {
     "groups": ("id", "label"),
     "nodes": ("id", "label", "group", "lang"),
-    "edges": ("from", "to", "kind", "dir"),
+    "edges": ("from", "to", "kind"),
+    "packages": ("from", "to", "kind", "dir"),
     "smells": ("kind", "severity", "title", "evidence"),
 }
 MAP_EDGE_KINDS = {"import", "cycle", "forbidden"}
@@ -214,7 +215,16 @@ def _map(data: dict) -> list[str]:
             errs.append(f"{name}: unknown node")
         if e["kind"] not in MAP_EDGE_KINDS:
             errs.append(f"{name}: kind must be one of {sorted(MAP_EDGE_KINDS)}")
-        if e["dir"] not in MAP_EDGE_DIRS:
+    group_ids = {g["id"] for g in data["groups"]}
+    for pk in data["packages"]:
+        name = f"package {pk['from']}->{pk['to']}"
+        if pk["from"] not in group_ids or pk["to"] not in group_ids or pk["from"] == pk["to"]:
+            errs.append(f"{name}: unknown group")
+        if type(pk.get("imports")) is not int or pk["imports"] < 1:
+            errs.append(f"{name}: imports must be a positive integer")
+        if pk["kind"] not in MAP_EDGE_KINDS:
+            errs.append(f"{name}: kind must be one of {sorted(MAP_EDGE_KINDS)}")
+        if pk["dir"] not in MAP_EDGE_DIRS:
             errs.append(f"{name}: dir must be one of {sorted(MAP_EDGE_DIRS)}")
     for i, sm in enumerate(data["smells"]):
         name = f"smell #{i} ({sm['title']!r})"

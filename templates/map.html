@@ -18,7 +18,7 @@
 .layer-label { fill: var(--ink-muted); font: 600 10px var(--sans); letter-spacing: .08em; }
 .edge-label { font: 600 11px var(--sans); text-anchor: middle; paint-order: stroke; stroke: var(--surface-1);
   stroke-width: 4px; stroke-linejoin: round; transition: opacity var(--ease); }
-.edge-label.cycle { fill: var(--cycle); } .edge-label.forbidden { fill: var(--forbidden); }
+.edge-label.import { fill: var(--ink-2); } .edge-label.cycle { fill: var(--cycle); } .edge-label.forbidden { fill: var(--forbidden); }
 .edge-label.dim { opacity: .08; }
 .seg { display: inline-flex; height: 30px; border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; background: none; padding: 0 12px; color: var(--ink-2); cursor: pointer; font-size: 12.5px; }
@@ -93,7 +93,7 @@ button.cell:hover { box-shadow: inset 0 0 0 1px var(--ink-muted); }
     <li><span><span class="dot sev-medium"></span></span>medium</li>
     <li><span><span class="dot sev-high"></span></span>high</li>
   </ul>
-  <p>Groups are ordered by dependency: a group sits above the groups it imports, so imports flow down. Anything flowing up breaks that order and is labelled. Click a box to focus it and its neighbours. Double-click or Enter opens a group; inside, dashed stubs stand for the other groups and open them. Esc or a click on empty space clears.</p>
+  <p>Groups are ordered by dependency: a group sits above the groups it imports, so imports flow down. Anything flowing up breaks that order and is labelled. Click a box to focus it and its neighbours. While one is focused, what it imports is drawn in blue and what imports it in grey; cycles, forbidden crossings and twins keep their colour. Double-click or Enter opens a group; inside, dashed stubs stand for the other groups and open them. Esc or a click on empty space clears.</p>
 </div>
 <div class="view">
   <main class="canvas" id="canvas"><div class="stage" id="stage"><svg id="g"></svg></div></main>
@@ -161,16 +161,15 @@ function aggregate(viewOf) {
     const a = viewOf(e.from), b = viewOf(e.to);
     if (a === b || (a[0] === STUB && b[0] === STUB)) continue;
     const key = a + "\n" + b;
-    if (!agg.has(key)) agg.set(key, {a, b, count: 0, kinds: {}, up: e.dir === "up"});
+    if (!agg.has(key)) agg.set(key, {a, b, count: 0, kinds: {}});
     const x = agg.get(key);
     x.count++;
     x.kinds[e.kind] = (x.kinds[e.kind] || 0) + 1;
   }
   return [...agg.values()].map(x => ({...x, kind: x.kinds.forbidden ? "forbidden" : x.kinds.cycle ? "cycle" : "import"}));
 }
-// Between groups, anything flowing up that isn't forbidden is a back edge inside a group cycle.
-const packageEdges = aggregate(id => byId[id].group)
-  .map(e => ({...e, kind: e.kinds.forbidden ? "forbidden" : e.up ? "cycle" : "import"}));
+// Classified by codemap: the most severe kind behind each group pair, and whether it flows up.
+const packageEdges = DATA.packages.map(p => ({a: p.from, b: p.to, count: p.imports, kind: p.kind, up: p.dir === "up"}));
 
 // mode: how the package view shows (graph or matrix); dense maps start as a matrix.
 let mode = localStorage.getItem(MODE_KEY) || (packageEdges.length > MATRIX_EDGES ? "matrix" : "graph");
@@ -248,9 +247,10 @@ function render(group, keepEgo = false) {
     e.path = el("path", {class: `edge ${e.kind}`, "marker-end": `url(#a-${e.kind})`});
     e.path.style.strokeWidth = Math.min(4.5, 1.5 + .75 * Math.log2(e.count));
     el("title", {}, e.path).textContent = `${nameOf(e.a)} → ${nameOf(e.b)} · ${KIND[e.kind]} · ${plural(e.count, "import")}`;
-    // Only the package view's upward edges carry a permanent label; counts otherwise live in tooltips and the drawer.
-    e.text = !view && e.kind !== "import" ? el("text", {class: `edge-label ${e.kind}`}) : null;
-    if (e.text) e.text.textContent = `${nameOf(e.a)} → ${nameOf(e.b)} · ${plural(e.count, "import")} · ${e.kind === "cycle" ? "cycle" : "forbidden"}`;
+    // Only the package view's problems and upward edges carry a permanent label; counts otherwise live in
+    // tooltips and the drawer.
+    e.text = !view && (e.kind !== "import" || e.up) ? el("text", {class: `edge-label ${e.kind}`}) : null;
+    if (e.text) e.text.textContent = `${nameOf(e.a)} → ${nameOf(e.b)} · ${plural(e.count, "import")} · ${e.kind === "import" ? "up" : e.kind}`;
   });
   stage.className = edges.length > 40 ? "stage dense" : "stage";
   renderCrumbs();
@@ -595,10 +595,9 @@ initUI({
     else showModule(groupById[it.id].nodes.find(id => hit(id, q)));
   },
 });
-// Menu counts are module imports, sorted the way the package view shows them.
+// Menu counts are module imports under the kind of the group pair they belong to.
 const kindCounts = {};
-DATA.edges.forEach(e => { const k = e.kind === "forbidden" ? "forbidden" : e.kind === "cycle" || e.dir === "up" ? "cycle" : "import";
-  kindCounts[k] = (kindCounts[k] || 0) + 1; });
+packageEdges.forEach(e => kindCounts[e.kind] = (kindCounts[e.kind] || 0) + e.count);
 edgeMenu(kindCounts);
 render(null);
 canvas.addEventListener("click", clearHighlight);

@@ -44,6 +44,31 @@ def _layers(group_ids: list[str], links: set[tuple[str, str]]) -> dict[str, int]
     return {g: top - height[comp[g]] for g in group_ids}
 
 
+# Package edge kinds, least to most severe.
+SEVERITY = ("import", "cycle", "forbidden")
+
+
+def _packages(edges: list[dict], kinds: list[str], group_of: dict, rank: dict) -> list[dict]:
+    """Group pairs: import count, the most severe kind behind them, direction in (layer, id) order."""
+    pairs: dict[tuple[str, str], dict] = {}
+    for e, kind in zip(edges, kinds, strict=True):
+        a, b = group_of[e["from"]], group_of[e["to"]]
+        if a == b:
+            continue
+        up = rank[a] > rank[b]
+        # Only runtime, allowed imports shape the order, so one of them flowing up is a back edge
+        # inside a group cycle.
+        if kind == "import" and up and not e["type_only"]:
+            kind = "cycle"
+        pair = pairs.setdefault(
+            (a, b),
+            {"from": a, "to": b, "imports": 0, "kind": "import", "dir": "up" if up else "down"},
+        )
+        pair["imports"] += 1
+        pair["kind"] = max(pair["kind"], kind, key=SEVERITY.index)
+    return [pairs[k] for k in sorted(pairs)]
+
+
 def build(root: Path, config: dict) -> dict:
     ignore = config["repo"]["ignore"]
     layers = config.get("rules", {}).get("layers", [])
@@ -70,13 +95,16 @@ def build(root: Path, config: dict) -> dict:
     }
     group_ids = sorted(set(group_of.values()))
     kinds = [_edge_kind(e, cyclic, layers) for e in g["edges"]]
-    # Forbidden edges break the order by definition, so they don't shape it.
+    # Forbidden edges break the order by definition and type-only ones don't load at runtime
+    # (smells ignore their cycles too), so neither shapes it.
     layer = _layers(
         group_ids,
         {
             (group_of[e["from"]], group_of[e["to"]])
             for e, kind in zip(g["edges"], kinds, strict=True)
-            if kind != "forbidden" and group_of[e["from"]] != group_of[e["to"]]
+            if kind != "forbidden"
+            and not e["type_only"]
+            and group_of[e["from"]] != group_of[e["to"]]
         },
     )
     rank = {gid: (layer[gid], gid) for gid in group_ids}
@@ -104,15 +132,10 @@ def build(root: Path, config: dict) -> dict:
             for i, lang in langs.items()
         ],
         "edges": [
-            {
-                "from": e["from"],
-                "to": e["to"],
-                "kind": kind,
-                # Against the (layer, id) order: a back edge inside a group cycle, or a forbidden one.
-                "dir": "up" if rank[group_of[e["from"]]] > rank[group_of[e["to"]]] else "down",
-            }
+            {"from": e["from"], "to": e["to"], "kind": kind}
             for e, kind in zip(g["edges"], kinds, strict=True)
         ],
+        "packages": _packages(g["edges"], kinds, group_of, rank),
         "smells": found,
         "unsupported": g["unsupported"],
     }

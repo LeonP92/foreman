@@ -67,7 +67,7 @@ def test_map_validates_and_renders(make_repo, tmp_path):
     assert render.validate(data) == []
     html = render.write(data, tmp_path / "map.html").read_text(encoding="utf-8")
     assert "/*__DATA__*/null" not in html
-    bad = {**data, "edges": [{"from": "pkg/a.py", "to": "nope", "kind": "call", "dir": "down"}]}
+    bad = {**data, "edges": [{"from": "pkg/a.py", "to": "nope", "kind": "call"}]}
     assert len(render.validate(bad)) == 2
 
 
@@ -99,6 +99,7 @@ def test_malformed_map_is_problems_not_exceptions():
         "groups": [],
         "nodes": [{"id": ["x"]}],
         "edges": {},
+        "packages": [],
         "smells": [],
         "unsupported": {},
     }
@@ -131,7 +132,10 @@ def test_go_package_layering(make_repo):
         }
     )
     data = codemap.build(root, _config(layers=[{"from": "core/**", "to": "app/**"}]))
-    assert data["edges"] == [{"from": "core", "to": "app", "kind": "forbidden", "dir": "up"}]
+    assert data["edges"] == [{"from": "core", "to": "app", "kind": "forbidden"}]
+    assert data["packages"] == [
+        {"from": "core", "to": "app", "imports": 1, "kind": "forbidden", "dir": "up"}
+    ]
     assert [s["nodes"] for s in data["smells"] if s["kind"] == "layering"] == [["core", "app"]]
 
 
@@ -139,8 +143,8 @@ def _layers(data):
     return {g["id"]: g["layer"] for g in data["groups"]}
 
 
-def _dirs(data):
-    return {(e["from"], e["to"]): (e["kind"], e["dir"]) for e in data["edges"]}
+def _packages(data):
+    return {(p["from"], p["to"]): (p["kind"], p["dir"], p["imports"]) for p in data["packages"]}
 
 
 def test_groups_are_layered_by_longest_path_to_a_sink(make_repo):
@@ -156,7 +160,7 @@ def test_groups_are_layered_by_longest_path_to_a_sink(make_repo):
     assert _layers(data) == {"app": 0, "core": 2, "svc": 1, "tool": 1}
     # ties in a layer keep group id order
     assert [g["id"] for g in data["groups"] if g["layer"] == 1] == ["svc", "tool"]
-    assert {d for _, d in _dirs(data).values()} == {"down"}
+    assert {d for _, d, _ in _packages(data).values()} == {"down"}
 
 
 def test_groups_in_a_cycle_share_a_layer_and_the_back_edge_is_up(make_repo):
@@ -171,10 +175,10 @@ def test_groups_in_a_cycle_share_a_layer_and_the_back_edge_is_up(make_repo):
     )
     data = codemap.build(root, _config())
     assert _layers(data) == {"a": 0, "b": 0, "c": 1}
-    assert _dirs(data) == {
-        ("a/x.py", "b/y.py"): ("import", "down"),
-        ("a/x.py", "c/z.py"): ("import", "down"),
-        ("b/w.py", "a/v.py"): ("import", "up"),
+    assert _packages(data) == {
+        ("a", "b"): ("import", "down", 1),
+        ("a", "c"): ("import", "down", 1),
+        ("b", "a"): ("cycle", "up", 1),
     }
 
 
@@ -182,13 +186,44 @@ def test_forbidden_edges_do_not_order_layers_and_flow_up(make_repo):
     root = make_repo({"core/a.py": "import app.b\n", "app/b.py": "", "app/c.py": "import core.a\n"})
     data = codemap.build(root, _config(layers=[{"from": "core/**", "to": "app/**"}]))
     assert _layers(data) == {"app": 0, "core": 1}
-    assert _dirs(data) == {
-        ("core/a.py", "app/b.py"): ("forbidden", "up"),
-        ("app/c.py", "core/a.py"): ("import", "down"),
+    assert _packages(data) == {
+        ("core", "app"): ("forbidden", "up", 1),
+        ("app", "core"): ("import", "down", 1),
     }
 
 
-def test_map_rejects_bad_layer_and_dir():
+def test_type_only_back_edge_is_not_a_package_cycle(make_repo):
+    root = make_repo(
+        {
+            "a/x.py": "import b.y\n",
+            "b/y.py": "",
+            "b/w.py": "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import a.v\n",
+            "a/v.py": "",
+        }
+    )
+    data = codemap.build(root, _config())
+    assert _layers(data) == {"a": 0, "b": 1}
+    assert _packages(data) == {("a", "b"): ("import", "down", 1), ("b", "a"): ("import", "up", 1)}
+
+
+def test_package_takes_its_most_severe_module_kind(make_repo):
+    root = make_repo(
+        {
+            "a/x.py": "import b.y\n",
+            "b/y.py": "import a.x\n",
+            "core/a.py": "import app.b\n",
+            "core/d.py": "import app.b\n",
+            "app/b.py": "",
+        }
+    )
+    data = codemap.build(root, _config(layers=[{"from": "core/a.py", "to": "app/**"}]))
+    packages = _packages(data)
+    # a module cycle inside a downward pair, and one forbidden import among plain ones
+    assert packages[("a", "b")] == ("cycle", "down", 1)
+    assert packages[("core", "app")] == ("forbidden", "down", 2)
+
+
+def test_map_rejects_bad_layer_and_packages():
     data = {
         "kind": "map",
         "title": "t",
@@ -200,12 +235,19 @@ def test_map_rejects_bad_layer_and_dir():
             {"id": "a/x.py", "label": "x.py", "group": "a", "lang": "python", "lines": 1},
             {"id": "b/y.py", "label": "y.py", "group": "b", "lang": "python", "lines": 1},
         ],
-        "edges": [{"from": "a/x.py", "to": "b/y.py", "kind": "import", "dir": "sideways"}],
+        "edges": [{"from": "a/x.py", "to": "b/y.py", "kind": "import"}],
+        "packages": [
+            {"from": "a", "to": "b", "imports": 1, "kind": "import", "dir": "sideways"},
+            {"from": "a", "to": "zz", "imports": 0, "kind": "call", "dir": "down"},
+        ],
         "smells": [],
         "unsupported": {},
     }
     assert render.validate(data) == [
         "group 'a': layer must be an integer >= 0",
         "group 'b': layer must be an integer >= 0",
-        "edge a/x.py->b/y.py: dir must be one of ['down', 'up']",
+        "package a->b: dir must be one of ['down', 'up']",
+        "package a->zz: unknown group",
+        "package a->zz: imports must be a positive integer",
+        "package a->zz: kind must be one of ['cycle', 'forbidden', 'import']",
     ]
