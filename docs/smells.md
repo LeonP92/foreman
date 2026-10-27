@@ -44,26 +44,33 @@ test, load or change alone.
 importing `src/db/**`), unless its target matches the pair's `except` globs. Always
 `high`: it breaks a boundary the team chose.
 
-**hub** — a module that imports at least `max(hub_fanout_floor = 5, repo p95)` others and
-whose neighbours (importers plus imports) number at least `max(hub_floor = 8, repo p95)`,
-counting non-test modules only. A module many import that depends on little (a stable
-definitions module) is never a hub. `medium`, or `low` for an entry point (see deadcode).
+**hub** — a module that imports at least `max(hub_fanout_floor = 5, repo p95)` others, is
+imported by at least `hub_fanin_floor = 3`, and whose neighbours (importers plus imports)
+number at least `max(hub_floor = 8, repo p95)`, counting non-test modules and runtime
+(not type-only) imports only. A module many import that depends on little (a stable
+definitions module) is never a hub, and neither is a composition root nothing imports (a
+page, a route table, app config). `medium`, or `low` for an entry point (see deadcode).
 `conftest.py` and a package `__init__.py` that only re-exports (imports, `__all__`) are never
 hubs. A change to a hub reaches everything around it, so it is the riskiest place to edit.
 
 **cochange** — two files that changed in the same commits but don't import each other:
 hidden coupling. Needs at least `cochange_min_both = 5` shared commits and confidence of at
 least `cochange_min_conf = 0.6`; `medium` from `cochange_medium_conf = 0.8`, else `low`. A
-test and the file it tests (`tests/…/test_x.py`, `x_test.go`, `x.test.ts`, `x.spec.ts`,
-`__tests__/x.ts` against `x.<ext>` anywhere) are ignored, and so are two tests. Only source
+test and the file it tests are ignored, and so are two tests. A test is a file under a
+`test/`, `tests/`, `spec/` or `__tests__/` folder, or whose name carries a test marker:
+`test_`/`spec_` before the name, or `_test`, `.test`, `.spec`, `_spec`, `Test`, `Tests`,
+`Spec` after it (`test_x.py`, `x_test.go`, `x.spec.ts`, `x_spec.rb`, `XTest.java`,
+`XSpec.kt`); with the markers stripped it pairs with `x.<ext>` anywhere. Only source
 files take part: config and infra files (`.yml`, `.tf`) don't. A Python import through a
 package that re-exports a name counts as importing the submodule it comes from. A commit
-touching more files than the larger of `bulk_commit_min_files = 10` and
-`bulk_commit_share = 0.2` of the repo's source files (a format or rename sweep) counts for
+touching more files than `min(max(bulk_commit_min_files = 10, bulk_commit_share = 0.2 ×
+source files), max(bulk_commit_min_files, p90 of files per commit))` over the analysed
+commits (a format or rename sweep, or a large squashed feature in a busy repo) counts for
 neither `cochange` nor `hotspot`.
 
 **hotspot** — a large file that changes often. Changed in at least
-`max(hotspot_min_churn = 5, repo p90)` commits and at least the repo's p75 in lines. Always
+`max(hotspot_min_churn = 5, repo p90)` commits within `hotspot_window_days = 365` of the
+newest commit, and at least the repo's p75 in lines. Always
 `medium`. Files that are both big and busy hold most of a repo's defects.
 
 **oversize** — a file or function far above the repo's norm, always `low`. A file must exceed

@@ -18,10 +18,12 @@ from foreman.metrics import percentiles
 THRESHOLDS: dict[str, int | float] = {
     "hub_floor": 8,
     "hub_fanout_floor": 5,
+    "hub_fanin_floor": 3,
     "cochange_min_both": 5,
     "cochange_min_conf": 0.6,
     "cochange_medium_conf": 0.8,
     "hotspot_min_churn": 5,
+    "hotspot_window_days": 365,
     "oversize_file_median_ratio": 3,
     "oversize_file_floor": 300,
     "oversize_function_floor": 60,
@@ -44,6 +46,8 @@ ENTRY_GLOBS = ("index.*", "*.config.*")
 # Files a framework loads by path, so nothing imports them; `[audit] entry_points` adds more.
 PATH_LOADED_GLOBS = ("**/migrations/**", "**/alembic/versions/**")
 TEST_DIRS = frozenset(["test", "tests", "__tests__", "spec"])
+TEST_PREFIXES = ("test_", "spec_")
+TEST_SUFFIXES = ("_test", ".test", ".spec", "_spec", "Tests", "Test", "Spec")
 
 
 class Smell(TypedDict):
@@ -55,9 +59,11 @@ class Smell(TypedDict):
 
 
 def _subject(path: str) -> str:
+    """The file stem without test markers: `test_cart`, `cart.spec`, `CartTest` -> the subject."""
     stem = posixpath.splitext(posixpath.basename(path))[0]
-    stem = stem.removeprefix("test_")
-    for suffix in ("_test", ".test", ".spec"):
+    for prefix in TEST_PREFIXES:
+        stem = stem.removeprefix(prefix)
+    for suffix in TEST_SUFFIXES:
         stem = stem.removesuffix(suffix)
     return stem
 
@@ -192,13 +198,15 @@ def _layering(graph: dict, layers: Sequence[dict]) -> list[Found]:
 
 def _hubs(graph: dict, entry_points: frozenset[str], facades: frozenset[str]) -> list[Found]:
     out: dict[str, set[str]] = {n["id"]: set() for n in graph["nodes"] if not _is_test(n["id"])}
-    near: dict[str, set[str]] = {n: set() for n in out}
+    into: dict[str, set[str]] = {n: set() for n in out}
+    # type-only imports don't load at runtime, so a change doesn't ripple through them
     for e in graph["edges"]:
-        if e["from"] in out and e["to"] in out:
+        if not e["type_only"] and e["from"] in out and e["to"] in out:
             out[e["from"]].add(e["to"])
-            near[e["from"]].add(e["to"])
-            near[e["to"]].add(e["from"])
-    # fan-out keeps a stable definitions module that everything imports from being a hub
+            into[e["to"]].add(e["from"])
+    near = {n: out[n] | into[n] for n in out}
+    # fan-out keeps a stable definitions module that everything imports from being a hub;
+    # fan-in keeps a composition root (a page, a route table) that nothing imports from being one
     min_out = max(
         THRESHOLDS["hub_fanout_floor"], percentiles([len(v) for v in out.values()])["p95"]
     )
@@ -211,11 +219,13 @@ def _hubs(graph: dict, entry_points: frozenset[str], facades: frozenset[str]) ->
             f"Hub: {n}",
             (
                 f"imports {len(out[n])} modules (threshold {min_out}); "
+                f"imported by {len(into[n])} (floor {THRESHOLDS['hub_fanin_floor']}); "
                 f"{len(near[n])} neighbours (threshold {min_near})"
             ),
         )
         for n in out
         if len(out[n]) >= min_out
+        and len(into[n]) >= THRESHOLDS["hub_fanin_floor"]
         and len(near[n]) >= min_near
         and posixpath.basename(n) != "conftest.py"
         and n not in facades
@@ -250,7 +260,7 @@ def _cochange(ids: Collection[str], graph: dict, history: dict) -> list[Found]:
 
 
 def _hotspots(ids: Collection[str], history: dict, metrics: dict) -> list[Found]:
-    churn = history["churn"]
+    churn = history["recent_churn"]
     measured = [f for f in metrics["files"] if f["path"] in churn and not _is_test(f["path"])]
     min_churn = max(
         THRESHOLDS["hotspot_min_churn"], percentiles([churn[f["path"]] for f in measured])["p90"]

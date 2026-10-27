@@ -7,6 +7,7 @@ from foreman.metrics import percentiles
 def _detect(
     nodes=(),
     edges=(),
+    type_edges=(),
     cycles=(),
     churn=None,
     pairs=(),
@@ -18,13 +19,16 @@ def _detect(
     facades=(),
     mentioned=(),
 ):
-    ids = sorted({*nodes, *(n for e in edges for n in e), *(n for c in cycles for n in c)})
+    ids = sorted(
+        {*nodes, *(n for e in [*edges, *type_edges] for n in e), *(n for c in cycles for n in c)}
+    )
     graph = {
         "nodes": [{"id": n, "lang": "python"} for n in ids],
-        "edges": [{"from": a, "to": b, "type_only": False} for a, b in edges],
+        "edges": [{"from": a, "to": b, "type_only": False} for a, b in edges]
+        + [{"from": a, "to": b, "type_only": True} for a, b in type_edges],
         "cycles": [list(c) for c in cycles],
     }
-    history = {"churn": churn or {}, "pairs": list(pairs)}
+    history = {"recent_churn": churn or {}, "pairs": list(pairs)}
     metrics = {
         "files": [{"path": p, "lines": n} for p, n in files],
         "functions": [{"path": p, "name": f, "start": 1, "lines": n} for p, f, n in functions],
@@ -77,11 +81,28 @@ def test_layering_skips_targets_the_rule_excepts():
     assert [s["nodes"] for s in found] == [["ui/a.py", "data/db.py"]]
 
 
+IMPORTERS = [(f"m{i}.py", "h.py") for i in range(3)]
+
+
 def test_hub_at_floor_and_just_under():
-    found = _kinds(_detect(edges=[("h.py", f"n{i}.py") for i in range(8)]), "hub")
+    imports = [("h.py", f"n{i}.py") for i in range(5)]
+    found = _kinds(_detect(edges=imports + IMPORTERS), "hub")
     assert [s["nodes"] for s in found] == [["h.py"]]
-    assert found[0]["evidence"] == "imports 8 modules (threshold 8); 8 neighbours (threshold 8)"
-    assert _kinds(_detect(edges=[("h.py", f"n{i}.py") for i in range(7)]), "hub") == []
+    assert found[0]["evidence"] == (
+        "imports 5 modules (threshold 5); imported by 3 (floor 3); 8 neighbours (threshold 8)"
+    )
+    assert _kinds(_detect(edges=imports[:4] + IMPORTERS), "hub") == []
+
+
+def test_hub_needs_fan_in_so_a_composition_root_is_not_one():
+    imports = [("h.py", f"n{i}.py") for i in range(10)]
+    assert _kinds(_detect(edges=imports + IMPORTERS[:2]), "hub") == []
+
+
+def test_hub_counts_only_runtime_edges():
+    imports = [("h.py", f"n{i}.py") for i in range(8)]
+    assert _kinds(_detect(edges=imports[:2] + IMPORTERS, type_edges=imports[2:]), "hub") == []
+    assert _kinds(_detect(edges=imports, type_edges=IMPORTERS), "hub") == []
 
 
 def _pair(both, conf, a="a.py", b="b.py"):
@@ -120,6 +141,8 @@ def test_hotspot_at_threshold_and_just_under():
         _kinds(_detect([p for p, _ in files], churn={**churn, "hot.py": 4}, files=files), "hotspot")
         == []
     )
+    # no commits in the window: no recent churn, so no hotspots
+    assert _kinds(_detect([p for p, _ in files], churn={}, files=files), "hotspot") == []
 
 
 def test_oversize_file_at_floor_and_just_under():
@@ -251,7 +274,10 @@ def test_hub_needs_fan_out_so_a_definitions_module_is_not_one():
     importers = [(f"m{i}.py", "defs.py") for i in range(20)]
     assert _kinds(_detect(edges=importers), "hub") == []
     found = _kinds(
-        _detect(edges=[*importers, ("h.py", "defs.py")] + [("h.py", f"n{i}.py") for i in range(7)]),
+        _detect(
+            edges=[*importers, *IMPORTERS, ("h.py", "defs.py")]
+            + [("h.py", f"n{i}.py") for i in range(7)]
+        ),
         "hub",
     )
     assert [s["nodes"] for s in found] == [["h.py"]]
@@ -333,9 +359,26 @@ def test_test_pairs_and_nested_test_subjects_are_not_cochange():
     assert _kinds(_detect(nodes, pairs=pairs), "cochange") == []
 
 
+def test_tests_in_other_languages_are_not_cochange_with_their_subject():
+    pairs = [
+        _pair(9, 1.0, "app/models/user.rb", "spec/models/user_spec.rb"),
+        _pair(9, 1.0, "src/main/java/shop/Cart.java", "src/test/java/shop/CartTest.java"),
+        _pair(9, 1.0, "src/main/kotlin/Order.kt", "src/test/kotlin/OrderSpec.kt"),
+        _pair(9, 1.0, "Sources/Bill.swift", "Tests/BillTests.swift"),
+        _pair(9, 1.0, "lib/tax.rb", "lib/spec_tax.rb"),
+    ]
+    nodes = [p[k] for p in pairs for k in ("a", "b")]
+    assert _kinds(_detect(nodes, pairs=pairs), "cochange") == []
+    # a source file whose name merely ends in "test" is still a subject that can be coupled
+    kept = [_pair(9, 1.0, "src/latest.py", "src/feed.py")]
+    found = _kinds(_detect(["src/latest.py", "src/feed.py"], pairs=kept), "cochange")
+    assert [s["nodes"] for s in found] == [["src/feed.py", "src/latest.py"]]
+
+
 def test_hubs_skip_tests_conftest_and_facades_and_cap_entry_points():
     hubs = ["conftest.py", "tests/test_big.py", "pkg/__init__.py", "main.py", "mig/x.py", "h.py"]
     edges = [(h, f"n{i}.py") for h in hubs for i in range(8)]
+    edges += [(f"m{i}.py", h) for h in hubs for i in range(3)]
     found = _kinds(
         _detect(edges=edges, entry_points=["mig/x.py"], facades=["pkg/__init__.py"]), "hub"
     )

@@ -25,11 +25,11 @@ def make_repo(tmp_path):
         "GIT_CONFIG_SYSTEM": os.devnull,
     }
 
-    def git(*args):
+    def git(*args, date=GIT_ENV["GIT_COMMITTER_DATE"]):
         subprocess.run(
             ["git", "-c", "commit.gpgsign=false", *args],
             cwd=tmp_path,
-            env=env,
+            env={**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date},
             check=True,
             capture_output=True,
         )
@@ -43,7 +43,8 @@ def make_repo(tmp_path):
             else:
                 path.write_text(content, encoding="utf-8", newline="")
 
-    def make(files, commits=None):
+    def make(files, commits=None, dates=None):
+        """`dates`, when given, holds one ISO date per extra commit."""
         git("init", "-q")
         write(files)
         git("add", "-A")
@@ -51,7 +52,8 @@ def make_repo(tmp_path):
         for i, extra in enumerate(commits or []):
             write(extra)
             git("add", "-A")
-            git("commit", "-q", "--allow-empty", "-m", f"commit {i + 1}")
+            when = dates[i] if dates else GIT_ENV["GIT_COMMITTER_DATE"]
+            git("commit", "-q", "--allow-empty", "-m", f"commit {i + 1}", date=when)
         return tmp_path
 
     return make
