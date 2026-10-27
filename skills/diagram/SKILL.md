@@ -24,8 +24,8 @@ The diagram is a fixed HTML template filled from one JSON file. You write only t
 Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
 `<branch>` has each `/` replaced by `-` and `<stamp>` is the UTC start time as
 `%Y%m%dT%H%M%SZ`. Never write into an earlier run's folder; when done, write the stamp
-alone to `.foreman/reports/<branch>/latest`. Output: `<run>/diagram/data.json` and `diagram.html` (inside a
-review, the review's `<run>`).
+alone to `.foreman/reports/<branch>/latest`. Output: `<run>/diagram/data.json` and
+`diagram.html` (inside a review, the review's `<run>`).
 
 ## Steps
 

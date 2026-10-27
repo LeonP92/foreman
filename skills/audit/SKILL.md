@@ -21,7 +21,11 @@ and hands them a map to look with.
   and never run repo-wide git maintenance (`git worktree prune`, `git gc`, branch
   deletion). End with "Not checked:" and why.
 
-Output: `.foreman/reports/audit/` (`map.html`, `map.json`, `audit.md`, and `smoke/` if you
+Each run writes to its own folder, `<run> = .foreman/reports/audit/<stamp>/`, where
+`<stamp>` is the UTC start time as `%Y%m%dT%H%M%SZ`. Never write into an earlier run's
+folder; when done, write the stamp alone to `.foreman/reports/audit/latest`.
+
+Output: `<run>` (`map.html`, `map.json`, `audit.md`, and `smoke/` if you
 run the UI pass).
 
 ## Steps
@@ -31,7 +35,7 @@ run the UI pass).
    repo. Audit that, not the current checkout, so uncommitted work and the current
    branch don't leak in.
 2. **Map it.** Run
-   `python3 -I <root>/scripts/run.py map --root <temp> --config <repo>/.foreman/config.toml --out .foreman/reports/audit`
+   `python3 -I <root>/scripts/run.py map --root <temp> --config <repo>/.foreman/config.toml --out <run>`
    (both paths absolute). It prints the map path, group and module counts, the ranked
    smells, and `unsupported`: file extensions that need an import rule.
 3. **Read the top smells.** For the highest-ranked ones, open the files named in the
@@ -56,19 +60,19 @@ process tree. Pick 3–8 main pages from the repo's routes (the router files, pa
 or URL config), one test each, titled by page (`cart`, `order-history`). For each page:
 it loads, no console errors, no 4xx/5xx responses, and Tab moves a visible focus through
 its controls. Run
-`python3 -I <root>/scripts/run.py browser-run --spec <spec> --out .foreman/reports/audit/smoke --base http://127.0.0.1:<port>`
+`python3 -I <root>/scripts/run.py browser-run --spec <spec> --out <run>/smoke --base http://127.0.0.1:<port>`
 with no `--branch`. Each problem is a finding with steps, expected, actual and screenshot.
 
 ## Report
 
-Write `.foreman/reports/audit/audit.md`, glance first:
+Write `<run>/audit.md`, glance first:
 
 ```
 ## Audit: main @ 3f2a9c1
 
 Verdict: 2 high-severity smells to look at first · 9 smells (2 high / 4 medium / 3 low:
 3 cochange, 2 cycle, 2 oversize, 1 hub, 1 deadcode) · UI smoke 5/6 pages clean ·
-map: .foreman/reports/audit/map.html
+map: .foreman/reports/audit/20261027T091500Z/map.html
 No import rule yet: .rb (14 files) — run setup to add one.
 ```
 

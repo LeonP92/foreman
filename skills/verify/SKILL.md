@@ -24,8 +24,8 @@ from the base branch and one built from the change, each on its own copy of the 
 Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
 `<branch>` has each `/` replaced by `-` and `<stamp>` is the UTC start time as
 `%Y%m%dT%H%M%SZ`. Never write into an earlier run's folder; when done, write the stamp
-alone to `.foreman/reports/<branch>/latest`. Output: `<run>/verify/` (inside a review, the review's
-`<run>`). Needs Node 20 or newer; `browser-run` installs its own Playwright.
+alone to `.foreman/reports/<branch>/latest`. Output: `<run>/verify/` (inside a review,
+the review's `<run>`). Needs Node 20 or newer; `browser-run` installs its own Playwright.
 
 ## 1. Test list first
 
@@ -44,8 +44,8 @@ screenshot name. Never skip an item for "no matching data": build it (step 3).
 
 Read `[database]`. `none`: no data to prepare. `file`: works when `path` is inside the
 repo; each server gets its own copy, at `<worktree>/<path>`, or, when `env_override` is
-set, at the file its filled-in `url_template` names under `{dir}`. `command`: works when `create`, `env_override` and
-`url_template` give each server its own database.
+set, at the file its filled-in `url_template` names under `{dir}`. `command`: works when
+`create`, `env_override` and `url_template` give each server its own database.
 
 Otherwise stop before starting anything. Say why, and what config would make it possible.
 Never point a server at a database you didn't copy or create.
@@ -89,7 +89,8 @@ server's last output lines and stop.
 ## 5. One Playwright spec
 
 Read `references/specs.md` first: how to explore the app safely (output kept in
-`<run>/explore/`), and the pitfalls that make a base/branch comparison lie. Write one spec, for example `<run>/verify/verify.spec.mjs`:
+`<run>/explore/`), and the pitfalls that make a base/branch comparison lie. Write one
+spec, for example `<run>/verify/verify.spec.mjs`:
 
 ```js
 import { test, expect } from "./foreman-fixtures.mjs";
@@ -148,5 +149,5 @@ didn't create. The user's real data must be untouched.
 
 Report: the test list and its source, the data you set up (each record's phase) and any
 permission you granted, a table of item → base / branch result, findings in the review's
-format (`<root>/skills/review/references/report.md`), and the output folder. End with "Not checked:" (for example: mobile sizes, other browsers,
-flows outside the list).
+format (`<root>/skills/review/references/report.md`), and the output folder. End with
+"Not checked:" (for example: mobile sizes, other browsers, flows outside the list).

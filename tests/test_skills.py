@@ -306,3 +306,15 @@ def test_diagram_keeps_standalone_changed_files():
     text = " ".join(skill_text("diagram").split())
     assert "Every `affected` node needs an edge" in text
     assert "standalone node in its lane" in text
+
+
+def test_every_audit_run_keeps_its_own_report_folder():
+    text = " ".join(skill_text("audit").split())
+    for phrase in [
+        "`<run> = .foreman/reports/audit/<stamp>/`",
+        "`%Y%m%dT%H%M%SZ`",
+        "Never write into an earlier run's folder",
+        "`.foreman/reports/audit/latest`",
+        "--out <run>/smoke",
+    ]:
+        assert phrase in text, phrase
