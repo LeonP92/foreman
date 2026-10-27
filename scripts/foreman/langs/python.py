@@ -8,7 +8,11 @@ from foreman.langs import RepoIndex
 def _type_checking_nodes(tree: ast.AST) -> set[int]:
     ids = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.If) and "TYPE_CHECKING" in ast.unparse(node.test):
+        test = isinstance(node, ast.If) and node.test
+        # only a positive test: `if not TYPE_CHECKING:` guards runtime code
+        if (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+            isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+        ):
             ids.update(id(n) for stmt in node.body for n in ast.walk(stmt))
     return ids
 

@@ -187,6 +187,17 @@ def test_js_path_aliases_from_jsconfig(make_repo):
     assert edge_set(build(root)) == {("main.js", "lib/util/index.js", False)}
 
 
+def test_python_only_a_positive_type_checking_test_is_type_only(make_repo):
+    root = make_repo(
+        {
+            "a.py": "import typing\nif typing.TYPE_CHECKING:\n    import b\nif not TYPE_CHECKING:\n    import c\n",
+            "b.py": "",
+            "c.py": "",
+        }
+    )
+    assert edge_set(build(root)) == {("a.py", "b.py", True), ("a.py", "c.py", False)}
+
+
 def test_js_specifier_maps_to_ts_source(make_repo):
     root = make_repo({"a.ts": "import x from './c.js'\n", "c.ts": ""})
     assert edge_set(build(root)) == {("a.ts", "c.ts", False)}
