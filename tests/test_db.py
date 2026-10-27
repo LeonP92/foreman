@@ -4,6 +4,7 @@ import sqlite3
 from contextlib import closing
 
 import pytest
+from foreman import db
 from foreman.cli import main
 from foreman.db import copy
 
@@ -86,7 +87,8 @@ def test_wal_source_files_are_left_alone(tmp_path):
     orphan = tmp_path / "orphan.db"
     sizes = {name: size for name, (size, _) in _sidecars(orphan).items()}
     copy(orphan, tmp_path / "c.db")
-    # the last connection to close would checkpoint and delete them
+    # the last connection to close would checkpoint and delete them. Sizes only: a reader rebuilds
+    # -shm, SQLite's scratch index, in place; the database and -wal are untouched.
     assert {name: size for name, (size, _) in _sidecars(orphan).items()} == sizes
     copy(src, tmp_path / "d.db")  # closed cleanly: no sidecars, and none created
     assert _sidecars(src).keys() == {"a.db"}
@@ -108,3 +110,11 @@ def test_source_in_read_only_folder_is_copied(tmp_path):
         folder.chmod(0o755)
     with closing(sqlite3.connect(tmp_path / "b.db")) as out:
         assert out.execute("select x from t").fetchall() == [(7,)]
+
+
+def test_inconsistent_copy_is_removed_and_refused(tmp_path, monkeypatch):
+    _db(tmp_path / "a.db", 1)
+    monkeypatch.setattr(db, "_consistent", lambda path: False)
+    with pytest.raises(ValueError, match="inconsistent"):
+        copy(tmp_path / "a.db", tmp_path / "b.db")
+    assert not (tmp_path / "b.db").exists()

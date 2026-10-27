@@ -19,9 +19,17 @@ def _read_only_uri(src: Path) -> str:
         wal_mode = f.read(19)[18:] == b"\x02"
     # Even a read-only connection creates missing -wal/-shm files beside a WAL database. With no
     # -wal file no connection is open, so the file is complete and can be read as immutable.
-    # shortcut: an app that opens it and checkpoints mid-copy could tear the read; rare, so accepted.
+    # An app that opens it and checkpoints mid-copy could tear the read; copy() checks for that.
     immutable = wal_mode and not src.with_name(src.name + "-wal").exists()
     return f"{src.resolve().as_uri()}?{'immutable=1' if immutable else 'mode=ro'}"
+
+
+def _consistent(path: Path) -> bool:
+    try:
+        with closing(sqlite3.connect(path)) as con:
+            return con.execute("pragma quick_check").fetchone() == ("ok",)
+    except sqlite3.DatabaseError:  # badly torn pages fail to read at all
+        return False
 
 
 def copy(src: Path, dst: Path) -> dict:
@@ -41,6 +49,12 @@ def copy(src: Path, dst: Path) -> dict:
                 source.backup(target)
         except sqlite3.Error as exc:
             raise ValueError(f"{src.as_posix()} -> {dst.as_posix()}: {exc}") from None
+        # catches a read torn by an app writing during an immutable read
+        if not _consistent(dst):
+            dst.unlink()
+            raise ValueError(
+                f"copy of {src.as_posix()} is inconsistent (the app may be writing) - stop it and retry"
+            )
         method = "sqlite-backup"
     else:
         shutil.copy2(src, dst)
