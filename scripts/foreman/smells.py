@@ -47,7 +47,10 @@ ENTRY_GLOBS = ("index.*", "*.config.*")
 PATH_LOADED_GLOBS = ("**/migrations/**", "**/alembic/versions/**")
 TEST_DIRS = frozenset(["test", "tests", "__tests__", "spec"])
 TEST_PREFIXES = ("test_", "spec_")
-TEST_SUFFIXES = ("_test", ".test", ".spec", "_spec", "Tests", "Test", "Spec")
+TEST_SUFFIXES = ("_test", ".test", ".spec", "_spec")
+# A class may just be named so (`PricingSpec`): these mark a test only in a test folder or
+# beside the subject they strip to.
+CLASS_TEST_SUFFIXES = ("Tests", "Test", "Spec")
 
 
 class Smell(TypedDict):
@@ -58,19 +61,30 @@ class Smell(TypedDict):
     evidence: str
 
 
-def _subject(path: str) -> str:
-    """The file stem without test markers: `test_cart`, `cart.spec`, `CartTest` -> the subject."""
+def _in_test_dir(path: str) -> bool:
+    return not TEST_DIRS.isdisjoint(path.split("/")[:-1])
+
+
+def _subject(path: str, stems: Collection[str]) -> str:
+    """The file stem without test markers: `test_cart`, `cart.spec`, `CartTest` -> the subject.
+
+    `stems` holds the repo's file stems, so `CartTest` strips only when `Cart` exists.
+    """
     stem = posixpath.splitext(posixpath.basename(path))[0]
     for prefix in TEST_PREFIXES:
         stem = stem.removeprefix(prefix)
     for suffix in TEST_SUFFIXES:
         stem = stem.removesuffix(suffix)
+    for suffix in CLASS_TEST_SUFFIXES:
+        bare = stem.removesuffix(suffix)
+        if bare != stem and (_in_test_dir(path) or bare in stems):
+            return bare
     return stem
 
 
-def _is_test(path: str) -> bool:
+def _is_test(path: str, stems: Collection[str]) -> bool:
     stem = posixpath.splitext(posixpath.basename(path))[0]
-    return _subject(path) != stem or not TEST_DIRS.isdisjoint(path.split("/")[:-1])
+    return _subject(path, stems) != stem or _in_test_dir(path)
 
 
 def folder_parts(node: dict) -> list[str]:
@@ -198,8 +212,12 @@ def _layering(graph: dict, layers: Sequence[dict]) -> list[Found]:
     return found
 
 
-def _hubs(graph: dict, entry_points: frozenset[str], facades: frozenset[str]) -> list[Found]:
-    out: dict[str, set[str]] = {n["id"]: set() for n in graph["nodes"] if not _is_test(n["id"])}
+def _hubs(
+    graph: dict, entry_points: frozenset[str], facades: frozenset[str], stems: frozenset[str]
+) -> list[Found]:
+    out: dict[str, set[str]] = {
+        n["id"]: set() for n in graph["nodes"] if not _is_test(n["id"], stems)
+    }
     into: dict[str, set[str]] = {n: set() for n in out}
     # type-only imports don't load at runtime, so a change doesn't ripple through them
     for e in graph["edges"]:
@@ -234,7 +252,9 @@ def _hubs(graph: dict, entry_points: frozenset[str], facades: frozenset[str]) ->
     ]
 
 
-def _cochange(ids: Collection[str], graph: dict, history: dict) -> list[Found]:
+def _cochange(
+    ids: Collection[str], graph: dict, history: dict, stems: frozenset[str]
+) -> list[Found]:
     linked = {(e["from"], e["to"]) for e in graph["edges"]}
     found = []
     for p in history["pairs"]:
@@ -247,8 +267,11 @@ def _cochange(ids: Collection[str], graph: dict, history: dict) -> list[Found]:
             or p["conf"] < THRESHOLDS["cochange_min_conf"]
             or (a, b) in linked
             or (b, a) in linked
-            or (_is_test(p["a"]) and _is_test(p["b"]))
-            or (_subject(p["a"]) == _subject(p["b"]) and _is_test(p["a"]) != _is_test(p["b"]))
+            or (_is_test(p["a"], stems) and _is_test(p["b"], stems))
+            or (
+                _subject(p["a"], stems) == _subject(p["b"], stems)
+                and _is_test(p["a"], stems) != _is_test(p["b"], stems)
+            )
         ):
             continue
         severity = "medium" if p["conf"] >= THRESHOLDS["cochange_medium_conf"] else "low"
@@ -261,9 +284,13 @@ def _cochange(ids: Collection[str], graph: dict, history: dict) -> list[Found]:
     return found
 
 
-def _hotspots(ids: Collection[str], history: dict, metrics: dict) -> list[Found]:
+def _hotspots(
+    ids: Collection[str], history: dict, metrics: dict, stems: frozenset[str]
+) -> list[Found]:
     churn = history["recent_churn"]
-    measured = [f for f in metrics["files"] if f["path"] in churn and not _is_test(f["path"])]
+    measured = [
+        f for f in metrics["files"] if f["path"] in churn and not _is_test(f["path"], stems)
+    ]
     min_churn = max(
         THRESHOLDS["hotspot_min_churn"], percentiles([churn[f["path"]] for f in measured])["p90"]
     )
@@ -282,14 +309,14 @@ def _hotspots(ids: Collection[str], history: dict, metrics: dict) -> list[Found]
     return found
 
 
-def _oversize(ids: Collection[str], metrics: dict) -> list[Found]:
+def _oversize(ids: Collection[str], metrics: dict, stems: frozenset[str]) -> list[Found]:
     fs, fn = metrics["stats"]["file_lines"], metrics["stats"]["function_lines"]
     found: list[Found] = []
     for f in metrics["files"]:
         node, n = _node_of(f["path"], ids), f["lines"]
         if (
             node
-            and not _is_test(f["path"])
+            and not _is_test(f["path"], stems)
             and n > fs["p95"]
             and n >= THRESHOLDS["oversize_file_median_ratio"] * fs["median"]
             and n >= THRESHOLDS["oversize_file_floor"]
@@ -300,7 +327,7 @@ def _oversize(ids: Collection[str], metrics: dict) -> list[Found]:
         node, n = _node_of(f["path"], ids), f["lines"]
         if (
             node
-            and not _is_test(f["path"])
+            and not _is_test(f["path"], stems)
             and n > fn["p95"]
             and n >= THRESHOLDS["oversize_function_floor"]
         ):
@@ -310,11 +337,11 @@ def _oversize(ids: Collection[str], metrics: dict) -> list[Found]:
     return found
 
 
-def _duplicates(ids: Collection[str], dupes: dict) -> list[Found]:
+def _duplicates(ids: Collection[str], dupes: dict, stems: frozenset[str]) -> list[Found]:
     """One smell per set of files sharing duplicate blocks, so a long copy isn't several smells."""
     by_nodes: dict[tuple[str, ...], list[tuple[int, list[dict]]]] = {}
     for b in dupes["blocks"]:
-        locs = [loc for loc in b["locations"] if not _is_test(loc["path"])]
+        locs = [loc for loc in b["locations"] if not _is_test(loc["path"], stems)]
         nodes = tuple(sorted({n for loc in locs if (n := _node_of(loc["path"], ids))}))
         if len(locs) > 1 and nodes:
             by_nodes.setdefault(nodes, []).append((b["lines"], locs))
@@ -341,7 +368,9 @@ def _is_entry(node: str) -> bool:
     return name in ENTRY_NAMES or any(fnmatch.fnmatchcase(name, g) for g in ENTRY_GLOBS)
 
 
-def _deadcode(graph: dict, entry_points: frozenset[str], mentioned: frozenset[str]) -> list[Found]:
+def _deadcode(
+    graph: dict, entry_points: frozenset[str], mentioned: frozenset[str], stems: frozenset[str]
+) -> list[Found]:
     imported = {e["to"] for e in graph["edges"]}
     evidence = "imported by 0 modules and named in no other file; not a test or a known entry point"
     return [
@@ -350,7 +379,7 @@ def _deadcode(graph: dict, entry_points: frozenset[str], mentioned: frozenset[st
         if n["id"] not in imported
         and n["id"] not in entry_points
         and n["id"] not in mentioned
-        and not _is_test(n["id"])
+        and not _is_test(n["id"], stems)
         and not _is_entry(n["id"])
     ]
 
@@ -366,15 +395,16 @@ def detect(
     mentioned: frozenset[str] = frozenset(),
 ) -> list[Smell]:
     ids = map_nodes(graph, metrics).keys()
+    stems = frozenset(posixpath.splitext(posixpath.basename(i))[0] for i in ids)
     found = [
         *_ranked("cycle", _cycles(graph)),
         *_ranked("layering", _layering(graph, layers)),
-        *_ranked("hub", _hubs(graph, entry_points, facades)),
-        *_ranked("cochange", _cochange(ids, graph, history)),
-        *_ranked("hotspot", _hotspots(ids, history, metrics)),
-        *_ranked("oversize", _oversize(ids, metrics)),
-        *_ranked("duplicate", _duplicates(ids, dupes)),
-        *_ranked("deadcode", _deadcode(graph, entry_points, mentioned)),
+        *_ranked("hub", _hubs(graph, entry_points, facades, stems)),
+        *_ranked("cochange", _cochange(ids, graph, history, stems)),
+        *_ranked("hotspot", _hotspots(ids, history, metrics, stems)),
+        *_ranked("oversize", _oversize(ids, metrics, stems)),
+        *_ranked("duplicate", _duplicates(ids, dupes, stems)),
+        *_ranked("deadcode", _deadcode(graph, entry_points, mentioned, stems)),
     ]
     # a [graph.*] rule may cover config or infra files; those are still never smells
     return [

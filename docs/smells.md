@@ -60,9 +60,11 @@ hidden coupling. Needs at least `cochange_min_both = 5` shared commits and confi
 least `cochange_min_conf = 0.6`; `medium` from `cochange_medium_conf = 0.8`, else `low`. A
 test and the file it tests are ignored, and so are two tests. A test is a file under a
 `test/`, `tests/`, `spec/` or `__tests__/` folder, or whose name carries a test marker:
-`test_`/`spec_` before the name, or `_test`, `.test`, `.spec`, `_spec`, `Test`, `Tests`,
-`Spec` after it (`test_x.py`, `x_test.go`, `x.spec.ts`, `x_spec.rb`, `XTest.java`,
-`XSpec.kt`); with the markers stripped it pairs with `x.<ext>` anywhere. Only source
+`test_`/`spec_` before the name, or `_test`, `.test`, `.spec`, `_spec` after it
+(`test_x.py`, `x_test.go`, `x.spec.ts`, `x_spec.rb`). A `Test`, `Tests` or `Spec` suffix
+(`XTest.java`, `XSpec.kt`) marks a test only in a test folder or when `X.<ext>` exists, so a
+class merely named `PricingSpec` stays source. With the markers stripped a test pairs with
+`x.<ext>` anywhere. Only source
 files take part: config and infra files (`.yml`, `.tf`) don't. A Python import through a
 package that re-exports a name counts as importing the submodule it comes from. A commit
 touching more files than `min(max(bulk_commit_min_files = 10, bulk_commit_share = 0.2 ×

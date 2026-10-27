@@ -461,3 +461,12 @@ def test_triage_never_caps_highs():
     items, left = smells.triage_order(shown, {"layering": {"high": 70}, "deadcode": {"low": 1}})
     assert len(items) == 70 and {i["kind"] for i in items} == {"layering"}
     assert left == {"deadcode": 1}
+
+
+def test_class_test_suffixes_need_a_test_folder_or_their_subject():
+    spec, foo, foo_test = "src/main/kotlin/PricingSpec.kt", "src/Foo.java", "src/FooTest.java"
+    dead = _kinds(_detect([spec, foo, foo_test]), "deadcode")
+    # no Pricing.kt and no test folder: a class named so, still eligible for smells
+    assert sorted(s["nodes"][0] for s in dead) == [foo, spec]
+    pairs = [_pair(9, 1.0, foo, foo_test)]
+    assert _kinds(_detect([foo, foo_test], pairs=pairs), "cochange") == []
