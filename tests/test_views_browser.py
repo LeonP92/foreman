@@ -61,6 +61,22 @@ LAYERED = _map(
     ],
 )
 
+# Nine modules in three lanes, each importing every later one: 36 edges.
+DENSE_DIAGRAM = {
+    "title": "Dense diagram",
+    "lanes": ["a", "b", "c"],
+    "nodes": [
+        {"id": f"m{i}", "label": f"m{i}", "lane": "abc"[i // 3], "status": "affected"}
+        for i in range(9)
+    ],
+    "edges": [
+        {"from": f"m{i}", "to": f"m{j}", "kind": "import"}
+        for i in range(9)
+        for j in range(i + 1, 9)
+    ],
+    "smells": [],
+}
+
 # One layer of three: with the drawer open it wraps, sending z -> x round the gutter.
 WIDE = _map([("x", 0), ("y", 0), ("z", 0)], [("z", "x", "cycle", "up")])
 
@@ -75,11 +91,14 @@ def test_views_in_a_browser(tmp_path, serve):
     render.write(DENSE, site / "dense.html")
     render.write(LAYERED, site / "layered.html")
     render.write(WIDE, site / "wide.html")
+    render.write(DENSE_DIAGRAM, site / "dense-diagram.html")
     r = run(SPEC, tmp_path / "out", serve(site))
     assert [(t["title"], t["status"]) for t in r["tests"]] == [
         ("diagram filter enter focuses the first match", "passed"),
         ("diagram focus pulls neighbours up and fades the rest", "passed"),
         ("diagram neighbourhood puts dependents left and dependencies right", "passed"),
+        ("diagram switch toggles to matrix and back", "passed"),
+        ("diagram with more than 30 edges opens as a matrix", "passed"),
         ("map enter on a group drills in and focuses the breadcrumb", "passed"),
         ("map label follows its arc after the drawer closes", "passed"),
         ("map neighbourhood puts dependents left and dependencies right", "passed"),

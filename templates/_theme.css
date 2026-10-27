@@ -174,8 +174,43 @@ body.directed .dir-key { display: flex; }
 .menu-actions .menu-item { font-size: 12px; color: var(--ink-muted); }
 .hide-import .stage .import, .hide-call .stage .call, .hide-impl .stage .impl,
 .hide-cycle .stage .cycle, .hide-forbidden .stage .forbidden, .hide-twin .stage .twin { display: none; }
-.hide-import .stage .cell.import, .hide-cycle .stage .cell.cycle, .hide-forbidden .stage .cell.forbidden {
+.hide-import .stage .cell.import, .hide-call .stage .cell.call, .hide-impl .stage .cell.impl,
+.hide-cycle .stage .cell.cycle, .hide-forbidden .stage .cell.forbidden, .hide-twin .stage .cell.twin {
   display: grid; opacity: .15; }
+
+/* Graph | Matrix switch and the matrix view, shared by the map and the diagram. */
+.seg { display: inline-flex; height: 30px; border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: none; padding: 0 12px; color: var(--ink-2); cursor: pointer; font-size: 12.5px; }
+.seg button[aria-pressed=true] { background: var(--hairline); color: var(--ink-1); }
+.seg[hidden] { display: none; }
+/* Matrix: rows import columns, both in dependency order, so normal imports sit above the diagonal. */
+.matrix { position: absolute; left: 0; top: 0; display: grid; gap: 2px;
+  grid-template-columns: var(--label) repeat(var(--n), var(--cell)); grid-template-rows: var(--head) repeat(var(--n), var(--cell)); }
+.mx-row, .mx-col { color: var(--ink-2); font: 11.5px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: opacity var(--ease), color var(--ease); }
+.mx-row { align-self: center; text-align: right; padding-right: 10px; }
+.mx-col { position: relative; overflow: visible; }
+.mx-col span { position: absolute; left: calc(var(--cell) / 2 - 4px); bottom: 6px; width: 120px; overflow: hidden;
+  text-overflow: ellipsis; transform: rotate(-45deg); transform-origin: 0 100%; }
+.mx-row.on, .mx-col.on { color: var(--ink-1); font-weight: 600; }
+.mx-row.dim, .mx-col.dim { opacity: .35; }
+.cell { display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; font: 600 11px var(--sans);
+  font-variant-numeric: tabular-nums; color: var(--ink-1); background: color-mix(in srgb, var(--ink-1) 3%, transparent);
+  transition: opacity var(--ease); }
+.cell.small { font-size: 9.5px; }
+button.cell { cursor: pointer; background: color-mix(in srgb, var(--changed) var(--shade), transparent); }
+button.cell:hover { box-shadow: inset 0 0 0 1px var(--ink-muted); }
+.cell.forbidden { border: 2px solid var(--forbidden); }
+.cell.cycle { border: 2px dashed var(--cycle); }
+.cell.twin { border: 2px dotted var(--sev-medium); }
+.cell.dim { opacity: .15; }
+.mx-diag { position: absolute; pointer-events: none; }
+.mx-diag line { stroke: var(--ink-muted); stroke-dasharray: 3 4; opacity: .6; }
+.mx-note { position: absolute; width: 184px; font-size: 11.5px; color: var(--ink-muted); }
+.mx-note.up { color: var(--ink-2); }
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  button.cell { background: var(--changed); } .cell { background: var(--surface-2); }
+}
 
 .tip { position: fixed; z-index: 10; transform: translate(-50%, -100%); pointer-events: none; opacity: 0;
   padding: 4px 8px; border: 1px solid var(--hairline); border-radius: 6px; background: var(--surface-2);

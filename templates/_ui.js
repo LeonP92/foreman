@@ -1,6 +1,7 @@
 // Shared foreman UI: escaping, theme toggle, filter keys, drawer, focus animation.
 // Text from DATA is escaped; `backticks` become <code>.
-// Requires: .view, #canvas, #g (the edge <svg>), #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme.
+// Requires: .view, #canvas, #g (the edge <svg>), #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme;
+// #seg for viewSwitch.
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 const SEV_RANK = {low: 1, medium: 2, high: 3};
@@ -130,6 +131,84 @@ const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* not remembered */ } },
 };
+
+// The top bar's Graph | Matrix switch (#seg). The choice is remembered per page as `foreman-<page>-view:<path>`;
+// until one is, views with more than MATRIX_EDGES edges open as a matrix. Returns a getter for the mode.
+const MATRIX_EDGES = 30;
+function viewSwitch(page, edgeCount, onChange) {
+  const key = `foreman-${page}-view:` + location.pathname, saved = store.get(key), seg = document.getElementById("seg");
+  let mode = ["graph", "matrix"].includes(saved) ? saved : edgeCount > MATRIX_EDGES ? "matrix" : "graph";
+  const show = () => seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
+  seg.addEventListener("click", ev => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    mode = b.dataset.mode;
+    store.set(key, mode);
+    show();
+    onChange(mode);
+  });
+  show();
+  return () => mode;
+}
+
+// Matrix (#matrix): rows import columns, both in `order`, so imports that follow the order sit above the diagonal.
+// pairs: [{a, b, count, kind}], one cell each, shaded by count; problem kinds are outlined by the theme.
+// describe(pair) is the cell's tooltip and label; onPick(pair, cell) runs on click.
+const MX = {cell: [22, 44], label: 150, head: 96, notes: 200, gap: 2};
+function buildMatrix(order, labelOf, pairs, describe, onPick) {
+  const at = new Map(pairs.map(e => [e.a + "\n" + e.b, e])), max = Math.max(1, ...pairs.map(e => e.count));
+  const m = document.createElement("div");
+  m.className = "matrix";
+  m.id = "matrix";
+  m.innerHTML = `<div></div>` + order.map(id => `<div class="mx-col" data-g="${esc(id)}" title="${esc(id)}"><span>${esc(labelOf(id))}</span></div>`).join("")
+    + order.map(a => `<div class="mx-row" data-g="${esc(a)}" title="${esc(a)}">${esc(labelOf(a))}</div>` + order.map(b => {
+      const e = at.get(a + "\n" + b);
+      if (!e) return `<div class="cell" data-a="${esc(a)}" data-b="${esc(b)}"></div>`;
+      const shade = Math.round(22 + 70 * Math.log1p(e.count) / Math.log1p(max));
+      return `<button type="button" class="cell ${e.kind}" data-a="${esc(a)}" data-b="${esc(b)}" style="--shade:${shade}%" aria-label="${esc(describe(e))}">${e.count}</button>`;
+    }).join("")).join("")
+    + `<svg class="mx-diag" aria-hidden="true"><line/></svg><span class="mx-note">↗ above: flows down (normal)</span>`
+    + `<span class="mx-note up">↙ below: flows up — cycles, forbidden crossings and twins are outlined</span>`;
+  const pairOf = cell => at.get(cell.dataset.a + "\n" + cell.dataset.b);
+  m.addEventListener("click", ev => {
+    const cell = ev.target.closest("button.cell");
+    if (!cell) return;
+    ev.stopPropagation();
+    onPick(pairOf(cell), cell);
+  });
+  for (const [on, off] of [["mouseover", "mouseout"], ["focusin", "focusout"]]) {
+    m.addEventListener(on, ev => { const cell = ev.target.closest("button.cell"); if (cell) showTip(cell, describe(pairOf(cell))); });
+    m.addEventListener(off, hideTip);
+  }
+  return m;
+}
+
+// Cells shrink to fit the canvas down to 22px; below that the canvas scrolls.
+function layoutMatrix(pad) {
+  const m = document.getElementById("matrix"), n = m.querySelectorAll(".mx-row").length;
+  const room = availableWidth(document.getElementById("canvas")) - 2 * pad - MX.label - MX.notes;
+  const cell = Math.max(MX.cell[0], Math.min(MX.cell[1], Math.floor(room / n) - MX.gap)), size = n * (cell + MX.gap) - MX.gap;
+  m.style.cssText = `--n:${n};--cell:${cell}px;--label:${MX.label}px;--head:${MX.head}px;transform:translate(${pad}px,${pad}px)`;
+  m.querySelectorAll("button.cell").forEach(c => c.classList.toggle("small", cell < 28));
+  const x0 = MX.label + MX.gap, y0 = MX.head + MX.gap, d = m.querySelector(".mx-diag"), [above, below] = m.querySelectorAll(".mx-note");
+  Object.assign(d.style, {left: x0 + "px", top: y0 + "px"});
+  d.setAttribute("width", size);
+  d.setAttribute("height", size);
+  Object.entries({x1: 0, y1: 0, x2: size, y2: size}).forEach(([k, v]) => d.firstChild.setAttribute(k, v));
+  Object.assign(above.style, {left: x0 + size + 16 + "px", top: y0 + 8 + "px"});
+  Object.assign(below.style, {left: x0 + size + 16 + "px", top: y0 + size - 40 + "px"});
+  setStage(2 * pad + x0 + size + MX.notes, 2 * pad + y0 + size);
+}
+
+// Matrix emphasis: lit(a, b) keeps a cell bright (none given: all are); `ids` get their row and column labels highlighted.
+function markMatrix(lit, ids = new Set()) {
+  const m = document.getElementById("matrix");
+  m.querySelectorAll(".cell").forEach(c => c.classList.toggle("dim", !!lit && !lit(c.dataset.a, c.dataset.b)));
+  m.querySelectorAll(".mx-row, .mx-col").forEach(l => {
+    l.classList.toggle("on", ids.has(l.dataset.g));
+    l.classList.toggle("dim", !!lit && !ids.has(l.dataset.g));
+  });
+}
 
 // Top-bar "Edges · k of n" menu over the kinds in `counts` ({kind: n}). An unchecked kind sets `hide-<kind>` on
 // <body>, which the theme turns into hidden edges and dimmed matrix cells. Remembered per page.

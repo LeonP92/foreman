@@ -7,12 +7,16 @@
 <title>Dependency diagram</title>
 <style>
 /*__THEME__*/
+body:not(.as-matrix) #matrix, .as-matrix .stage > .card, .as-matrix #g { display: none; }
 </style>
 </head>
 <body>
 <header class="topbar">
   <div class="bar-row">
     <div class="bar-title"><h1 id="title"></h1><p id="notes"></p></div>
+    <div class="seg" id="seg" role="group" aria-label="Diagram view">
+      <button type="button" data-mode="graph">Graph</button><button type="button" data-mode="matrix">Matrix</button>
+    </div>
     <label class="filter">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.75"/><path d="m10.5 10.5 3.5 3.5"/></svg>
       <input id="filter" type="text" autocomplete="off" spellcheck="false" placeholder="Filter nodes" aria-label="Filter nodes (Enter focuses the first match)">
@@ -122,13 +126,40 @@ const twinEls = SMELLS.filter(s => s.kind === "twin").map(s => {
   return {s, path};
 });
 
+// Matrix cells: one per ordered pair, holding every edge (and twin) between them, outlined by the worst kind.
+const PAIR_KINDS = ["forbidden", "cycle", "twin", "import", "call", "impl"];
+const pairMap = new Map();
+function addPair(a, b, kind, text) {
+  const key = a + "\n" + b;
+  if (!pairMap.has(key)) pairMap.set(key, {a, b, count: 0, kinds: [], lines: []});
+  const p = pairMap.get(key);
+  p.count++;
+  p.kinds.push(kind);
+  p.lines.push(text);
+}
+DATA.edges.forEach(e => addPair(e.from, e.to, e.kind, KIND[e.kind] + (e.label ? " · " + e.label : "")));
+twinEls.forEach(({s}) => addPair(...s.nodes, "twin", "twin (must stay in sync): " + s.title));
+const pairs = [...pairMap.values()].map(p => ({...p, kind: PAIR_KINDS.find(k => p.kinds.includes(k))}));
+const pairText = p => `${labelOf(p.a)} → ${labelOf(p.b)} · ${p.lines.join(" · ")}`;
+// Matrix order: by lane, then dependency depth (importers before what they import, cycles ignored), then data order.
+const depth = Object.fromEntries(DATA.nodes.map(n => [n.id, 0]));
+for (let i = 0; i < DATA.nodes.length; i++)
+  for (const e of DATA.edges) if (e.kind !== "cycle") depth[e.to] = Math.max(depth[e.to], depth[e.from] + 1);
+const ORDER = DATA.nodes.map((n, i) => ({n, i})).sort((x, y) => DATA.lanes.indexOf(x.n.lane) - DATA.lanes.indexOf(y.n.lane)
+  || depth[x.n.id] - depth[y.n.id] || x.i - y.i).map(x => x.n.id);
+stage.appendChild(buildMatrix(ORDER, labelOf, pairs, pairText, focusPair));
+const viewMode = viewSwitch("diagram", DATA.edges.length, () => { if (ego) leaveEgo(); clearHighlight(); });
+const matrixShown = () => viewMode() === "matrix" && !ego;
+
 // Lanes share the available width (clamped); rows go selection first, then its neighbours, then the
 // rest, each keeping data order (sort is stable). Nodes and edges move in one frame loop so edges stay
 // attached while nodes slide.
 // ego: the neighbourhood view ({id, hops}) while it is up.
 let focused = null, near = new Set(), ego = null;
 function layout(instant = false) {
+  document.body.classList.toggle("as-matrix", matrixShown());
   if (ego) return egoPlace(instant);
+  if (matrixShown()) return layoutMatrix(PAD);
   const n = DATA.lanes.length;
   W = Math.max(MIN_W, Math.min(MAX_W, Math.floor((availableWidth(canvas) - 2 * PAD - (n - 1) * GAP) / n)));
   const width = 2 * PAD + (n - 1) * (W + GAP) + W;
@@ -181,7 +212,7 @@ function exitEgo() {
 }
 // Also runs when the drawer's padding transition ends; before that the scroll range can't reach the last lane.
 function reveal() {
-  if (!focused) return;
+  if (!focused || matrixShown()) return;
   const x = stage.offsetLeft + pos[focused].x, room = canvas.clientWidth - drawer.offsetWidth;
   if (x < canvas.scrollLeft || x + W > canvas.scrollLeft + room) canvas.scrollTo({left: x - (room - W) / 2});
 }
@@ -192,6 +223,7 @@ function clearHighlight() {
   stage.className = "stage";
   nodeEls.forEach(card => card.classList.remove("selected", "smelly", "dim"));
   markEdges(edgeEls, () => "");
+  markMatrix(null);
   twinEls.forEach(t => t.path.classList.remove("dim", "on"));
   document.querySelectorAll("#chips button").forEach(b => b.classList.remove("active"));
   closeDrawer();
@@ -215,6 +247,7 @@ function focusNode(n) {
     card.classList.toggle("dim", id !== n.id && !near.has(id));
   });
   markEdges(edgeEls, towards(n.id));
+  markMatrix((a, b) => a === n.id || b === n.id, new Set([n.id]));
   twinEls.forEach(t => { const on = t.s.nodes.includes(n.id);
     t.path.classList.toggle("on", on); t.path.classList.toggle("dim", !on); });
   let html = `<h2>${esc(n.label)}</h2><div class="meta"><span class="badge r-${n.status}">${BADGE[n.status]}</span>`
@@ -227,8 +260,15 @@ function focusNode(n) {
   if (mine.length) html += `<h3>Smells</h3><ul>${mine.map(s => `<li>${sevWord(s)} ${esc(s.kind)}: ${fmt(s.title)}</li>`).join("")}</ul>`;
   html += `<h3>Edges out</h3>${edgeList(edgeEls.filter(e => e.a === n.id), "→", "b")}`
     + `<h3>Edges in</h3>${edgeList(edgeEls.filter(e => e.b === n.id), "←", "a")}`;
-  openDrawer(html, nodeEls.get(n.id));
+  openDrawer(html, matrixShown() ? null : nodeEls.get(n.id));
   reveal();
+}
+function focusPair(p, cell) {
+  clearHighlight();
+  markMatrix((a, b) => a === p.a && b === p.b, new Set([p.a, p.b]));
+  openDrawer(`<h2>${esc(labelOf(p.a))} → ${esc(labelOf(p.b))}</h2>`
+    + `<h3>Edges (${p.count})</h3><ul>${p.lines.map(l => `<li>${fmt(l)}</li>`).join("")}</ul>`
+    + `<h3>Nodes</h3><ul><li>${linkTo(p.a)}</li><li>${linkTo(p.b)}</li></ul>`, cell);
 }
 function showSmell(s, button) {
   if (ego) leaveEgo();
@@ -241,6 +281,7 @@ function showSmell(s, button) {
     card.classList.toggle("dim", !members.has(id));
   });
   markEdges(edgeEls, e => members.has(e.a) && members.has(e.b) ? "on" : "dim");
+  markMatrix((a, b) => members.has(a) && members.has(b), members);
   twinEls.forEach(t => { t.path.classList.toggle("on", t.s === s); t.path.classList.toggle("dim", t.s !== s); });
   openDrawer(`<h2 class="sans">${fmt(s.title)}</h2><div class="meta">${sevWord(s)}<span class="quiet">${esc(s.kind)}</span></div>`
     + `<h3>What it means</h3><p>${esc(SMELL_TEXT[s.kind])}</p><h3>Evidence</h3><p>${fmt(s.evidence)}</p>`
@@ -299,6 +340,7 @@ initUI({
     const ids = new Set(matches(q).map(n => n.id));
     nodeEls.forEach((card, id) => card.classList.toggle("dim", !ids.has(id)));
     markEdges(edgeEls, () => "dim");
+    markMatrix((a, b) => ids.has(a) || ids.has(b), ids);
     twinEls.forEach(t => t.path.classList.add("dim"));
   },
   onFilterEnter: q => { const found = q && matches(q); if (found && found.length) focusNode(found[0]); },
@@ -310,6 +352,7 @@ layout();
 // The whole pane, not just the SVG, so a click below a short graph also clears.
 canvas.addEventListener("click", clearHighlight);
 canvas.addEventListener("transitionend", ev => { if (ev.target === canvas) reveal(); });
+canvas.addEventListener("scroll", hideTip);
 </script>
 </body>
 </html>

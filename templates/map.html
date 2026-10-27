@@ -20,38 +20,7 @@
   stroke-width: 4px; stroke-linejoin: round; transition: opacity var(--ease); }
 .edge-label.import { fill: var(--ink-2); } .edge-label.cycle { fill: var(--cycle); } .edge-label.forbidden { fill: var(--forbidden); }
 .edge-label.dim { opacity: .08; }
-.seg { display: inline-flex; height: 30px; border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; }
-.seg button { border: 0; background: none; padding: 0 12px; color: var(--ink-2); cursor: pointer; font-size: 12.5px; }
-.seg button[aria-pressed=true] { background: var(--hairline); color: var(--ink-1); }
-.seg[hidden] { display: none; }
-/* Matrix: rows import columns, both in dependency order, so normal imports sit above the diagonal. */
-.matrix { position: absolute; left: 0; top: 0; display: grid; gap: 2px;
-  grid-template-columns: var(--label) repeat(var(--n), var(--cell)); grid-template-rows: var(--head) repeat(var(--n), var(--cell)); }
-.mx-row, .mx-col { color: var(--ink-2); font: 11.5px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  transition: opacity var(--ease), color var(--ease); }
-.mx-row { align-self: center; text-align: right; padding-right: 10px; }
-.mx-col { position: relative; overflow: visible; }
-.mx-col span { position: absolute; left: calc(var(--cell) / 2 - 4px); bottom: 6px; width: 120px; overflow: hidden;
-  text-overflow: ellipsis; transform: rotate(-45deg); transform-origin: 0 100%; }
-.mx-row.on, .mx-col.on { color: var(--ink-1); font-weight: 600; }
-.mx-row.dim, .mx-col.dim { opacity: .35; }
-.cell { display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; font: 600 11px var(--sans);
-  font-variant-numeric: tabular-nums; color: var(--ink-1); background: color-mix(in srgb, var(--ink-1) 3%, transparent);
-  transition: opacity var(--ease); }
-.cell.small { font-size: 9.5px; }
-button.cell { cursor: pointer; background: color-mix(in srgb, var(--changed) var(--shade), transparent); }
-button.cell:hover { box-shadow: inset 0 0 0 1px var(--ink-muted); }
-.cell.forbidden { border: 2px solid var(--forbidden); }
-.cell.cycle { border: 2px dashed var(--cycle); }
-.cell.dim { opacity: .15; }
-.mx-diag { position: absolute; pointer-events: none; }
-.mx-diag line { stroke: var(--ink-muted); stroke-dasharray: 3 4; opacity: .6; }
-.mx-note { position: absolute; width: 184px; font-size: 11.5px; color: var(--ink-muted); }
-.mx-note.up { color: var(--ink-2); }
 .drawer-body .pair-list li { flex-wrap: wrap; gap: 4px 8px; }
-@supports not (color: color-mix(in srgb, red 50%, blue)) {
-  button.cell { background: var(--changed); } .cell { background: var(--surface-2); }
-}
 </style>
 </head>
 <body>
@@ -116,8 +85,6 @@ const SIZE = {group: [248, 64], module: [212, 48], stub: [180, 44]};
 const GAP = {group: [72, 44], module: [20, 14]}, PAD = 32, TOP = 58, STUB_GAP = 72;
 // Package view: a label column, then one row per dependency layer (wrapping when wide).
 const LAYER_LABEL = 160, LAYER_GAP = 72, ARC = 40;
-const MATRIX_EDGES = 30, CELL = [22, 44], MX_LABEL = 150, MX_HEAD = 96, MX_NOTES = 200, MX_GAP = 2;
-const MODE_KEY = "foreman-map-view:" + location.pathname;
 const ORDER = [...DATA.groups].sort((a, b) => a.layer - b.layer || (a.id < b.id ? -1 : 1)).map(g => g.id);
 const LAYERS = [...new Set(DATA.groups.map(g => g.layer))].sort((a, b) => a - b);
 const layerName = i => `LAYER ${i + 1}` + (LAYERS.length < 2 ? "" : i === 0 ? " · entry points" : i === LAYERS.length - 1 ? " · foundations" : "");
@@ -171,21 +138,10 @@ function aggregate(viewOf) {
 // Classified by codemap: the most severe kind behind each group pair, and whether it flows up.
 const packageEdges = DATA.packages.map(p => ({a: p.from, b: p.to, count: p.imports, kind: p.kind, up: p.dir === "up"}));
 
-// mode: how the package view shows (graph or matrix); dense maps start as a matrix.
-const savedMode = store.get(MODE_KEY);
-let mode = ["graph", "matrix"].includes(savedMode) ? savedMode : packageEdges.length > MATRIX_EDGES ? "matrix" : "graph";
-const matrixShown = () => !view && mode === "matrix" && !ego;
+// How the package view shows (graph or matrix).
+const viewMode = viewSwitch("map", packageEdges.length, () => render(null));
+const matrixShown = () => !view && viewMode() === "matrix" && !ego;
 const seg = document.getElementById("seg");
-const showMode = () => seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
-seg.addEventListener("click", ev => {
-  const b = ev.target.closest("button");
-  if (!b) return;
-  mode = b.dataset.mode;
-  store.set(MODE_KEY, mode);
-  showMode();
-  render(null);
-});
-showMode();
 
 // ego: the neighbourhood view ({id, hops}) while it is up.
 let ego = null, view = null, items = [], edges = [], focused = null, near = new Set(), boxW = 0;
@@ -220,7 +176,7 @@ function render(group, keepEgo = false) {
   for (const k in pos) delete pos[k];
   document.getElementById("matrix")?.remove();
   seg.hidden = !!group;
-  if (matrixShown()) stage.appendChild(buildMatrix());
+  if (matrixShown()) stage.appendChild(buildMatrix(ORDER, id => groupById[id].label, packageEdges, pairText, focusPair));
   else for (const it of items) {
     const [w, h] = SIZE[it.kind], card = document.createElement("div");
     const open = it.kind === "stub" ? () => render(it.group) : it.kind === "group" ? () => render(it.id) : null;
@@ -320,7 +276,7 @@ function layerPlace(to) {
 
 function layout(instant = false) {
   regions.replaceChildren();
-  if (matrixShown()) return layoutMatrix();
+  if (matrixShown()) return layoutMatrix(PAD);
   if (ego) return egoPlace(instant);
   const to = {}, [width, height] = view ? gridPlace(to) : layerPlace(to);
   cards.forEach((card, id) => { if (id[0] !== STUB) card.style.width = boxW + "px"; });
@@ -398,60 +354,6 @@ function edgePath(a, b, pairs) {
 
 const countText = e => plural(e.count, "import") + (e.kind === "import" ? "" : " · " + KIND[e.kind]);
 const pairText = e => `${e.a} → ${e.b} · ${countText(e)}`;
-function buildMatrix() {
-  const at = new Map(packageEdges.map(e => [e.a + "\n" + e.b, e])), max = Math.max(1, ...packageEdges.map(e => e.count));
-  const m = document.createElement("div");
-  m.className = "matrix";
-  m.id = "matrix";
-  m.innerHTML = `<div></div>` + ORDER.map(id => `<div class="mx-col" data-g="${esc(id)}" title="${esc(id)}"><span>${esc(groupById[id].label)}</span></div>`).join("")
-    + ORDER.map(a => `<div class="mx-row" data-g="${esc(a)}" title="${esc(a)}">${esc(groupById[a].label)}</div>` + ORDER.map(b => {
-      const e = at.get(a + "\n" + b);
-      if (!e) return `<div class="cell" data-a="${esc(a)}" data-b="${esc(b)}"></div>`;
-      const shade = Math.round(22 + 70 * Math.log1p(e.count) / Math.log1p(max));
-      return `<button type="button" class="cell ${e.kind}" data-a="${esc(a)}" data-b="${esc(b)}" style="--shade:${shade}%" aria-label="${esc(pairText(e))}">${e.count}</button>`;
-    }).join("")).join("")
-    + `<svg class="mx-diag" aria-hidden="true"><line/></svg><span class="mx-note">↗ above: flows down (normal)</span><span class="mx-note up">↙ below: flows up — cycles and forbidden crossings are outlined</span>`;
-  const pairOf = cell => at.get(cell.dataset.a + "\n" + cell.dataset.b);
-  m.addEventListener("click", ev => {
-    const cell = ev.target.closest("button.cell");
-    if (!cell) return;
-    ev.stopPropagation();
-    focusPair(pairOf(cell), cell);
-  });
-  for (const [on, off] of [["mouseover", "mouseout"], ["focusin", "focusout"]]) {
-    m.addEventListener(on, ev => { const cell = ev.target.closest("button.cell"); if (cell) showTip(cell, pairText(pairOf(cell))); });
-    m.addEventListener(off, hideTip);
-  }
-  return m;
-}
-
-// Cells shrink to fit the canvas down to 22px; below that the canvas scrolls.
-function layoutMatrix() {
-  const m = document.getElementById("matrix"), n = ORDER.length;
-  const room = availableWidth(canvas) - 2 * PAD - MX_LABEL - MX_NOTES;
-  const cell = Math.max(CELL[0], Math.min(CELL[1], Math.floor(room / n) - MX_GAP)), size = n * (cell + MX_GAP) - MX_GAP;
-  m.style.cssText = `--n:${n};--cell:${cell}px;--label:${MX_LABEL}px;--head:${MX_HEAD}px;transform:translate(${PAD}px,${PAD}px)`;
-  m.querySelectorAll("button.cell").forEach(c => c.classList.toggle("small", cell < 28));
-  const x0 = MX_LABEL + MX_GAP, y0 = MX_HEAD + MX_GAP, d = m.querySelector(".mx-diag"), [above, below] = m.querySelectorAll(".mx-note");
-  Object.assign(d.style, {left: x0 + "px", top: y0 + "px"});
-  d.setAttribute("width", size);
-  d.setAttribute("height", size);
-  Object.entries({x1: 0, y1: 0, x2: size, y2: size}).forEach(([k, v]) => d.firstChild.setAttribute(k, v));
-  Object.assign(above.style, {left: x0 + size + 16 + "px", top: y0 + 8 + "px"});
-  Object.assign(below.style, {left: x0 + size + 16 + "px", top: y0 + size - 40 + "px"});
-  const width = 2 * PAD + x0 + size + MX_NOTES, height = 2 * PAD + y0 + size;
-  setStage(width, height);
-}
-
-// Matrix emphasis: lit(a, b) keeps a cell bright; `groups` get their row and column labels highlighted.
-function markMatrix(lit, groups = new Set()) {
-  stage.querySelectorAll(".cell").forEach(c => c.classList.toggle("dim", !!lit && !lit(c.dataset.a, c.dataset.b)));
-  stage.querySelectorAll(".mx-row, .mx-col").forEach(l => {
-    l.classList.toggle("on", groups.has(l.dataset.g));
-    l.classList.toggle("dim", !!lit && !groups.has(l.dataset.g));
-  });
-}
-
 function focusPair(e, cell) {
   clearHighlight();
   markMatrix((a, b) => a === e.a && b === e.b, new Set([e.a, e.b]));

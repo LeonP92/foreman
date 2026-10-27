@@ -106,3 +106,28 @@ test("map renders when storage is unavailable", async ({ page }) => {
   await page.locator('#seg [data-mode="matrix"]').click();
   await expect(page.locator("#matrix")).toBeVisible();
 });
+
+test("diagram switch toggles to matrix and back", async ({ page }) => {
+  await page.goto("/diagram.html");
+  await expect(page.locator('#seg [data-mode="graph"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#matrix")).toBeHidden();
+  await page.locator('#seg [data-mode="matrix"]').click();
+  await expect(page.locator("#matrix")).toBeVisible();
+  await expect(card(page, "cart")).toBeHidden();
+  // lanes in order, importers before what they import within a lane
+  expect(await page.locator("#matrix .mx-row").evaluateAll(rows => rows.map(r => r.dataset.g))).toEqual(
+    ["cart_view", "cart_js", "order", "cart", "discounts", "refunds", "gateway", "receipts"]);
+  await expect(page.locator("#matrix button.cell.twin")).toHaveCount(1);
+  await page.locator('#matrix button.cell[data-a="order"][data-b="cart"]').click();
+  await expect(page.locator("#drawer")).toHaveClass(/open/);
+  await expect(page.locator('#matrix .mx-row[data-g="order"]')).toHaveClass(/on/);
+  await page.locator('#seg [data-mode="graph"]').click();
+  await expect(page.locator("#matrix")).toBeHidden();
+  await expect(card(page, "cart")).toBeVisible();
+});
+
+test("diagram with more than 30 edges opens as a matrix", async ({ page }) => {
+  await page.goto("/dense-diagram.html");
+  await expect(page.locator("#matrix")).toBeVisible();
+  await expect(page.locator('#seg [data-mode="matrix"]')).toHaveAttribute("aria-pressed", "true");
+});
