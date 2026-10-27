@@ -139,15 +139,64 @@ def test_launcher_reads_references_after_removing_database_variables(tmp_path):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
-def test_throwaway_secrets_go_to_a_user_only_file_and_are_not_printed(tmp_path):
+def test_throwaway_secrets_go_to_a_stable_user_only_file_and_are_not_printed(tmp_path):
     helper = _snippet(tmp_path, "throwaway.py", "setup/references/ci.md")
-    out = tmp_path / "cfg" / "shop.env"
-    ran = _py(helper, out, "SHOP_SECRET_KEY", "SHOP_SIGNING_KEY")
-    assert ran.stdout.split() == ["SHOP_SECRET_KEY", "SHOP_SIGNING_KEY"]
+    repo = tmp_path / "shop"
+    env = {**os.environ, "XDG_CONFIG_HOME": str(tmp_path / "cfg")}
+    only_path = _py(helper, repo, env=env).stdout.split()
+    assert len(only_path) == 1
+    out = Path(only_path[0])
+    assert re.fullmatch(r"shop-[0-9a-f]{8}\.env", out.name)
+    assert out.parent == tmp_path / "cfg" / "foreman" / "secrets"
+    assert not out.exists()
+    ran = _py(helper, repo, "SHOP_SECRET_KEY", "SHOP_SIGNING_KEY", env=env)
+    assert ran.stdout.split() == [out.as_posix(), "SHOP_SECRET_KEY", "SHOP_SIGNING_KEY"]
+    again = _py(helper, repo, "SHOP_SECRET_KEY", "SHOP_OTHER_KEY", env=env)
+    assert again.stdout.split() == [out.as_posix(), "SHOP_OTHER_KEY"]
     lines = out.read_text(encoding="utf-8").splitlines()
-    assert [line.split("=", 1)[0] for line in lines] == ["SHOP_SECRET_KEY", "SHOP_SIGNING_KEY"]
-    assert all(line.split("=", 1)[1] not in ran.stdout for line in lines)
+    assert [line.split("=", 1)[0] for line in lines] == [
+        "SHOP_SECRET_KEY",
+        "SHOP_SIGNING_KEY",
+        "SHOP_OTHER_KEY",
+    ]
+    assert all(line.split("=", 1)[1] not in ran.stdout + again.stdout for line in lines)
     assert out.stat().st_mode & 0o777 == 0o600
+
+
+def test_verify_builds_data_instead_of_skipping():
+    verify = " ".join(skill_text("verify").split())
+    data = " ".join(
+        (SKILLS_DIR / "verify" / "references" / "data.md").read_text(encoding="utf-8").split()
+    )
+    for phrase in [
+        'Never skip an item for "no matching data"',
+        "references/data.md",
+        "existing-data-survives",
+        "--env-file",
+    ]:
+        assert phrase in verify, phrase
+    for phrase in [
+        "Phase a",
+        "Phase b",
+        "403",
+        "on **both** sides",
+        "Never grant anything in real data",
+        "querying the branch **copy**",
+    ]:
+        assert phrase in data, phrase
+
+
+def test_env_files_are_read_only_through_the_names_helper():
+    rule = "may be read only through the names-only helper `dotenv.py`"
+    ask = "ask the user which variable names it sets"
+    for text in [
+        skill_text("setup"),
+        (SKILLS_DIR / "verify" / "references" / "servers.md").read_text(encoding="utf-8"),
+    ]:
+        text = " ".join(text.split())
+        assert rule in text
+        assert ask in text
+    assert "Never open `.env`" not in all_skill_text()
 
 
 def test_diagram_groups_large_neighbourhoods():

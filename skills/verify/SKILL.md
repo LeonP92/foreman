@@ -31,9 +31,10 @@ and signed in; the branch's commit messages (`git log BASE..<branch>`, `BASE` as
 step 3); the diff alone.
 
 Write the list before touching a browser: the main flow plus 2–3 edge cases it implies
-(invalid input, data created before the change, a user with less access). Give each item a
-short lowercase name, like `apply-coupon` or `expired-coupon`; it becomes the test title
-and the screenshot name.
+(invalid input, data created before the change, a user with less access). When the diff
+adds a migration, always add `existing-data-survives`. Give each item a short lowercase
+name, like `apply-coupon` or `expired-coupon`; it becomes the test title and the
+screenshot name. Never skip an item for "no matching data": build it (step 3).
 
 ## 2. Can the data be isolated?
 
@@ -52,8 +53,10 @@ finding that foreman's isolation failed (what ran just before, the old and new v
 Do not continue the run.
 
 Every command runs through the launcher in `references/servers.md`, with an explicit
-environment that can't reach the real database. If the user has a secrets file from setup
-(outside the repo), pass it to every launch with `--env-file`.
+environment that can't reach the real database. If setup made a throwaway secrets file
+(`<user config dir>/foreman/secrets/<repo name>-<8 hex>.env`; `throwaway.py <repo>` from
+`<root>/skills/setup/references/ci.md` prints its path), pass it to every launch with
+`--env-file`.
 
 ## 3. Worktrees and data
 
@@ -65,21 +68,11 @@ environment that can't reach the real database. If the user has a secrets file f
    server's port, `{name}` and `{dir}`, and prepare each worktree (copy `[repo] copy`
    files and fix their database lines, `install`, `build`), as `references/servers.md`
    says.
-2. Build both databases with the **base** code, so "existing data" is genuinely pre-change
-   (phase 1 records):
-   - `file`: `python3 -I <root>/scripts/run.py db-copy <repo>/<path> <temp>/base/<path>`
-     (if the original doesn't exist, start empty). In the base worktree run `migrate`,
-     `seed`, and create the records the test list needs. Then copy that file to the branch
-     worktree with `db-copy` the same way.
-   - `command`: run `create`, `migrate`, `seed` and your record set-up from the **base**
-     worktree with that server's settings.
-3. Migrate the branch's database with the **branch** code: run `migrate` in the branch
-   worktree.
-4. Records you only discover you need while exploring (step 5) are phase 2: write them
-   once as set-up statements or a script and apply exactly the same ones to both copies,
-   after both are migrated.
-
-Record what data you created and which phase each record came from; the report says.
+2. Build the data every item needs, as `references/data.md` says: phase a (pre-change
+   records, with the base code, in both copies), `migrate` the branch copy with the
+   branch code, then phase b (state found while exploring, the same in both copies). Never
+   skip an item for "no matching data"; if a record is truly impossible to make, list the
+   item under "Not checked:" with the reason.
 
 ## 4. Servers
 
@@ -148,7 +141,7 @@ didn't create. The user's real data must be untouched.
 
 ## Finish
 
-Report: the test list and its source, the data you set up, a table of item → base / branch
-result, findings in the review's format (`<root>/skills/review/references/report.md`), and
-the output folder. End with "Not checked:" (for example: mobile sizes, other browsers,
+Report: the test list and its source, the data you set up (each record's phase) and any
+permission you granted, a table of item → base / branch result, findings in the review's
+format (`<root>/skills/review/references/report.md`), and the output folder. End with "Not checked:" (for example: mobile sizes, other browsers,
 flows outside the list).

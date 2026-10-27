@@ -31,8 +31,10 @@ says about itself, asks the user only for what is missing, and writes
 4. CI workflows (`.github/workflows/*` or the repo's equivalent). CI shows the commands
    that really run: read its `env:` blocks and the steps it runs before the tests, as
    `references/ci.md` says.
-5. `.env.example`-style files, to learn variable names. Never open `.env` or any file
-   holding real secrets.
+5. `.env.example`-style files, to learn variable names. Env files (`.env`, `.env.local`
+   and the like) may be read only through the names-only helper `dotenv.py` in
+   `<root>/skills/verify/references/servers.md`, never opened or printed otherwise; if the
+   host blocks reading one, ask the user which variable names it sets.
 6. The default branch: `git symbolic-ref refs/remotes/origin/HEAD` (the part after
    `origin/`). If that fails, use the branch that CI runs on.
 
@@ -54,8 +56,8 @@ Fill each table from what you read:
 - `[env]` variables every command needs (from `.env.example`, settings code, CI `env:`
   blocks). Plain values as written; a secret only as `${NAME}`, a variable the user
   exports, never its value. A required secret the user has no value for: offer a
-  throwaway, generated into a user-only file outside the repo (`references/ci.md`). An
-  app that needs its own address gets `{url}`.
+  throwaway, generated into a user-only file outside the repo (`references/ci.md`), and
+  tell the user its path. An app that needs its own address gets `{url}`.
 - `[server]` the dev-server command with `{port}` in place of the port, a `ready_path` that
   answers once the app is up, and any `env` only the server needs.
 - `[login]` plain steps a browser can follow to sign in locally: a dev-login link, a seeded

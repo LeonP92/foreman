@@ -18,7 +18,10 @@ In each worktree foreman makes, before running anything:
 1. Copy each `[repo] copy` file that exists in the repo's checkout to the same path in the
    worktree, as a plain file copy. Never print, quote or summarise its contents; note any
    that are missing.
-2. A copied file may point the app at the real database. List the names each copy sets
+2. A copied file may point the app at the real database. Env files (`.env`, `.env.local`
+   and the like) may be read only through the names-only helper `dotenv.py` below, never
+   opened or printed otherwise; if the host blocks reading one, ask the user which
+   variable names it sets. List the names each copy sets
    with `python3 -I <temp>/dotenv.py <worktree>/<file>` (names only, never values). For
    every database-location name in that list, rewrite its line in the worktree's copy to
    this server's value: `python3 -I <temp>/dotenv.py <worktree>/<file> NAME=<value>`. If
