@@ -125,6 +125,10 @@ def _semantic_problems(data: dict) -> list[str]:
         for key in DB_REQUIRED.get(kind, ())
         if not _get(data, "database", key)
     ]
+    # optional for file: points migrate/seed/start at the per-server copy
+    url_keys = (_get(data, "database", "env_override"), _get(data, "database", "url_template"))
+    if kind == "file" and bool(url_keys[0]) != bool(url_keys[1]):
+        problems.append("database.env_override and database.url_template go together")
     patterns = _get(data, "verify", "ignore_console", [])
     # wrong types are already reported by check()
     for pattern in [] if _type_problem("", patterns, []) else patterns:

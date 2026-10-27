@@ -56,8 +56,10 @@ Every command foreman runs in a worktree (`install`, `build`, tests, `create`, `
 2. Remove every variable that names a database location: `DATABASE_URL`,
    `DATABASE_PATH`, `DB_URL`, `DB_PATH`, `env_override`, and any other that
    `.env.example`, `[env]`, `[server] env` or the repo's docs name as one.
-3. Apply `[env]`; for the server also `[server] env` on top; then, for `command`
-   databases, `env_override` set to this server's filled-in `url_template`.
+3. Apply `[env]`; for the server also `[server] env` on top; then, whenever
+   `env_override` is set (always for `command`, optionally for `file`), that variable
+   set to this server's filled-in `url_template`, so `migrate`, `seed` and `start` reach
+   the copy.
 
 Fill in `{port}`, `{url}` (`http://127.0.0.1:{port}`), `{dir}` and `{name}` yourself. Leave
 `${NAME}` as written: the launcher reads it from the environment left after step 2 as the

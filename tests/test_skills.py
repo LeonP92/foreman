@@ -292,3 +292,11 @@ def test_exploration_output_is_kept():
     specs = (SKILLS_DIR / "verify" / "references" / "specs.md").read_text(encoding="utf-8")
     assert "--out <run>/explore" in specs
     assert "`<run>/explore/`" in skill_text("verify")
+
+
+def test_file_databases_can_use_a_per_server_url():
+    servers = " ".join(
+        (SKILLS_DIR / "verify" / "references" / "servers.md").read_text(encoding="utf-8").split()
+    )
+    assert "always for `command`, optionally for `file`" in servers
+    assert "when `env_override` is set" in " ".join(skill_text("verify").split())

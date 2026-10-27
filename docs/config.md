@@ -24,8 +24,8 @@ is fine and means defaults). Unknown tables and keys are errors.
 | `database.create` | Command that creates a database. Required for `command`. |
 | `database.migrate` / `seed` | Optional commands, either kind. |
 | `database.drop` | Optional command that deletes a database `create` made (`command` kind). Only ever run on databases foreman created. |
-| `database.env_override` | Env var that points the server at its database. Required for `command`. |
-| `database.url_template` | Value for that env var. Required for `command`. |
+| `database.env_override` | Env var that points the server at its database. Required for `command`. Optional for `file`, together with `url_template`: then `migrate`, `seed` and the server get it pointing at the server's own copy. |
+| `database.url_template` | Value for that env var, usually with `{dir}` or `{name}`. Required for `command`; optional for `file` (`sqlite:///{dir}/app.db`), set with `env_override` or not at all. |
 | `verify.ignore_console` | Regexes for known console noise (a warning the app logs on every page). `browser-run` lists matching console errors under `ignored_console_errors` instead of `console_errors`, so they are kept but never count as a finding. Each must compile. |
 | `rules.docs` | Repo docs that state design rules. |
 | `rules.layers` | Edges that must not exist: `[{from = "glob", to = "glob"}]`. An optional `except = ["glob", …]` lists targets under `to` that `from` may still import. |

@@ -59,13 +59,6 @@ def test_existing_non_sqlite_dst_is_refused(tmp_path):
     assert (tmp_path / "notes.txt").read_text(encoding="utf-8") == "keep me"
 
 
-def test_missing_dst_parent_is_a_one_line_error(tmp_path, capsys):
-    _db(tmp_path / "a.db", 1)
-    assert main(["db-copy", str(tmp_path / "a.db"), str(tmp_path / "no" / "b.db")]) == 1
-    err = capsys.readouterr().err
-    assert err.count("\n") == 1 and "unable to open database file" in err
-
-
 def _sidecars(src):
     return {
         p.name: (p.stat().st_size, p.stat().st_mtime_ns) for p in src.parent.glob(src.name + "*")
@@ -152,3 +145,11 @@ def test_wal_without_shm_is_read_from_a_private_copy(tmp_path, read_only):
     assert {name: size for name, (size, _) in _sidecars(src).items()} == before
     with closing(sqlite3.connect(tmp_path / "b.db")) as out:
         assert out.execute("select x from t").fetchall() == [(5,)]
+
+
+@pytest.mark.parametrize("make", [lambda p: _db(p, 1), lambda p: p.write_bytes(b"plain")])
+def test_copy_creates_the_destination_folders(tmp_path, make):
+    make(tmp_path / "a.db")
+    dst = tmp_path / "server" / "data" / "a.db"
+    copy(tmp_path / "a.db", dst)
+    assert dst.read_bytes()[:5] == (tmp_path / "a.db").read_bytes()[:5]

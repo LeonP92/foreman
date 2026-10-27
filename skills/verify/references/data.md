@@ -8,7 +8,8 @@ service you can't reach, say) list the item under "Not checked:" with the reason
 
 Build both databases with the **base** code, so "existing data" is genuinely pre-change:
 
-- `file`: `python3 -I <root>/scripts/run.py db-copy <repo>/<path> <base copy>` (if the
+- `file`: `python3 -I <root>/scripts/run.py db-copy <repo>/<path> <base copy>`, where a
+  side's copy is where the skill's step 2 puts it (`db-copy` creates its folders; if the
   original doesn't exist, start empty). In the base worktree run `migrate`, `seed`, and
   create the records the test list needs. Then copy that file to the branch side with
   `db-copy` the same way.

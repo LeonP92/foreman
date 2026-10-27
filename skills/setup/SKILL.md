@@ -80,7 +80,8 @@ Fill each table from what you read:
 Foreman only ever runs servers against databases it copied or created.
 
 - `kind = "file"` when the app uses a file inside the repo (SQLite and similar). `path` is
-  that file, relative to the repo.
+  that file, relative to the repo. If the app reads its location from a variable, also
+  set `env_override` and `url_template` with `{dir}` (`sqlite:///{dir}/app.db`).
 - `kind = "command"` when the app uses a database server. It needs `create` (a command that
   makes a new, empty database), `env_override` (the variable the app reads its database
   location from) and `url_template` (that variable's value). Write `{name}` where a

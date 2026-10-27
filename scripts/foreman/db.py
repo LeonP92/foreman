@@ -34,6 +34,7 @@ def copy(src: Path, dst: Path) -> dict:
     # A backup onto itself never finishes.
     if dst.exists() and os.path.samefile(src, dst):
         raise ValueError(f"{src.as_posix()} and {dst.as_posix()} are the same file")
+    dst.parent.mkdir(parents=True, exist_ok=True)
     if _is_sqlite(src):
         if dst.exists() and not _is_sqlite(dst):
             raise ValueError(f"{dst.as_posix()}: exists and is not a SQLite database")

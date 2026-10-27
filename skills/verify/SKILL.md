@@ -43,7 +43,8 @@ screenshot name. Never skip an item for "no matching data": build it (step 3).
 ## 2. Can the data be isolated?
 
 Read `[database]`. `none`: no data to prepare. `file`: works when `path` is inside the
-repo; each worktree gets its own copy. `command`: works when `create`, `env_override` and
+repo; each server gets its own copy, at `<worktree>/<path>`, or, when `env_override` is
+set, at the file its filled-in `url_template` names under `{dir}`. `command`: works when `create`, `env_override` and
 `url_template` give each server its own database.
 
 Otherwise stop before starting anything. Say why, and what config would make it possible.
