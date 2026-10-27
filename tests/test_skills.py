@@ -300,3 +300,9 @@ def test_file_databases_can_use_a_per_server_url():
     )
     assert "always for `command`, optionally for `file`" in servers
     assert "when `env_override` is set" in " ".join(skill_text("verify").split())
+
+
+def test_diagram_keeps_standalone_changed_files():
+    text = " ".join(skill_text("diagram").split())
+    assert "Every `affected` node needs an edge" in text
+    assert "standalone node in its lane" in text

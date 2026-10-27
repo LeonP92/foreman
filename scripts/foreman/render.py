@@ -121,10 +121,11 @@ def _diagram(data: dict) -> list[str]:
         f"lane {lane!r} has no nodes (drop it)" for lane in data["lanes"] if lane not in used_lanes
     ]
     touched = {e.get(k) for e in data["edges"] for k in ("from", "to")}
+    # changed files nothing imports (a migration) may stand alone in their lane
     errs += [
         f"node {n.get('id')}: has no edges (drop it or connect it)"
         for n in data["nodes"]
-        if n.get("id") not in touched
+        if n.get("status") == "affected" and n.get("id") not in touched
     ]
     return errs + _smell_problems(data.get("smells", []), ids, data["edges"])
 

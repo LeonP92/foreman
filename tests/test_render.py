@@ -47,8 +47,13 @@ def test_diagram_inlines_shared_theme_and_ui(tmp_path):
     assert "http" not in html.replace("http://www.w3.org/2000/svg", "")
 
 
-def test_rejects_node_without_edges():
-    assert "node b: has no edges (drop it or connect it)" in render.validate(_data(edges=[]))
+def test_only_affected_nodes_need_edges():
+    assert render.validate(_data(edges=[])) == ["node b: has no edges (drop it or connect it)"]
+    standalone = [
+        {"id": s, "label": s, "lane": "core", "status": s, "summary": {"added": ["x"]}}
+        for s in ("added", "changed", "removed")
+    ]
+    assert render.validate(_data(nodes=standalone, edges=[])) == []
 
 
 def test_rejects_smell_without_evidence():
@@ -136,8 +141,8 @@ def test_cli_render_lists_every_problem(tmp_path, capsys):
     data.write_text(json.dumps(_data(edges=[], smells=[_smell("twin", ["a"])])), encoding="utf-8")
     assert main(["render", str(data), str(tmp_path / "d.html")]) == 1
     lines = capsys.readouterr().err.splitlines()
-    assert lines[0] == "foreman: invalid diagram: 3 problems"
-    assert len(lines) == 4
+    assert lines[0] == "foreman: invalid diagram: 2 problems"
+    assert len(lines) == 3
     assert not (tmp_path / "d.html").exists()
 
 

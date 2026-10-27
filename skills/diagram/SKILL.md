@@ -56,7 +56,9 @@ review, the review's `<run>`).
    `[rules] layers` and its target isn't in that pair's `except`. Name the rule and the
    doc it comes from in `notes`. No rule, no forbidden edge.
 5. **Nodes.** Every changed module, class or interface, plus unchanged ones exactly one hop
-   from a changed node. Drop everything else, including tests. Every node needs an edge.
+   from a changed node. Drop everything else, including tests. Every `affected` node needs
+   an edge; a file the change adds (or changes, or removes) that nothing imports, such as
+   a migration, stays as a standalone node in its lane.
    Decide `hub` smells (below) on the ungrouped graph first. If more than 20 unchanged
    one-hop neighbours remain, group them, but never group a hub's direct neighbours: they
    stay individual nodes, so `render` still sees them. Group the rest: one `affected`
