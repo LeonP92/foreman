@@ -100,6 +100,7 @@ def test_malformed_map_is_problems_not_exceptions():
         "nodes": [{"id": ["x"]}],
         "edges": {},
         "smells": [],
+        "unsupported": {},
     }
     assert render.validate(bad) == [
         "nodes #0: must be an object with string id, label, group, lang",

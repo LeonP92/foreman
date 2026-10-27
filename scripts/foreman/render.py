@@ -165,6 +165,11 @@ def _smell_problems(smells: list, ids: set, edges: list) -> list[str]:
 
 def _map(data: dict) -> list[str]:
     errs = [] if isinstance(data.get("title"), str) else ["'title' must be a string"]
+    unsupported = data.get("unsupported")
+    if not isinstance(unsupported, dict) or not all(
+        isinstance(k, str) and isinstance(v, int) for k, v in unsupported.items()
+    ):
+        errs.append("'unsupported' must map extensions to file counts")
     for key, fields in _MAP_STRING_FIELDS.items():
         items = data.get(key)
         if not isinstance(items, list):

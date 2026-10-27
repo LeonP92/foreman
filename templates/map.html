@@ -148,6 +148,7 @@ function itemsFor(group) {
 }
 
 function render(group) {
+  const from = view, first = !cards.size;
   view = group;
   focused = null;
   near = new Set();
@@ -192,6 +193,10 @@ function render(group) {
   layout(true);
   canvas.scrollTo({top: 0, left: 0});
   closeDrawer();
+  // Switching views removes the focused card (or drawer link); keep keyboard users in the new view.
+  const active = document.activeElement;
+  if (!first && (active === document.body || !active.isConnected || drawer.contains(active)))
+    (view ? document.getElementById("crumb-all") : cards.get(from) || cards.values().next().value).focus();
 }
 
 function renderCrumbs() {
@@ -199,12 +204,7 @@ function renderCrumbs() {
   crumbs.innerHTML = view
     ? `<button type="button" class="link" id="crumb-all">All groups</button><span class="quiet">/</span><span>${esc(view)}</span>`
     : `<span>All groups</span><span class="quiet">double-click a group to open it</span>`;
-  if (view) document.getElementById("crumb-all").addEventListener("click", ev => {
-    const from = view;
-    ev.stopPropagation();
-    render(null);
-    cards.get(from).focus();
-  });
+  if (view) document.getElementById("crumb-all").addEventListener("click", ev => { ev.stopPropagation(); render(null); });
 }
 
 // Grid order: selection, then its neighbours, then the rest; each keeps data order (sort is stable).
@@ -350,14 +350,14 @@ function showSmells(kind, list, button) {
 
 const chips = document.getElementById("chips");
 const forbidden = DATA.edges.filter(e => e.kind === "forbidden").length;
-const unsupported = Object.entries(DATA.unsupported || {}).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1));
+const unsupported = Object.entries(DATA.unsupported).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1));
 const NO_RULE_TEXT = "Files in these languages are still on the map and checked for size, duplication and churn; they have no import edges until a rule exists.";
 chips.insertAdjacentHTML("beforeend", `<span class="chip"><b>${DATA.groups.length}</b> groups</span>`
   + `<span class="chip"><b>${DATA.nodes.length.toLocaleString()}</b> modules</span>`
   + `<span class="chip"><b>${DATA.edges.length.toLocaleString()}</b> imports</span>`
   + (DATA.smells.length ? `<span class="chip"><b>${DATA.smells.length}</b> smells</span>` : "")
   + (forbidden ? `<span class="chip alert"><b>${forbidden}</b> forbidden</span>` : `<span class="quiet">No forbidden crossings</span>`)
-  + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${n})`).join(", ")} — run setup to graph them</span>` : "")
+  + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${esc(n)})`).join(", ")} — run setup to graph them</span>` : "")
   + `<span class="sep"></span>` + (DATA.smells.length ? "" : `<span class="quiet">No structural smells found</span>`));
 const kinds = {};
 DATA.smells.forEach(s => (kinds[s.kind] ||= []).push(s));

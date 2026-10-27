@@ -170,8 +170,8 @@ def test_hub_self_edge_is_not_a_neighbour():
     assert any("hub has 4 neighbours" in e for e in errs)
 
 
-def test_map_inlines_theme_and_escapes_payload(tmp_path):
-    data = {
+def _map_data():
+    return {
         "kind": "map",
         "title": "</script><script>alert(1)</script>",
         "notes": "",
@@ -183,6 +183,10 @@ def test_map_inlines_theme_and_escapes_payload(tmp_path):
         "smells": [],
         "unsupported": {".rb": 2},
     }
+
+
+def test_map_inlines_theme_and_escapes_payload(tmp_path):
+    data = _map_data()
     html = render.write(data, tmp_path / "map.html").read_text(encoding="utf-8")
     assert "/*__" not in html
     assert "#0d0d0d" in html
@@ -190,3 +194,8 @@ def test_map_inlines_theme_and_escapes_payload(tmp_path):
     assert "alert(1)</script>" not in html
     payload = html.split("const DATA = ", 1)[1].split(";\n", 1)[0]
     assert json.loads(payload) == data
+
+
+def test_map_unsupported_must_map_extensions_to_counts():
+    data = {**_map_data(), "unsupported": {".rb": "<img src=x onerror=alert(1)>"}}
+    assert render.validate(data) == ["'unsupported' must map extensions to file counts"]
