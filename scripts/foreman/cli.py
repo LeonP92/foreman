@@ -13,9 +13,9 @@ class _Parser(argparse.ArgumentParser):
         raise ValueError(message)
 
 
-def _load(args) -> dict:
+def _load(args, *, gate_graph=True) -> dict:
     cfg = config.load_or_default(args.root / args.config)
-    problems = config.check(cfg)
+    problems = config.check(cfg if gate_graph else {**cfg, "graph": {}})
     if problems:
         raise ValueError(f"invalid config: {len(problems)} problems — run config-check")
     return cfg
@@ -35,9 +35,13 @@ def _graph(args) -> tuple[dict, int]:
 
 
 def _graph_rule_check(args) -> tuple[dict, int]:
-    rules = _load(args)["graph"]
+    rules = _load(args, gate_graph=False)["graph"]
     if args.name not in rules:
         raise ValueError(f"no rule [graph.{args.name}] in {args.config}")
+    problems = rule.validate(args.name, rules[args.name])
+    if problems:
+        lines = "".join(f"\n  {p}" for p in problems)
+        raise ValueError(f"invalid rule {args.name}: {len(problems)} problems{lines}")
     result = rule.check(args.root, rules[args.name])
     return result, 0 if result["ok"] else 1
 

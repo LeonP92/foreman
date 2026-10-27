@@ -75,18 +75,15 @@ def test_cli_rule_check_exit_codes(make_repo, capsys):
             ".foreman/config.toml": (
                 "[graph.ruby]\nextensions = ['.rb']\n"
                 "pattern = '''^require_relative\\s+'(.+?)''''\nresolve = ['{dir}/{1}.rb']\n"
+                "[graph.broken]\nextensions = ['.rb']\npattern = '('\nresolve = []\n"
+                "[graph.typed]\nextensions = ['.rb']\npattern = 1\nresolve = ['{1}.rb']\n"
             ),
         }
     )
     assert cli.main(["graph-rule-check", "--name", "ruby", "--root", str(root)]) == 0
     assert json.loads(capsys.readouterr().out)["ok"] is True
-    config = root / ".foreman/config.toml"
-    config.write_text(
-        config.read_text(encoding="utf-8")
-        + "[graph.broken]\nextensions = ['.rb']\npattern = '('\nresolve = []\n"
-        + "[graph.typed]\nextensions = ['.rb']\npattern = 1\nresolve = ['{1}.rb']\n",
-        encoding="utf-8",
-    )
     for name in ("broken", "typed"):
         assert cli.main(["graph-rule-check", "--name", name, "--root", str(root)]) == 1
-        assert capsys.readouterr().err.count("\n") == 1
+        err = capsys.readouterr().err
+        assert f"invalid rule {name}: " in err
+        assert err.splitlines()[1].startswith("  ")
