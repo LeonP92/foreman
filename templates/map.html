@@ -12,12 +12,9 @@
 .card.stub { border-style: dashed; background: var(--page); }
 .card.stub .card-label { color: var(--ink-2); }
 .badge.lang { --role: var(--ink-2); }
-.crumbs { display: flex; align-items: center; gap: 6px; font: 500 12.5px var(--mono); color: var(--ink-1); }
-.crumbs .quiet { font-family: var(--sans); }
 .drawer-body .evidence { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-muted); }
 /* Many edges at rest read as noise; focus still lights them fully. */
 .stage.dense .edge:not(.on):not(.dim) { opacity: .3; }
-.drawer-body .actions { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
 .layer-label { fill: var(--ink-muted); font: 600 10px var(--sans); letter-spacing: .08em; }
 .edge-label { font: 600 11px var(--sans); text-anchor: middle; paint-order: stroke; stroke: var(--surface-1);
   stroke-width: 4px; stroke-linejoin: round; transition: opacity var(--ease); }
@@ -155,7 +152,7 @@ document.getElementById("title").innerHTML = fmt(DATA.title);
 document.getElementById("notes").innerHTML = fmt(DATA.notes || "");
 
 const canvas = document.getElementById("canvas"), stage = document.getElementById("stage");
-const defs = markerDefs(["import", "cycle", "forbidden"], 11), regions = el("g", {});
+const defs = markerDefs(["import", "cycle", "forbidden", "out", "in"], 11), regions = el("g", {});
 
 // Collapses module edges onto what the view shows: groups in the package view, modules + stubs inside a group.
 function aggregate(viewOf) {
@@ -177,7 +174,7 @@ const packageEdges = aggregate(id => byId[id].group)
 
 // mode: how the package view shows (graph or matrix); dense maps start as a matrix.
 let mode = localStorage.getItem(MODE_KEY) || (packageEdges.length > MATRIX_EDGES ? "matrix" : "graph");
-const matrixShown = () => !view && mode === "matrix";
+const matrixShown = () => !view && mode === "matrix" && !ego;
 const seg = document.getElementById("seg");
 const showMode = () => seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
 seg.addEventListener("click", ev => {
@@ -190,7 +187,8 @@ seg.addEventListener("click", ev => {
 });
 showMode();
 
-let view = null, items = [], edges = [], focused = null, near = new Set(), boxW = 0;
+// ego: the neighbourhood view ({id, hops}) while it is up.
+let ego = null, view = null, items = [], edges = [], focused = null, near = new Set(), boxW = 0;
 const cards = new Map();
 
 function itemsFor(group) {
@@ -206,8 +204,11 @@ function itemsFor(group) {
   return [...stubs, ...modules];
 }
 
-function render(group) {
+// keepEgo: re-render the same view for the neighbourhood (which needs cards, so not a matrix).
+function render(group, keepEgo = false) {
   const from = view, first = !items.length;
+  if (!keepEgo) { ego = null; hideEgoBar(); }
+  document.body.classList.remove("directed");
   view = group;
   focused = null;
   near = new Set();
@@ -243,14 +244,13 @@ function render(group) {
     cards.set(it.id, card);
     stage.appendChild(card);
   }
-  const name = id => id[0] === STUB ? id.slice(1) : id;
   if (!matrixShown()) edges.forEach(e => {
     e.path = el("path", {class: `edge ${e.kind}`, "marker-end": `url(#a-${e.kind})`});
     e.path.style.strokeWidth = Math.min(4.5, 1.5 + .75 * Math.log2(e.count));
-    el("title", {}, e.path).textContent = `${name(e.a)} → ${name(e.b)} · ${KIND[e.kind]} · ${plural(e.count, "import")}`;
+    el("title", {}, e.path).textContent = `${nameOf(e.a)} → ${nameOf(e.b)} · ${KIND[e.kind]} · ${plural(e.count, "import")}`;
     // Only the package view's upward edges carry a permanent label; counts otherwise live in tooltips and the drawer.
     e.text = !view && e.kind !== "import" ? el("text", {class: `edge-label ${e.kind}`}) : null;
-    if (e.text) e.text.textContent = `${name(e.a)} → ${name(e.b)} · ${plural(e.count, "import")} · ${e.kind === "cycle" ? "cycle" : "forbidden"}`;
+    if (e.text) e.text.textContent = `${nameOf(e.a)} → ${nameOf(e.b)} · ${plural(e.count, "import")} · ${e.kind === "cycle" ? "cycle" : "forbidden"}`;
   });
   stage.className = edges.length > 40 ? "stage dense" : "stage";
   renderCrumbs();
@@ -318,12 +318,10 @@ function layerPlace(to) {
 function layout(instant = false) {
   regions.replaceChildren();
   if (matrixShown()) return layoutMatrix();
+  if (ego) return egoPlace(instant);
   const to = {}, [width, height] = view ? gridPlace(to) : layerPlace(to);
   cards.forEach((card, id) => { if (id[0] !== STUB) card.style.width = boxW + "px"; });
-  stage.style.width = width + "px";
-  stage.style.height = height + "px";
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
+  setStage(width, height);
   slide(to, instant, () => {
     const pairs = {};
     edges.forEach(e => e.path.setAttribute("d", view ? edgePath(e.a, e.b, pairs) : layerPath(e)));
@@ -349,7 +347,34 @@ function layerPath(e) {
     + ` L${qx - r},${top} Q${qx},${top} ${qx},${q.y}`;
 }
 
-const sizeOf = id => id[0] === STUB ? SIZE.stub : [boxW, SIZE.module[1]];
+const sizeOf = id => id[0] === STUB ? SIZE.stub : [boxW, SIZE[view ? "module" : "group"][1]];
+const nameOf = id => id[0] === STUB ? id.slice(1) : id;
+
+// Neighbourhood: only the centre's columns and the edges between neighbouring columns stay.
+function egoPlace(instant) {
+  const size = SIZE[view ? "module" : "group"], {to, col, width, height} = egoLayout(ego.id, edges, ego.hops, nameOf,
+    {size, gap: [GAP.group[0], GAP.module[1] + 8], pad: PAD, top: TOP + 16});
+  boxW = size[0];
+  cards.forEach((card, id) => { card.classList.toggle("gone", !col.has(id)); if (id[0] !== STUB) card.style.width = boxW + "px"; });
+  edges.forEach(e => { e.path.classList.toggle("gone", !egoEdge(col, e)); e.text?.classList.add("gone"); });
+  setStage(width, height);
+  slide(to, instant, () => {
+    edges.forEach(e => { if (col.has(e.a) && col.has(e.b)) e.path.setAttribute("d", flowPath(pos[e.a], sizeOf(e.a), pos[e.b], sizeOf(e.b))); });
+    col.forEach((_, id) => { cards.get(id).style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
+  });
+}
+function enterEgo(id, hops) {
+  ego = {id, hops};
+  if (!cards.size) render(view, true);
+  showEgoBar(view || "All groups", nameOf(id), hops, exitEgo, h => enterEgo(ego.id, h));
+  focusItem(id);
+}
+// Back to the view the neighbourhood was opened from, with its centre selected.
+function exitEgo() {
+  const id = ego.id;
+  render(view);
+  focusItem(id);
+}
 function edgePath(a, b, pairs) {
   const p = pos[a], q = pos[b], [pw, ph] = sizeOf(a), [qw, qh] = sizeOf(b);
   const key = [a, b].sort().join("\n"), k = pairs[key] = (pairs[key] || 0) + 1;
@@ -411,10 +436,7 @@ function layoutMatrix() {
   Object.assign(above.style, {left: x0 + size + 16 + "px", top: y0 + 8 + "px"});
   Object.assign(below.style, {left: x0 + size + 16 + "px", top: y0 + size - 24 + "px"});
   const width = 2 * PAD + x0 + size + MX_NOTES, height = 2 * PAD + y0 + size;
-  stage.style.width = width + "px";
-  stage.style.height = height + "px";
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
+  setStage(width, height);
 }
 
 // Matrix emphasis: lit(a, b) keeps a cell bright; `groups` get their row and column labels highlighted.
@@ -449,6 +471,7 @@ function clearHighlight() {
 }
 
 function focusItem(id) {
+  if (ego && cards.get(id).classList.contains("gone")) return enterEgo(id, ego.hops);
   clearHighlight();
   focused = id;
   near = new Set(edges.flatMap(e => e.a === id ? [e.b] : e.b === id ? [e.a] : []));
@@ -463,7 +486,7 @@ function focusItem(id) {
     card.classList.toggle("selected", cid === id);
     card.classList.toggle("dim", cid !== id && !near.has(cid));
   });
-  markEdges(edges, e => e.a === id || e.b === id ? "on" : "dim");
+  markEdges(edges, towards(id));
   openDrawer(view ? moduleHtml(byId[id]) : groupHtml(groupById[id]), cards.get(id));
 }
 
@@ -478,7 +501,7 @@ const edgeNote = e => e.kind === "import" ? "" : KIND[e.kind];
 function moduleHtml(n) {
   const out = DATA.edges.filter(e => e.from === n.id), into = DATA.edges.filter(e => e.to === n.id), mine = nodeSmells[n.id] || [];
   return `<h2>${esc(n.id)}</h2><div class="meta"><span class="badge lang">${esc(n.lang)}</span><span class="quiet">${plural(n.lines, "line")}</span></div>`
-    + `<h3>Group</h3><p>${groupLink(n.group)}</p>`
+    + EGO_BUTTON + `<h3>Group</h3><p>${groupLink(n.group)}</p>`
     + (mine.length ? `<h3>Smells (${mine.length})</h3>${smellList(mine)}` : "")
     + `<h3>Imports (${out.length})</h3>${linkList(out, e => moduleLink(e.to), edgeNote)}`
     + `<h3>Imported by (${into.length})</h3>${linkList(into, e => moduleLink(e.from), edgeNote)}`;
@@ -489,7 +512,7 @@ function groupHtml(g) {
   const out = packageEdges.filter(e => e.a === g.id), into = packageEdges.filter(e => e.b === g.id);
   return `<h2>${esc(g.label)}</h2><div class="meta"><span class="badge lang">${esc(mainLang(g))}</span>`
     + `<span class="quiet">${plural(g.nodes.length, "module")} · ${plural(groupLines(g), "line")}</span></div>`
-    + `<div class="actions"><button type="button" class="icon-btn" data-open="${esc(g.id)}">Open group</button><span class="quiet">or double-click / Enter</span></div>`
+    + `<div class="actions"><button type="button" class="icon-btn" data-open="${esc(g.id)}">Open group</button><span class="quiet">or double-click / Enter</span></div>` + EGO_BUTTON
     + `<h3>Worst smells${mine.length ? ` (${mine.length})` : ""}</h3>`
     + (mine.length ? smellList(shown) + (mine.length > shown.length ? `<p class="quiet">and ${mine.length - shown.length} more</p>` : "") : `<p class="quiet">None</p>`)
     + `<h3>Depends on (${out.length})</h3>${linkList(out, e => groupLink(e.b), countText)}`
@@ -511,6 +534,7 @@ document.getElementById("drawer").addEventListener("click", ev => {
 
 // One chip per smell kind: up to 20 smells of each would flood the bar.
 function showSmells(kind, list, button) {
+  if (ego) render(view);
   clearHighlight();
   button.classList.add("active");
   stage.classList.add(`sev-${list[0].severity}`);
@@ -552,8 +576,10 @@ const matches = (it, q) => it.kind === "module" ? hit(it.id, q)
   : it.kind === "group" && (hit(it.id, q) || groupById[it.id].nodes.some(id => hit(id, q)));
 initUI({
   layout,
-  dismiss: clearHighlight,
+  dismiss: () => ego ? exitEgo() : clearHighlight(),
+  neighbourhood: () => { const id = focused || ego?.id; if (id) enterEgo(id, ego ? ego.hops : 1); },
   onFilter: q => {
+    if (ego && q) render(view);
     clearHighlight();
     if (!q) return;
     const found = new Set(items.filter(it => matches(it, q)).map(it => it.id));

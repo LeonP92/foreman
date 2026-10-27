@@ -130,12 +130,27 @@ body.drawer-open .canvas { padding-right: 380px; }
 /* Edges */
 .edge { fill: none; stroke-width: 1.5; opacity: .55; transition: opacity var(--ease), stroke-width var(--ease); }
 .edge.import { stroke: var(--import); } .edge.call { stroke: var(--call); }
-.edge.impl { stroke: var(--impl); } .edge.cycle { stroke: var(--cycle); }
+.edge.impl { stroke: var(--impl); } .edge.cycle { stroke: var(--cycle); opacity: .9; }
 .edge.forbidden { stroke: var(--forbidden); stroke-width: 2; stroke-dasharray: 6 3; opacity: .9; }
 .edge.twin { stroke: var(--sev); stroke-width: 2; stroke-dasharray: 1 5; stroke-linecap: round; opacity: .8; }
 /* After the kind rules so focus state wins over each kind's resting look. */
 .edge.on { opacity: 1; stroke-width: 2; }
 .edge.dim { opacity: .08; }
+/* Focus direction: what the selection imports in the accent, what imports it in ink-2. */
+.edge.on.out { stroke: var(--changed); opacity: 1; } .edge.on.in { stroke: var(--ink-2); opacity: 1; }
+.ah-out { fill: var(--changed); } .ah-in { fill: var(--ink-2); }
+.gone { display: none !important; }
+/* The neighbourhood shows only what matters, so its unfocused part stays legible. */
+body.ego .card.dim { opacity: .6; } body.ego .edge.dim { opacity: .35; }
+.dir-key { position: absolute; z-index: 1; left: 16px; bottom: 16px; display: none; gap: 14px; padding: 7px 12px;
+  border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface-2); color: var(--ink-2); font-size: 12px; }
+.dir-key span { display: flex; align-items: center; gap: 8px; }
+body.directed .dir-key { display: flex; }
+.ego-bar { position: absolute; z-index: 1; left: 16px; top: 14px; padding: 6px 12px; border: 1px solid var(--hairline);
+  border-radius: 10px; background: var(--surface-2); }
+.ego-bar[hidden] { display: none; }
+.ego-bar .hop { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; cursor: pointer; }
+.ego-bar input { margin: 0; accent-color: var(--changed); }
 .ah-import { fill: var(--import); } .ah-call { fill: var(--call); } .ah-cycle { fill: var(--cycle); }
 .ah-forbidden { fill: var(--forbidden); } .ah-impl { fill: var(--surface-1); stroke: var(--impl); stroke-width: 1.5; }
 
@@ -195,6 +210,9 @@ body.drawer-open .canvas { padding-right: 380px; }
 .link { border: 0; background: none; padding: 0; cursor: pointer; font: 12.5px var(--mono);
   color: var(--ink-1); text-decoration: underline; text-decoration-color: var(--hairline); text-underline-offset: 3px; }
 .link:hover { text-decoration-color: var(--ink-muted); }
+.drawer-body .actions { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
+.crumbs { display: flex; align-items: center; gap: 6px; font: 500 12.5px var(--mono); color: var(--ink-1); }
+.crumbs .quiet { font-family: var(--sans); }
 .edge-list li { display: flex; align-items: baseline; gap: 8px; }
 .edge-list .kind { font-size: 11px; color: var(--ink-muted); }
 

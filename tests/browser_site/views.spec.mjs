@@ -29,3 +29,51 @@ test("map enter on a group drills in and focuses the breadcrumb", async ({ page 
   await page.keyboard.press("Enter");
   await expect(page.locator("#crumb-all")).toBeFocused();
 });
+
+const group = (page, label) => page.locator(".card.group", { has: page.locator(".card-label", { hasText: new RegExp(`^${label}$`) }) });
+const left = async locator => (await locator.boundingBox()).x;
+
+test("map with more than 30 package edges opens as a matrix", async ({ page }) => {
+  await page.goto("/dense.html");
+  await expect(page.locator("#matrix")).toBeVisible();
+  await expect(page.locator('#seg [data-mode="matrix"]')).toHaveAttribute("aria-pressed", "true");
+});
+
+test("map with few package edges opens as a graph", async ({ page }) => {
+  await page.goto("/layered.html");
+  await expect(page.locator("#matrix")).toHaveCount(0);
+  await expect(page.locator(".card.group")).toHaveCount(3);
+});
+
+test("problems only hides import edges", async ({ page }) => {
+  await page.goto("/layered.html");
+  await page.locator("#edges").click();
+  await page.locator('[data-set="problems"]').click();
+  await expect(page.locator("path.edge.import").first()).toBeHidden();
+  await expect(page.locator("path.edge.forbidden")).toBeVisible();
+});
+
+test("map neighbourhood puts dependents left and dependencies right", async ({ page }) => {
+  await page.goto("/layered.html");
+  await group(page, "svc").click();
+  await page.keyboard.press("n");
+  await expect(page.locator(".ego-bar")).toBeVisible();
+  await expect.poll(async () => (await left(group(page, "app"))) < (await left(group(page, "svc")))).toBe(true);
+  await expect.poll(async () => (await left(group(page, "svc"))) < (await left(group(page, "core")))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ego-bar")).toBeHidden();
+  await expect(group(page, "svc")).toHaveClass(/selected/);
+  await expect(page.locator(".layer-label")).toHaveCount(3);
+});
+
+test("diagram neighbourhood puts dependents left and dependencies right", async ({ page }) => {
+  await page.goto("/diagram.html");
+  await card(page, "gateway").click();
+  await page.locator("[data-ego]").click();
+  await expect(card(page, "cart_view")).toBeHidden();
+  await expect.poll(async () => (await left(card(page, "refunds"))) < (await left(card(page, "gateway")))).toBe(true);
+  await expect.poll(async () => (await left(card(page, "gateway"))) < (await left(card(page, "receipts")))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(card(page, "cart_view")).toBeVisible();
+  await expect(card(page, "gateway")).toHaveClass(/selected/);
+});

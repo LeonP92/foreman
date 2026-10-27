@@ -87,10 +87,8 @@ const canvas = document.getElementById("canvas"), stage = document.getElementByI
 
 const perLane = DATA.lanes.map(l => DATA.nodes.filter(n => n.lane === l).length);
 const height = TOP + Math.max(...perLane) * PITCH - (PITCH - H) + 32;
-stage.style.height = height + "px";
-svg.setAttribute("height", height);
 
-const defs = markerDefs(["import", "call", "cycle", "forbidden"], 8);
+const defs = markerDefs(["import", "call", "cycle", "forbidden", "out", "in"], 8);
 const mi = el("marker", {id:"a-impl", viewBox:"0 0 12 12", refX:11, refY:6, markerWidth:10, markerHeight:10,
   markerUnits:"userSpaceOnUse", orient:"auto"}, defs);
 el("path", {d:"M1,1 L11,6 L1,11 z", class:"ah-impl"}, mi);
@@ -114,7 +112,7 @@ function edgePath(a, b) {
 }
 DATA.edges.forEach(({from: a, to: b, kind, label}) => {
   const path = el("path", {class:`edge ${kind}`, "marker-end":`url(#a-${kind})`});
-  el("title", {}, path).textContent = `${labelOf(a)} → ${labelOf(b)}: ${KIND[kind]}${label ? " — " + label : ""}`;
+  el("title", {}, path).textContent = `${labelOf(a)} → ${labelOf(b)} · ${KIND[kind]}${label ? " · " + label : ""}`;
   edgeEls.push({a, b, kind, label, path});
 });
 // Twins get an arrowless dotted line; it is not a dependency, so it is not in edgeEls.
@@ -127,13 +125,14 @@ const twinEls = SMELLS.filter(s => s.kind === "twin").map(s => {
 // Lanes share the available width (clamped); rows go selection first, then its neighbours, then the
 // rest, each keeping data order (sort is stable). Nodes and edges move in one frame loop so edges stay
 // attached while nodes slide.
-let focused = null, near = new Set();
+// ego: the neighbourhood view ({id, hops}) while it is up.
+let focused = null, near = new Set(), ego = null;
 function layout(instant = false) {
+  if (ego) return egoPlace(instant);
   const n = DATA.lanes.length;
   W = Math.max(MIN_W, Math.min(MAX_W, Math.floor((availableWidth(canvas) - 2 * PAD - (n - 1) * GAP) / n)));
   const width = 2 * PAD + (n - 1) * (W + GAP) + W;
-  stage.style.width = width + "px";
-  svg.setAttribute("width", width);
+  setStage(width, height);
   lanes.replaceChildren();
   DATA.lanes.forEach((name, i) => {
     el("rect", {class:"lane", x:PAD + i * (W + GAP) - 16, y:16, width:W + 32, height:height - 32, rx:14}, lanes);
@@ -151,6 +150,35 @@ function layout(instant = false) {
     nodeEls.forEach((card, id) => { card.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
   });
 }
+// Neighbourhood: only the centre's columns and the edges between neighbouring columns stay.
+function egoPlace(instant) {
+  const {to, col, width, height: h} = egoLayout(ego.id, edgeEls, ego.hops, labelOf, {size: [W, H], gap: [GAP + 24, PITCH - H], pad: PAD, top: TOP + 16});
+  setStage(width, h);
+  lanes.replaceChildren();
+  nodeEls.forEach((card, id) => card.classList.toggle("gone", !col.has(id)));
+  edgeEls.forEach(e => e.path.classList.toggle("gone", !egoEdge(col, e)));
+  twinEls.forEach(t => t.path.classList.add("gone"));
+  slide(to, instant, () => {
+    edgeEls.forEach(e => { if (col.has(e.a) && col.has(e.b)) e.path.setAttribute("d", flowPath(pos[e.a], [W, H], pos[e.b], [W, H])); });
+    col.forEach((_, id) => { nodeEls.get(id).style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
+  });
+}
+function enterEgo(id, hops) {
+  ego = {id, hops};
+  showEgoBar("Diagram", labelOf(id), hops, exitEgo, h => enterEgo(ego.id, h));
+  focusNode(byId[id]);
+}
+function leaveEgo() {
+  ego = null;
+  hideEgoBar();
+  document.querySelectorAll(".gone").forEach(x => x.classList.remove("gone"));
+}
+// Back to the lanes with the neighbourhood's centre selected.
+function exitEgo() {
+  const id = ego.id;
+  leaveEgo();
+  focusNode(byId[id]);
+}
 // Also runs when the drawer's padding transition ends; before that the scroll range can't reach the last lane.
 function reveal() {
   if (!focused) return;
@@ -163,7 +191,7 @@ function clearHighlight() {
   layout();
   stage.className = "stage";
   nodeEls.forEach(card => card.classList.remove("selected", "smelly", "dim"));
-  edgeEls.forEach(e => e.path.classList.remove("dim", "on"));
+  markEdges(edgeEls, () => "");
   twinEls.forEach(t => t.path.classList.remove("dim", "on"));
   document.querySelectorAll("#chips button").forEach(b => b.classList.remove("active"));
   closeDrawer();
@@ -176,6 +204,7 @@ const entry = e => typeof e === "string" ? `<li>${fmt(e)}</li>`
   : `<li class="diff"><code class="old">${esc(e.old)}</code><code class="new">${esc(e.new)}</code>${e.note ? `<div class="note">${fmt(e.note)}</div>` : ""}</li>`;
 const SECTIONS = [["added","Added"],["changed","Changed"],["removed","Removed"],["affected","Role in this change"]];
 function focusNode(n) {
+  if (ego && nodeEls.get(n.id).classList.contains("gone")) return enterEgo(n.id, ego.hops);
   clearHighlight();
   focused = n.id;
   near = new Set(edgeEls.flatMap(e => e.a === n.id ? [e.b] : e.b === n.id ? [e.a] : []));
@@ -185,12 +214,11 @@ function focusNode(n) {
     card.classList.toggle("selected", id === n.id);
     card.classList.toggle("dim", id !== n.id && !near.has(id));
   });
-  edgeEls.forEach(e => { const on = e.a === n.id || e.b === n.id;
-    e.path.classList.toggle("on", on); e.path.classList.toggle("dim", !on); });
+  markEdges(edgeEls, towards(n.id));
   twinEls.forEach(t => { const on = t.s.nodes.includes(n.id);
     t.path.classList.toggle("on", on); t.path.classList.toggle("dim", !on); });
   let html = `<h2>${esc(n.label)}</h2><div class="meta"><span class="badge r-${n.status}">${BADGE[n.status]}</span>`
-    + (n.sub ? `<code class="quiet">${esc(n.sub)}</code>` : "") + `</div>`;
+    + (n.sub ? `<code class="quiet">${esc(n.sub)}</code>` : "") + `</div>` + EGO_BUTTON;
   for (const [k, title] of SECTIONS) {
     const items = (n.summary || {})[k];
     if (items && items.length) html += `<h3>${title}</h3><ul>${items.map(entry).join("")}</ul>`;
@@ -203,6 +231,7 @@ function focusNode(n) {
   reveal();
 }
 function showSmell(s, button) {
+  if (ego) leaveEgo();
   clearHighlight();
   button.classList.add("active");
   stage.className = `stage sev-${s.severity}`;
@@ -211,8 +240,7 @@ function showSmell(s, button) {
     card.classList.toggle("smelly", members.has(id));
     card.classList.toggle("dim", !members.has(id));
   });
-  edgeEls.forEach(e => { const on = members.has(e.a) && members.has(e.b);
-    e.path.classList.toggle("on", on); e.path.classList.toggle("dim", !on); });
+  markEdges(edgeEls, e => members.has(e.a) && members.has(e.b) ? "on" : "dim");
   twinEls.forEach(t => { t.path.classList.toggle("on", t.s === s); t.path.classList.toggle("dim", t.s !== s); });
   openDrawer(`<h2 class="sans">${fmt(s.title)}</h2><div class="meta">${sevWord(s)}<span class="quiet">${esc(s.kind)}</span></div>`
     + `<h3>What it means</h3><p>${esc(SMELL_TEXT[s.kind])}</p><h3>Evidence</h3><p>${fmt(s.evidence)}</p>`
@@ -262,13 +290,15 @@ document.getElementById("drawer").addEventListener("click", ev => {
 const matches = q => DATA.nodes.filter(n => n.label.toLowerCase().includes(q));
 initUI({
   layout,
-  dismiss: clearHighlight,
+  dismiss: () => ego ? exitEgo() : clearHighlight(),
+  neighbourhood: () => { const id = focused || (ego && ego.id); if (id) enterEgo(id, ego ? ego.hops : 1); },
   onFilter: q => {
+    if (ego && q) leaveEgo();
     clearHighlight();
     if (!q) return;
     const ids = new Set(matches(q).map(n => n.id));
     nodeEls.forEach((card, id) => card.classList.toggle("dim", !ids.has(id)));
-    edgeEls.forEach(e => e.path.classList.add("dim"));
+    markEdges(edgeEls, () => "dim");
     twinEls.forEach(t => t.path.classList.add("dim"));
   },
   onFilterEnter: q => { const found = q && matches(q); if (found && found.length) focusNode(found[0]); },

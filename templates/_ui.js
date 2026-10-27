@@ -1,6 +1,6 @@
 // Shared foreman UI: escaping, theme toggle, filter keys, drawer, focus animation.
 // Text from DATA is escaped; `backticks` become <code>.
-// Requires: #canvas, #g (the edge <svg>), #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme.
+// Requires: .view, #canvas, #g (the edge <svg>), #drawer (with .drawer-body and .drawer-close), #filter, #filter-key, #theme.
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 const SEV_RANK = {low: 1, medium: 2, high: 3};
@@ -21,6 +21,13 @@ function el(tag, attrs, parent = svg) {
   parent.appendChild(e);
   return e;
 }
+// Sizes the stage (the edge <svg>'s parent) and the <svg> together.
+function setStage(width, height) {
+  svg.parentNode.style.width = width + "px";
+  svg.parentNode.style.height = height + "px";
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+}
 // A <defs> with a filled arrowhead `#a-<kind>` per kind, sized in canvas px so thick edges don't inflate it.
 function markerDefs(kinds, size) {
   const defs = el("defs", {});
@@ -31,13 +38,68 @@ function markerDefs(kinds, size) {
   }
   return defs;
 }
-// Edge emphasis: state(e) is "on", "dim" or "" for each {path, text?} (text: the edge's label, if any).
+// Edge emphasis: state(e) is "out" / "in" (lit, coloured by direction), "on", "dim" or "" for each
+// {path, kind, text?} (text: the edge's label, if any). Direction colours bring up the on-canvas key.
 function markEdges(list, state) {
+  let directed = false;
   for (const e of list) {
-    const st = state(e);
-    for (const node of [e.path, e.text]) if (node) { node.classList.toggle("on", st === "on"); node.classList.toggle("dim", st === "dim"); }
+    if (!e.path) continue;  // never drawn (a map opened as a matrix)
+    const st = state(e), dir = st === "out" || st === "in", on = dir || st === "on";
+    directed ||= dir;
+    for (const node of [e.path, e.text]) if (node) { node.classList.toggle("on", on); node.classList.toggle("dim", st === "dim"); }
+    e.path.classList.toggle("out", st === "out");
+    e.path.classList.toggle("in", st === "in");
+    e.path.setAttribute("marker-end", `url(#a-${dir ? st : e.kind})`);
   }
+  document.body.classList.toggle("directed", directed);
 }
+const towards = id => e => e.a === id ? "out" : e.b === id ? "in" : "dim";
+
+// Neighbourhood ("ego") layout: what imports `id` in the columns to its left, what it imports to its right, `hops`
+// deep; each column sorted by edge weight to the previous column, then name. Each id appears once, nearest first.
+// Returns positions `to`, the column of every id shown, and the stage size.
+function egoLayout(id, edges, hops, name, {size: [w, h], gap: [gx, gy], pad, top}) {
+  const col = new Map([[id, 0]]), weight = new Map();
+  for (let d = 1; d <= hops; d++) for (const side of [1, -1]) for (const e of edges) {
+    const [from, to] = side > 0 ? [e.a, e.b] : [e.b, e.a];
+    if (col.get(from) !== side * (d - 1)) continue;
+    if (!col.has(to)) col.set(to, side * d);
+    if (col.get(to) === side * d) weight.set(to, (weight.get(to) || 0) + (e.count || 1));
+  }
+  const cols = {};
+  col.forEach((c, n) => (cols[c] ||= []).push(n));
+  const keys = Object.keys(cols).map(Number).sort((a, b) => a - b), rows = Math.max(...keys.map(c => cols[c].length));
+  const to = {}, byWeight = (a, b) => weight.get(b) - weight.get(a) || (name(a) < name(b) ? -1 : 1);
+  keys.forEach((c, i) => cols[c].sort(byWeight).forEach((n, j) =>
+    to[n] = {x: pad + i * (w + gx), y: top + ((rows - cols[c].length) / 2 + j) * (h + gy)}));
+  return {to, col, width: 2 * pad + keys.length * (w + gx) - gx, height: top + rows * (h + gy) - gy + pad};
+}
+// Only edges one column to the right are drawn, so direction is position.
+const egoEdge = (col, e) => col.has(e.a) && col.get(e.b) === col.get(e.a) + 1;
+const flowPath = (p, [pw, ph], q, [, qh]) => {
+  const x1 = p.x + pw, y1 = p.y + ph / 2, x2 = q.x, y2 = q.y + qh / 2, mid = (x1 + x2) / 2;
+  return `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
+};
+const EGO_BUTTON = `<div class="actions"><button type="button" class="icon-btn" data-ego>Neighbourhood</button><kbd>N</kbd></div>`;
+
+// The neighbourhood bar over the canvas: a way back (the breadcrumb) and the +1 hop toggle.
+const egoBar = Object.assign(document.createElement("nav"), {className: "ego-bar crumbs", hidden: true});
+egoBar.setAttribute("aria-label", "Neighbourhood");
+document.querySelector(".view").appendChild(egoBar);
+function showEgoBar(back, label, hops, onBack, onHops) {
+  egoBar.innerHTML = `<button type="button" class="link">${esc(back)}</button><span class="quiet">/</span>`
+    + `<span>Neighbourhood of <b>${esc(label)}</b></span><label class="quiet hop"><input type="checkbox"${hops > 1 ? " checked" : ""}> +1 hop</label>`;
+  egoBar.querySelector("button").addEventListener("click", ev => { ev.stopPropagation(); onBack(); });
+  egoBar.querySelector("input").addEventListener("change", ev => onHops(ev.target.checked ? 2 : 1));
+  egoBar.hidden = false;
+  document.body.classList.add("ego");
+}
+const hideEgoBar = () => { egoBar.hidden = true; document.body.classList.remove("ego"); };
+
+const dirKey = Object.assign(document.createElement("div"), {className: "dir-key"});
+dirKey.innerHTML = `<span><svg width="26" height="8"><line class="edge on out" x1="0" y1="4" x2="26" y2="4"/></svg>outgoing</span>`
+  + `<span><svg width="26" height="8"><line class="edge on in" x1="0" y1="4" x2="26" y2="4"/></svg>incoming</span>`;
+document.querySelector(".view").appendChild(dirKey);
 
 // Floating tooltip for things a native title can't serve (keyboard focus): showTip(element, text) / hideTip().
 const tipEl = Object.assign(document.createElement("div"), {className: "tip", role: "tooltip"});
@@ -158,9 +220,10 @@ function closeDrawer() {
 }
 
 // dismiss: clears the view's selection (Esc, drawer close). onFilter(query) / onFilterEnter(query).
+// neighbourhood: switches to the neighbourhood view (key N, the drawer's Neighbourhood button).
 // layout(instant): re-places the view in availableWidth(); animated when the drawer opens or closes,
 // snapped on resize (debounced, then one frame).
-function initUI({dismiss, onFilter, onFilterEnter, layout}) {
+function initUI({dismiss, onFilter, onFilterEnter, layout, neighbourhood}) {
   const root = document.documentElement, filter = document.getElementById("filter");
   const saved = localStorage.getItem(THEME_KEY);
   if (saved) root.dataset.theme = saved;
@@ -178,7 +241,9 @@ function initUI({dismiss, onFilter, onFilterEnter, layout}) {
   document.addEventListener("keydown", ev => {
     if (/^k$/i.test(ev.key) && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); filter.focus(); filter.select(); }
     else if (ev.key === "Escape") dismiss();
+    else if (/^n$/i.test(ev.key) && !ev.metaKey && !ev.ctrlKey && !ev.altKey && !(ev.target instanceof HTMLInputElement)) neighbourhood();
   });
+  drawer.addEventListener("click", ev => { if (ev.target.closest("[data-ego]")) neighbourhood(); });
   drawer.querySelector(".drawer-close").addEventListener("click", dismiss);
   closeDrawer();
   relayout = layout;
