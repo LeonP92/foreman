@@ -11,6 +11,8 @@ with smells marked), and a short ranked list of what needs your judgement.
 
 ![A dependency diagram with a node focused and its details open](docs/diagram.png)
 
+![A dependency-ordered codebase map with a forbidden crossing and a cycle highlighted](docs/map.png)
+
 ## Install
 
 Claude Code:
