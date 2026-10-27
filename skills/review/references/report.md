@@ -11,8 +11,7 @@ and "branch deleted on remote" or "appears squash-merged as <sha>" when the revi
 it so.
 
 - **Verdict:** `fix N first`, where N is exactly the number of Must fix findings, or
-  `ship` when there are none. Should fix and Nice to have never change the verdict; if
-  one would block the merge, it is a Must fix.
+  `ship` when there are none. Should fix and Nice to have never change the verdict.
 - **Findings:** counts by severity, `M must / S should / N nice`.
 - **Tests:** passed / run, or which command failed.
 - **Browser:** items passing on branch / items run, and how many bugs base reproduced;

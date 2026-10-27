@@ -47,4 +47,4 @@ same way. Adding a guard or a new layer is the last resort, not the first.
 One line says what goes and what takes its place:
 "`checkout/discounts.py:40` `percent_of()` repeats `money.percent()`; call that and delete
 40–58." For simplicity findings the concrete case is the cost you can point at: the copy
-that will fall out of step, the option nobody passes, the lines a reader must wade through.
+that will fall out of step, the option nobody passes.

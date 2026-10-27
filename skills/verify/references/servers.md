@@ -80,9 +80,10 @@ server with a log file instead of `-`, and `[server] start` with `{port}` filled
 prints `{"pid": N}` and returns while the server keeps running in its own process group,
 so the whole tree can be stopped later.
 
-Put `--env-file <path>` (repeatable) before `<settings>` to load a file of `NAME=value`
-lines, such as the throwaway secrets file setup made outside the repo, into the
-environment before `${NAME}` is filled in. It never prints values, and a file that sets
+Put `--env-file <path>` (repeatable) before `<settings>` to load a file of unquoted
+`NAME=value` lines (an optional `export ` prefix; quotes are kept as part of the value), such
+as the throwaway secrets file setup made outside the repo, into the environment before
+`${NAME}` is filled in. It never prints values, and a file that sets
 a removed database location is rejected with a one-line error naming the variable.
 
 The commands are shell commands written by the repo, so the launcher runs them through
