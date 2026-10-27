@@ -61,6 +61,9 @@ LAYERED = _map(
     ],
 )
 
+# One layer of three: with the drawer open it wraps, sending z -> x round the gutter.
+WIDE = _map([("x", 0), ("y", 0), ("z", 0)], [("z", "x", "cycle", "up")])
+
 
 @pytest.mark.browser
 def test_views_in_a_browser(tmp_path, serve):
@@ -71,13 +74,16 @@ def test_views_in_a_browser(tmp_path, serve):
     render.write(MAP, site / "map.html")
     render.write(DENSE, site / "dense.html")
     render.write(LAYERED, site / "layered.html")
+    render.write(WIDE, site / "wide.html")
     r = run(SPEC, tmp_path / "out", serve(site))
     assert [(t["title"], t["status"]) for t in r["tests"]] == [
         ("diagram filter enter focuses the first match", "passed"),
         ("diagram focus pulls neighbours up and fades the rest", "passed"),
         ("diagram neighbourhood puts dependents left and dependencies right", "passed"),
         ("map enter on a group drills in and focuses the breadcrumb", "passed"),
+        ("map label follows its arc after the drawer closes", "passed"),
         ("map neighbourhood puts dependents left and dependencies right", "passed"),
+        ("map renders when storage is unavailable", "passed"),
         ("map with few package edges opens as a graph", "passed"),
         ("map with more than 30 package edges opens as a matrix", "passed"),
         ("problems only hides import edges", "passed"),

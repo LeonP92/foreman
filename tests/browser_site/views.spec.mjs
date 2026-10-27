@@ -79,3 +79,30 @@ test("diagram neighbourhood puts dependents left and dependencies right", async 
   await expect(card(page, "cart_view")).toBeVisible();
   await expect(card(page, "gateway")).toHaveClass(/selected/);
 });
+
+test("map label follows its arc after the drawer closes", async ({ page }) => {
+  await page.goto("/wide.html");
+  // Distance from the label to the midpoint of its edge.
+  const offset = () => page.evaluate(() => {
+    const path = document.querySelector("path.edge.cycle"), text = document.querySelector("text.edge-label");
+    const mid = path.getPointAtLength(path.getTotalLength() / 2);
+    return Math.hypot(Number(text.getAttribute("x")) - mid.x, Number(text.getAttribute("y")) + 6 - mid.y);
+  });
+  const top = async label => (await group(page, label).boundingBox()).y;
+  await group(page, "y").click();
+  await expect.poll(async () => (await top("z")) > (await top("x"))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#drawer")).not.toHaveClass(/open/);
+  await expect.poll(offset).toBeLessThan(1);
+});
+
+test("map renders when storage is unavailable", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", { get() { throw new DOMException("denied", "SecurityError"); } });
+  });
+  await page.goto("/layered.html");
+  await expect(page.locator(".card.group")).toHaveCount(3);
+  await page.locator("#theme").click();
+  await page.locator('#seg [data-mode="matrix"]').click();
+  await expect(page.locator("#matrix")).toBeVisible();
+});

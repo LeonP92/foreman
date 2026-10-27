@@ -46,8 +46,8 @@ button.cell:hover { box-shadow: inset 0 0 0 1px var(--ink-muted); }
 .cell.dim { opacity: .15; }
 .mx-diag { position: absolute; pointer-events: none; }
 .mx-diag line { stroke: var(--ink-muted); stroke-dasharray: 3 4; opacity: .6; }
-.mx-note { position: absolute; font-size: 11.5px; color: var(--ink-muted); white-space: nowrap; }
-.mx-note.up { color: var(--forbidden); font-weight: 600; }
+.mx-note { position: absolute; width: 184px; font-size: 11.5px; color: var(--ink-muted); }
+.mx-note.up { color: var(--ink-2); }
 .drawer-body .pair-list li { flex-wrap: wrap; gap: 4px 8px; }
 @supports not (color: color-mix(in srgb, red 50%, blue)) {
   button.cell { background: var(--changed); } .cell { background: var(--surface-2); }
@@ -172,7 +172,8 @@ function aggregate(viewOf) {
 const packageEdges = DATA.packages.map(p => ({a: p.from, b: p.to, count: p.imports, kind: p.kind, up: p.dir === "up"}));
 
 // mode: how the package view shows (graph or matrix); dense maps start as a matrix.
-let mode = localStorage.getItem(MODE_KEY) || (packageEdges.length > MATRIX_EDGES ? "matrix" : "graph");
+const savedMode = store.get(MODE_KEY);
+let mode = ["graph", "matrix"].includes(savedMode) ? savedMode : packageEdges.length > MATRIX_EDGES ? "matrix" : "graph";
 const matrixShown = () => !view && mode === "matrix" && !ego;
 const seg = document.getElementById("seg");
 const showMode = () => seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
@@ -180,7 +181,7 @@ seg.addEventListener("click", ev => {
   const b = ev.target.closest("button");
   if (!b) return;
   mode = b.dataset.mode;
-  localStorage.setItem(MODE_KEY, mode);
+  store.set(MODE_KEY, mode);
   showMode();
   render(null);
 });
@@ -251,6 +252,8 @@ function render(group, keepEgo = false) {
     // tooltips and the drawer.
     e.text = !view && (e.kind !== "import" || e.up) ? el("text", {class: `edge-label ${e.kind}`}) : null;
     if (e.text) e.text.textContent = `${nameOf(e.a)} → ${nameOf(e.b)} · ${plural(e.count, "import")} · ${e.kind === "import" ? "up" : e.kind}`;
+    // An upward plain import can only be type-only (codemap makes runtime ones cycles).
+    if (e.text && e.kind === "import") el("title", {}, e.text).textContent = "type-only import against the dependency order";
   });
   stage.className = edges.length > 40 ? "stage dense" : "stage";
   renderCrumbs();
@@ -336,6 +339,7 @@ function layout(instant = false) {
 // Up across rows: out to the left of the grid, up, along the gap above the target row and down into it.
 function layerPath(e) {
   const p = pos[e.a], q = pos[e.b], [w, h] = SIZE.group, px = p.x + w / 2, qx = q.x + w / 2;
+  e.labelAt = null;  // set again below only while the edge takes the gutter route
   if (Math.abs(p.y - q.y) < 1) {
     const [y, dip] = p.x < q.x ? [p.y + h, ARC] : [p.y, -ARC];
     return `M${px},${y} C${px},${y + dip} ${qx},${y + dip} ${qx},${y}`;
@@ -406,7 +410,7 @@ function buildMatrix() {
       const shade = Math.round(22 + 70 * Math.log1p(e.count) / Math.log1p(max));
       return `<button type="button" class="cell ${e.kind}" data-a="${esc(a)}" data-b="${esc(b)}" style="--shade:${shade}%" aria-label="${esc(pairText(e))}">${e.count}</button>`;
     }).join("")).join("")
-    + `<svg class="mx-diag" aria-hidden="true"><line/></svg><span class="mx-note">↗ above: flows down (normal)</span><span class="mx-note up">↙ below: flows up (problem)</span>`;
+    + `<svg class="mx-diag" aria-hidden="true"><line/></svg><span class="mx-note">↗ above: flows down (normal)</span><span class="mx-note up">↙ below: flows up — cycles and forbidden crossings are outlined</span>`;
   const pairOf = cell => at.get(cell.dataset.a + "\n" + cell.dataset.b);
   m.addEventListener("click", ev => {
     const cell = ev.target.closest("button.cell");
@@ -434,7 +438,7 @@ function layoutMatrix() {
   d.setAttribute("height", size);
   Object.entries({x1: 0, y1: 0, x2: size, y2: size}).forEach(([k, v]) => d.firstChild.setAttribute(k, v));
   Object.assign(above.style, {left: x0 + size + 16 + "px", top: y0 + 8 + "px"});
-  Object.assign(below.style, {left: x0 + size + 16 + "px", top: y0 + size - 24 + "px"});
+  Object.assign(below.style, {left: x0 + size + 16 + "px", top: y0 + size - 40 + "px"});
   const width = 2 * PAD + x0 + size + MX_NOTES, height = 2 * PAD + y0 + size;
   setStage(width, height);
 }
