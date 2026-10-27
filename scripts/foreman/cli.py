@@ -4,7 +4,7 @@ import posixpath
 import sys
 from pathlib import Path, PureWindowsPath
 
-from foreman import config, graph
+from foreman import config, graph, render
 from foreman.langs import rule
 
 
@@ -41,6 +41,13 @@ def _graph_rule_check(args) -> tuple[dict, int]:
     return result, 0 if result["ok"] else 1
 
 
+def _render(args) -> tuple[dict, int]:
+    data = json.loads(args.data.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{args.data.as_posix()}: expected a JSON object")  # noqa: TRY004 - CLI maps bad input to ValueError
+    return {"path": render.write(data, args.out).as_posix()}, 0
+
+
 def _command(name, func):
     sub = _SUBPARSERS.add_parser(name)
     sub.set_defaults(func=func)
@@ -53,6 +60,10 @@ _PARSER = _Parser(prog="foreman")
 _SUBPARSERS = _PARSER.add_subparsers(dest="command", required=True)
 _command("graph", _graph).add_argument("--files", nargs="+")
 _command("graph-rule-check", _graph_rule_check).add_argument("--name", required=True)
+_render_parser = _SUBPARSERS.add_parser("render")
+_render_parser.set_defaults(func=_render)
+_render_parser.add_argument("data", type=Path)
+_render_parser.add_argument("out", type=Path)
 COMMANDS = frozenset(_SUBPARSERS.choices)
 
 
@@ -60,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = _PARSER.parse_args(argv)
         result, code = args.func(args)
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
         print(f"foreman: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=1, sort_keys=True))

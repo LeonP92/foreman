@@ -1,0 +1,44 @@
+{
+ "title": "Branch `order-discounts` vs `main`: modules and interfaces touched",
+ "notes": "Import edges from the Python import graph; `cart.js` imports read directly.",
+ "lanes": ["web", "checkout", "payments"],
+ "nodes": [
+  {"id": "cart_view", "label": "web/cart_view.py", "sub": "CartView", "lane": "web", "status": "changed",
+   "summary": {"changed": [{"old": "render_cart(cart: Cart) -> str", "new": "render_cart(cart: Cart, code: str | None = None) -> str"}]}},
+  {"id": "cart_js", "label": "web/static/cart.js", "sub": "discountTotal", "lane": "web", "status": "changed",
+   "summary": {"added": ["`discountTotal(lines, code)` previews the discount before checkout"]}},
+  {"id": "cart", "label": "checkout/cart.py", "sub": "Cart", "lane": "checkout", "status": "changed",
+   "summary": {"changed": [{"old": "Cart.total() -> Decimal", "new": "Cart.total(discount: Decimal = Decimal(0)) -> Decimal", "note": "rounds half-even"}]}},
+  {"id": "order", "label": "checkout/order.py", "sub": "place_order", "lane": "checkout", "status": "changed",
+   "summary": {"changed": [{"old": "place_order(cart: Cart) -> Order", "new": "place_order(cart: Cart, code: str | None) -> Order"}]}},
+  {"id": "discounts", "label": "checkout/discounts.py", "sub": "NEW", "lane": "checkout", "status": "added",
+   "summary": {"added": ["`apply_discount(cart: Cart, code: str) -> Decimal`", "`reverse_discount(order: Order) -> Decimal`"]}},
+  {"id": "gateway", "label": "payments/gateway.py", "sub": "charge", "lane": "payments", "status": "changed",
+   "summary": {"changed": [{"old": "charge(order: Order) -> Receipt", "new": "charge(order: Order, *, rounding: str = \"half-even\") -> Receipt"}]}},
+  {"id": "receipts", "label": "payments/receipts.py", "sub": "send_receipt", "lane": "payments", "status": "affected",
+   "summary": {"affected": ["`send_receipt(receipt)` now shows the discount line"]}},
+  {"id": "refunds", "label": "payments/refunds.py", "sub": "refund", "lane": "payments", "status": "affected",
+   "summary": {"affected": ["`refund(order)` calls `reverse_discount` for partial refunds"]}}
+ ],
+ "edges": [
+  {"from": "cart_view", "to": "cart", "kind": "import"},
+  {"from": "cart_view", "to": "discounts", "kind": "call", "label": "apply_discount"},
+  {"from": "cart_view", "to": "cart_js", "kind": "call", "label": "renders"},
+  {"from": "cart", "to": "discounts", "kind": "import"},
+  {"from": "order", "to": "cart", "kind": "import"},
+  {"from": "order", "to": "gateway", "kind": "call", "label": "charge"},
+  {"from": "gateway", "to": "receipts", "kind": "call", "label": "send_receipt"},
+  {"from": "refunds", "to": "gateway", "kind": "import"},
+  {"from": "refunds", "to": "discounts", "kind": "call", "label": "reverse_discount"}
+ ],
+ "smells": [
+  {"kind": "twin", "severity": "high", "nodes": ["discounts", "cart_js"],
+   "title": "Discount rule exists in Python and in the browser",
+   "evidence": "`apply_discount()` and `discountTotal()` both cap the discount at 50%; no test compares them",
+   "suggestion": "Serve the preview from `apply_discount()` or add a shared table of cases both test against"},
+  {"kind": "scatter", "severity": "medium", "nodes": ["cart", "order", "gateway"],
+   "title": "Half-even rounding added in three modules",
+   "evidence": "`Cart.total()`, `place_order()` and `charge()` each round with `ROUND_HALF_EVEN`",
+   "suggestion": "Round once in `Cart.total()` and pass the rounded amount on"}
+ ]
+}

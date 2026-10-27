@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dependency diagram</title>
+<style>
+  :root { --bg:#fff; --fg:#1f2937; --muted:#6b7280; --panel:#f9fafb; --line:#e5e7eb;
+          --added:#16a34a; --changed:#2563eb; --removed:#dc2626; --affected:#9ca3af;
+          --import:#6b7280; --call:#2563eb; --impl:#7c3aed; --cycle:#d97706; --forbidden:#dc2626; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111827; --fg:#e5e7eb; --muted:#9ca3af; --panel:#1f2937; --line:#374151; }
+  }
+  body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg);
+         display:grid; grid-template-columns: 1fr 400px; grid-template-rows: auto 1fr; height:100vh; }
+  header { grid-column: 1 / -1; padding:10px 16px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0 0 4px; }
+  header .notes { font-size:12px; color:var(--muted); margin:0 0 6px; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--muted); align-items:center; }
+  .legend svg { vertical-align:middle; }
+  main { overflow:auto; }
+  aside { border-left:1px solid var(--line); background:var(--panel); padding:14px 16px; overflow:auto; }
+  aside h2 { font-size:15px; margin:0 0 2px; word-break:break-all; }
+  aside .status { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  aside h3 { font-size:12px; margin:14px 0 4px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  aside ul { margin:0; padding-left:18px; }
+  aside li { margin:3px 0; }
+  code { font:12px ui-monospace, monospace; }
+  .old { color:var(--removed); text-decoration:line-through; }
+  .new { color:var(--added); }
+  g.node { cursor:pointer; transition:transform 200ms ease; }
+  g.node rect { fill:var(--bg); stroke-width:2; }
+  g.node.selected rect { stroke-width:4; }
+  g.node text { fill:var(--fg); font-size:12px; pointer-events:none; }
+  g.node text.sub { fill:var(--muted); font-size:10px; }
+  .lane { fill:none; stroke:var(--line); stroke-dasharray:4 4; }
+  .lane-label { fill:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+  path.edge { fill:none; stroke-width:1.4; opacity:.75; }
+  path.edge.dim { opacity:.15; }
+  path.import { stroke:var(--import); }
+  path.call { stroke:var(--call); stroke-dasharray:6 4; }
+  path.impl { stroke:var(--impl); stroke-dasharray:2 3; }
+  path.cycle { stroke:var(--cycle); stroke-width:2.5; stroke-dasharray:8 3; opacity:1; }
+  path.forbidden { stroke:var(--forbidden); stroke-width:3; opacity:1; }
+  path.twin { stroke-width:2.5; stroke-dasharray:1 5; stroke-linecap:round; opacity:1; }
+  g.node.dim { opacity:.15; }
+  g.node.smelly rect { stroke-width:4; }
+  g.node .badge text { fill:#fff; font-size:11px; font-weight:700; }
+  .smells { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; font-size:12px; align-items:center; }
+  .smells button { font:inherit; font-size:12px; border:1px solid currentColor; background:transparent;
+                   border-radius:999px; padding:1px 9px; cursor:pointer; }
+  .smells button.active { background:currentColor; }
+  .smells button.active span { color:var(--bg); }
+  aside .sev { font-size:11px; font-weight:700; text-transform:uppercase; }
+  aside code { overflow-wrap:anywhere; }
+  #filter { font:inherit; font-size:12px; padding:2px 8px; margin-top:6px; width:220px;
+            color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p class="notes" id="notes"></p>
+  <div class="legend">
+    <span><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="3" fill="none" stroke="#16a34a" stroke-width="2"/></svg> added</span>
+    <span><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="3" fill="none" stroke="#2563eb" stroke-width="2"/></svg> changed</span>
+    <span><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="3" fill="none" stroke="#dc2626" stroke-width="2"/></svg> removed</span>
+    <span><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="3" fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="3 2"/></svg> unchanged, one hop away</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#6b7280" stroke-width="1.6"/></svg> imports</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#2563eb" stroke-width="1.6" stroke-dasharray="6 4"/></svg> calls / renders</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#7c3aed" stroke-width="1.6" stroke-dasharray="2 3"/></svg> implements / subclasses</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#d97706" stroke-width="2.5" stroke-dasharray="8 3"/></svg> import cycle</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#dc2626" stroke-width="3"/></svg> forbidden layer crossing</span>
+    <span><svg width="34" height="8"><line x1="0" y1="4" x2="34" y2="4" stroke="#ea580c" stroke-width="2.5" stroke-dasharray="1 5" stroke-linecap="round"/></svg> twin (must stay in sync)</span>
+    <span><svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="#ea580c"/><text x="8" y="12" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">!</text></svg> smell (low / medium / high: <b style="color:#ca8a04">●</b> <b style="color:#ea580c">●</b> <b style="color:#be123c">●</b>)</span>
+    <span id="crossings"></span>
+    <span>Click a node to focus it and its neighbours, or a smell for details; click empty space to clear.</span>
+  </div>
+  <div class="smells" id="smells"></div>
+  <input id="filter" type="search" placeholder="Filter nodes (Enter focuses the first match)" aria-label="Filter nodes">
+</header>
+<main><svg id="g"></svg></main>
+<aside id="panel"><h2>Select a node</h2><p>Each node lists the public methods it added, removed or changed, with old and new signatures. Method bodies are left out.</p></aside>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+// Text from DATA is escaped; `backticks` become <code>.
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+const fmtEntry = e => typeof e === "string" ? fmt(e)
+  : `<code class="old">${esc(e.old)}</code> → <code class="new">${esc(e.new)}</code>${e.note ? " — " + fmt(e.note) : ""}`;
+
+document.title = DATA.title;
+document.getElementById("title").innerHTML = fmt(DATA.title);
+document.getElementById("notes").innerHTML = fmt(DATA.notes || "");
+const forbiddenCount = DATA.edges.filter(e => e.kind === "forbidden").length;
+document.getElementById("crossings").innerHTML = forbiddenCount
+  ? `<b style="color:#dc2626">${forbiddenCount} forbidden crossing(s)</b>` : "Forbidden layer crossings: <b>none found</b>";
+
+const COLOR = {added:"#16a34a", changed:"#2563eb", removed:"#dc2626", affected:"#9ca3af"};
+const W = 230, H = 46, LANE_GAP = 290, LEFT = 30, TOP = 50, GAP = 100;
+const svg = document.getElementById("g"), NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+
+const pos = {}, perLane = DATA.lanes.map(l => DATA.nodes.filter(n => n.lane === l).length);
+const height = TOP + Math.max(...perLane) * GAP + 20;
+svg.setAttribute("width", LEFT + DATA.lanes.length * LANE_GAP);
+svg.setAttribute("height", height);
+
+const defs = el("defs", {});
+for (const [k, c] of [["import","#6b7280"],["call","#2563eb"],["cycle","#d97706"],["forbidden","#dc2626"]]) {
+  const m = el("marker", {id:"a-"+k, viewBox:"0 0 10 10", refX:9, refY:5, markerWidth:7, markerHeight:7, orient:"auto-start-reverse"}, defs);
+  el("path", {d:"M0,0 L10,5 L0,10 z", fill:c}, m);
+}
+const mi = el("marker", {id:"a-impl", viewBox:"0 0 12 12", refX:11, refY:6, markerWidth:10, markerHeight:10, orient:"auto"}, defs);
+el("path", {d:"M0,0 L11,6 L0,12 z", fill:"white", stroke:"#7c3aed", "stroke-width":1.5}, mi);
+
+DATA.lanes.forEach((name, i) => {
+  el("rect", {class:"lane", x:LEFT + i * LANE_GAP - 12, y:16, width:W + 24, height:height - 20, rx:8});
+  el("text", {class:"lane-label", x:LEFT + i * LANE_GAP, y:36}).textContent = name;
+});
+
+const SEV = {low:"#ca8a04", medium:"#ea580c", high:"#be123c"}, SEV_RANK = {low:1, medium:2, high:3};
+const SMELL_TEXT = {
+  scatter: "One concept is spread across these modules; the next change to it touches all of them.",
+  twin: "Two implementations of the same rule that must change together.",
+  hub: "Many modules meet here; a change to it ripples to all of them.",
+};
+const SMELLS = DATA.smells || [];
+
+const edgeEls = [], nodeEls = new Map();
+let pairCount = {};
+function edgePath(a, b) {
+  const p = pos[a], q = pos[b];
+  const key = [a, b].sort().join("|");
+  const k = pairCount[key] = (pairCount[key] || 0) + 1;
+  const bend = (k - 1) * 22 * (a < b ? 1 : -1);
+  let x1, y1, x2, y2;
+  if (p.x === q.x) { x1 = p.x + W; y1 = p.y + H/2; x2 = q.x + W; y2 = q.y + H/2; }
+  else if (p.x < q.x) { x1 = p.x + W; y1 = p.y + H/2; x2 = q.x; y2 = q.y + H/2; }
+  else { x1 = p.x; y1 = p.y + H/2; x2 = q.x + W; y2 = q.y + H/2; }
+  return p.x === q.x
+    ? `M${x1},${y1} C${x1+60+bend},${y1} ${x2+60+bend},${y2} ${x2},${y2}`
+    : `M${x1},${y1} C${(x1+x2)/2},${y1+bend} ${(x1+x2)/2},${y2+bend} ${x2},${y2}`;
+}
+DATA.edges.forEach(({from: a, to: b, kind, label}) => {
+  const path = el("path", {class:`edge ${kind}`, "marker-end":`url(#a-${kind})`});
+  el("title", {}, path).textContent = `${a} → ${b}: ${kind}${label ? " — " + label : ""}`;
+  edgeEls.push({a, b, path});
+});
+// Twins get an arrowless dotted line; it is not a dependency, so it is not in edgeEls.
+const twinEls = SMELLS.filter(s => s.kind === "twin").map(s => {
+  const [a, b] = s.nodes;
+  const path = el("path", {class:"edge twin", stroke:SEV[s.severity]});
+  el("title", {}, path).textContent = `twin: ${s.title}`;
+  return {s, path};
+});
+const smellsOf = id => SMELLS.filter(s => s.nodes.includes(id));
+
+const panel = document.getElementById("panel");
+const SECTIONS = [["added","Added"],["removed","Removed"],["changed","Changed"],["affected","Role in this change"]];
+const labelOf = id => DATA.nodes.find(n => n.id === id).label;
+const sevTag = s => `<span class="sev" style="color:${SEV[s.severity]}">${s.severity}</span>`;
+// Rows go selection first, then `first`, then the rest; each group keeps data order (sort is stable).
+function layout(first = new Set(), sel = null) {
+  const rank = n => n.id === sel ? 0 : first.has(n.id) ? 1 : 2, rows = DATA.lanes.map(() => 0);
+  [...DATA.nodes].sort((a, b) => rank(a) - rank(b)).forEach(n => { const lane = DATA.lanes.indexOf(n.lane);
+    pos[n.id] = {x: LEFT + lane * LANE_GAP, y: TOP + rows[lane]++ * GAP}; });
+  pairCount = {};
+  // shortcut: edges jump to their new route while nodes slide; animate `d` if that reads badly.
+  edgeEls.forEach(e => e.path.setAttribute("d", edgePath(e.a, e.b)));
+  twinEls.forEach(t => t.path.setAttribute("d", edgePath(...t.s.nodes)));
+  nodeEls.forEach((g, id) => g.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`);
+}
+function clearHighlight() {
+  layout();
+  document.querySelectorAll("g.node").forEach(g => g.classList.remove("selected", "smelly", "dim"));
+  edgeEls.forEach(e => e.path.classList.remove("dim"));
+  twinEls.forEach(t => t.path.classList.remove("dim"));
+  document.querySelectorAll(".smells button").forEach(b => b.classList.remove("active"));
+}
+function focusNode(n) {
+  clearHighlight();
+  const near = new Set(edgeEls.flatMap(e => e.a === n.id ? [e.b] : e.b === n.id ? [e.a] : []));
+  layout(near, n.id);
+  document.querySelector("main").scrollTo({top: 0});
+  document.querySelectorAll("g.node").forEach(g => {
+    g.classList.toggle("selected", g.dataset.id === n.id);
+    g.classList.toggle("dim", g.dataset.id !== n.id && !near.has(g.dataset.id));
+  });
+  edgeEls.forEach(e => e.path.classList.toggle("dim", e.a !== n.id && e.b !== n.id));
+  twinEls.forEach(t => t.path.classList.toggle("dim", !t.s.nodes.includes(n.id)));
+  let html = `<h2>${esc(n.label)}</h2><div class="status" style="color:${COLOR[n.status]}">${n.status === "affected" ? "unchanged, affected" : n.status}</div>`;
+  for (const [k, title] of SECTIONS) {
+    const items = (n.summary || {})[k];
+    if (items && items.length) html += `<h3>${title}</h3><ul>${items.map(i => `<li>${fmtEntry(i)}</li>`).join("")}</ul>`;
+  }
+  const mine = smellsOf(n.id);
+  if (mine.length) html += `<h3>Smells</h3><ul>${mine.map(s => `<li>${sevTag(s)} ${esc(s.kind)}: ${fmt(s.title)}</li>`).join("")}</ul>`;
+  const out = [...new Set(edgeEls.filter(e => e.a === n.id).map(e => e.b))];
+  const inc = [...new Set(edgeEls.filter(e => e.b === n.id).map(e => e.a))];
+  html += `<h3>Edges</h3><ul><li>out → ${esc(out.join(", ") || "—")}</li><li>in ← ${esc(inc.join(", ") || "—")}</li></ul>`;
+  panel.innerHTML = html;
+}
+function showSmell(s, button) {
+  clearHighlight();
+  button.classList.add("active");
+  const members = new Set(s.nodes);
+  document.querySelectorAll("g.node").forEach(g => {
+    g.classList.toggle("smelly", members.has(g.dataset.id));
+    g.classList.toggle("dim", !members.has(g.dataset.id));
+  });
+  edgeEls.forEach(e => e.path.classList.toggle("dim", !(members.has(e.a) && members.has(e.b))));
+  twinEls.forEach(t => t.path.classList.toggle("dim", t.s !== s));
+  panel.innerHTML = `<h2>${fmt(s.title)}</h2><div>${sevTag(s)} <span class="status">${esc(s.kind)}</span></div>`
+    + `<p>${esc(SMELL_TEXT[s.kind])}</p><h3>Evidence</h3><p>${fmt(s.evidence)}</p>`
+    + (s.suggestion ? `<h3>Suggestion</h3><p>${fmt(s.suggestion)}</p>` : "")
+    + `<h3>Nodes (${s.nodes.length})</h3><ul>${s.nodes.map(id => `<li>${esc(labelOf(id))}</li>`).join("")}</ul>`;
+}
+const smellBar = document.getElementById("smells");
+if (SMELLS.length) {
+  smellBar.innerHTML = `<b>Smells:</b>`;
+  [...SMELLS].sort((x, y) => SEV_RANK[y.severity] - SEV_RANK[x.severity]).forEach(s => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.style.color = SEV[s.severity];
+    b.innerHTML = `<span>⚠ ${esc(s.kind)}: ${fmt(s.title)}</span>`;
+    b.addEventListener("click", ev => { ev.stopPropagation(); showSmell(s, b); });
+    smellBar.appendChild(b);
+  });
+} else {
+  smellBar.innerHTML = `Structural smells: <b>none found</b>`;
+}
+DATA.nodes.forEach(n => {
+  const g = el("g", {class:"node", "data-id":n.id, tabindex:0, role:"button", "aria-label":n.label});
+  nodeEls.set(n.id, g);
+  el("rect", {width:W, height:H, rx:6, stroke:COLOR[n.status], "stroke-dasharray": n.status === "affected" ? "4 3" : ""}, g);
+  el("text", {x:10, y:19}, g).textContent = n.label;
+  el("text", {x:10, y:35, class:"sub"}, g).textContent = n.sub || "";
+  const mine = smellsOf(n.id);
+  if (mine.length) {
+    const worst = mine.reduce((w, s) => SEV_RANK[s.severity] > SEV_RANK[w.severity] ? s : w);
+    const badge = el("g", {class:"badge", transform:`translate(${W - 4},4)`}, g);
+    el("circle", {r:9, fill:SEV[worst.severity]}, badge);
+    el("text", {y:4, "text-anchor":"middle"}, badge).textContent = mine.length > 1 ? mine.length : "!";
+    el("title", {}, badge).textContent = mine.map(s => `${s.severity} ${s.kind}: ${s.title}`).join("\n");
+  }
+  g.addEventListener("click", ev => { ev.stopPropagation(); focusNode(n); });
+  g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); focusNode(n); } });
+});
+layout();
+const filter = document.getElementById("filter");
+const matches = () => { const q = filter.value.trim().toLowerCase();
+  return q ? DATA.nodes.filter(n => n.label.toLowerCase().includes(q)) : null; };
+filter.addEventListener("input", () => {
+  clearHighlight();
+  const found = matches();
+  if (!found) return;
+  const ids = new Set(found.map(n => n.id));
+  nodeEls.forEach((g, id) => g.classList.toggle("dim", !ids.has(id)));
+  edgeEls.forEach(e => e.path.classList.add("dim"));
+  twinEls.forEach(t => t.path.classList.add("dim"));
+});
+filter.addEventListener("keydown", ev => { const found = matches();
+  if (ev.key === "Enter" && found && found.length) focusNode(found[0]); });
+// The whole pane, not just the SVG, so a click below a short graph also clears.
+document.querySelector("main").addEventListener("click", clearHighlight);
+</script>
+</body>
+</html>
