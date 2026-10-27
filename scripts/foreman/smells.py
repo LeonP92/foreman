@@ -62,7 +62,8 @@ class Smell(TypedDict):
 
 
 def _in_test_dir(path: str) -> bool:
-    return not TEST_DIRS.isdisjoint(path.split("/")[:-1])
+    # case-insensitive: Swift keeps tests in `Tests/`, some Java layouts in `Test/`
+    return not TEST_DIRS.isdisjoint(part.lower() for part in path.split("/")[:-1])
 
 
 def _subject(path: str, stems: Collection[str]) -> str:

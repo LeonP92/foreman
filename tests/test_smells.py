@@ -470,3 +470,9 @@ def test_class_test_suffixes_need_a_test_folder_or_their_subject():
     assert sorted(s["nodes"][0] for s in dead) == [foo, spec]
     pairs = [_pair(9, 1.0, foo, foo_test)]
     assert _kinds(_detect([foo, foo_test], pairs=pairs), "cochange") == []
+
+
+def test_test_folders_match_in_any_case():
+    for path in ["Tests/Helpers.swift", "src/Test/Util.java", "web/__TESTS__/x.js"]:
+        assert smells._is_test(path, set()), path
+    assert not smells._is_test("src/Testing/Util.java", set())
