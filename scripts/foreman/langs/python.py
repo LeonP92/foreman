@@ -19,33 +19,35 @@ def _module_file(base: str, index: RepoIndex) -> str | None:
     return None
 
 
-def _bases(path: str, level: int, module: str | None) -> list[str]:
+def _bases(path: str, level: int, module: str | None, index: RepoIndex) -> list[str]:
     parts = module.split(".") if module else []
     if level == 0:
-        return ["/".join(parts), posixpath.join("src", *parts)]
+        return [posixpath.join(root, *parts) for root in index.python_roots]
     package = posixpath.dirname(path)
     for _ in range(level - 1):
         package = posixpath.dirname(package)
     return [posixpath.join(package, *parts)]
 
 
+def _first(bases: list[str], name: str | None, index: RepoIndex) -> str | None:
+    for base in bases:
+        # `from pkg import name` names a submodule when one exists, else something in pkg
+        found = (name and _module_file(posixpath.join(base, name), index)) or _module_file(
+            base, index
+        )
+        if found:
+            return found
+    return None
+
+
 def _targets(path: str, node: ast.AST, index: RepoIndex) -> list[str]:
     if isinstance(node, ast.Import):
-        found = [
-            _module_file(base, index)
-            for alias in node.names
-            for base in _bases(path, 0, alias.name)
-        ]
-        return [f for f in found if f]
-    if not isinstance(node, ast.ImportFrom):
+        found = [_first(_bases(path, 0, a.name, index), None, index) for a in node.names]
+    elif isinstance(node, ast.ImportFrom):
+        bases = _bases(path, node.level, node.module, index)
+        found = [_first(bases, a.name, index) for a in node.names]
+    else:
         return []
-    found = []
-    for base in _bases(path, node.level, node.module):
-        # `from pkg import name` names a submodule when one exists, else something in pkg
-        for alias in node.names:
-            found.append(
-                _module_file(posixpath.join(base, alias.name), index) or _module_file(base, index)
-            )
     return [f for f in found if f]
 
 

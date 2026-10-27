@@ -10,6 +10,7 @@ QUOTED = re.compile(r"\"([^\"]+)\"")
 def imports(path: str, text: str, index: RepoIndex) -> list[tuple[str, bool]]:
     if index.go_module is None:
         return []
+    # shortcut: regex scan also matches imports in comments/strings; switch to a tokenizer if this causes false edges
     specs = [s for block in BLOCK.findall(text) for s in QUOTED.findall(block)]
     specs += SINGLE.findall(text)
     found = []

@@ -8,6 +8,45 @@ from foreman.files import language, list_files, read_text
 from foreman.langs import go, go_package, javascript, make_index, python, rule
 from foreman.langs.rule import Rule
 
+NON_SOURCE_EXTENSIONS = frozenset(
+    [
+        ".md",
+        ".rst",
+        ".txt",
+        ".json",
+        ".jsonc",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".lock",
+        ".csv",
+        ".tsv",
+        ".xml",
+        ".html",
+        ".htm",
+        ".css",
+        ".scss",
+        ".sass",
+        ".less",
+        ".svg",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".ico",
+        ".webp",
+        ".pdf",
+        ".sql",
+        ".env",
+        ".example",
+        ".sample",
+        ".gitignore",
+        ".gitattributes",
+        ".editorconfig",
+    ]
+)
 BUILTINS = {"python": python, "javascript": javascript, "go": go}
 
 
@@ -87,7 +126,7 @@ def build(
         suffix = posixpath.splitext(path)[1]
         lang = language(path) or rule_by_ext.get(suffix)
         if lang is None:
-            if in_scope and suffix:
+            if in_scope and suffix and suffix not in NON_SOURCE_EXTENSIONS:
                 unsupported[suffix] += 1
             continue
         source = go_package(path) if lang == "go" else path

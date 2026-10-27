@@ -24,6 +24,8 @@ LANGUAGES = {
     ".py": "python",
     ".ts": "javascript",
     ".tsx": "javascript",
+    ".mts": "javascript",
+    ".cts": "javascript",
     ".js": "javascript",
     ".jsx": "javascript",
     ".mjs": "javascript",

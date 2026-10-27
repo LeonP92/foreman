@@ -118,8 +118,32 @@ def test_syntax_error_and_latin1_files_are_skipped_not_fatal(make_repo):
 
 
 def test_unknown_extensions_counted_in_unsupported(make_repo):
-    root = make_repo({"a.rb": "", "lib/b.rb": ""})
+    root = make_repo({"a.rb": "", "lib/b.rb": "", "README.md": "", "data.json": "{}"})
     assert build(root)["unsupported"] == {".rb": 2}
+
+
+def test_python_inferred_source_roots(make_repo):
+    root = make_repo(
+        {
+            "scripts/run.py": "from foreman import cli\n",
+            "scripts/foreman/__init__.py": "",
+            "scripts/foreman/cli.py": "from foreman.files import read_text\n",
+            "scripts/foreman/files.py": "",
+            "packages/a/src/a/__init__.py": "",
+            "packages/a/src/a/x.py": "import a.y\n",
+            "packages/a/src/a/y.py": "",
+        }
+    )
+    assert {
+        ("scripts/run.py", "scripts/foreman/cli.py", False),
+        ("scripts/foreman/cli.py", "scripts/foreman/files.py", False),
+        ("packages/a/src/a/x.py", "packages/a/src/a/y.py", False),
+    } <= edge_set(build(root))
+
+
+def test_js_specifier_maps_to_ts_source(make_repo):
+    root = make_repo({"a.ts": "import x from './c.js'\n", "c.ts": ""})
+    assert edge_set(build(root)) == {("a.ts", "c.ts", False)}
 
 
 def test_files_filter_keeps_edges_touching_given_paths(make_repo):
