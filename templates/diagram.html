@@ -155,7 +155,15 @@ function layout(first = new Set(), sel = null) {
     nodeEls.forEach((card, id) => { card.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
   });
 }
+let focused = null;
+// Also runs when the drawer's padding transition ends; before that the scroll range can't reach the last lane.
+function reveal() {
+  if (!focused) return;
+  const x = stage.offsetLeft + pos[focused].x, room = canvas.clientWidth - drawer.offsetWidth;
+  if (x < canvas.scrollLeft || x + W > canvas.scrollLeft + room) canvas.scrollTo({left: x - (room - W) / 2});
+}
 function clearHighlight() {
+  focused = null;
   layout();
   stage.className = "stage";
   nodeEls.forEach(card => card.classList.remove("selected", "smelly", "dim"));
@@ -173,6 +181,7 @@ const entry = e => typeof e === "string" ? `<li>${fmt(e)}</li>`
 const SECTIONS = [["added","Added"],["changed","Changed"],["removed","Removed"],["affected","Role in this change"]];
 function focusNode(n) {
   clearHighlight();
+  focused = n.id;
   const near = new Set(edgeEls.flatMap(e => e.a === n.id ? [e.b] : e.b === n.id ? [e.a] : []));
   layout(near, n.id);
   canvas.scrollTo({top: 0});
@@ -195,6 +204,7 @@ function focusNode(n) {
   html += `<h3>Edges out</h3>${edgeList(edgeEls.filter(e => e.a === n.id), "→", "b")}`
     + `<h3>Edges in</h3>${edgeList(edgeEls.filter(e => e.b === n.id), "←", "a")}`;
   openDrawer(html);
+  reveal();
 }
 function showSmell(s, button) {
   clearHighlight();
@@ -274,6 +284,7 @@ initUI({
 layout();
 // The whole pane, not just the SVG, so a click below a short graph also clears.
 canvas.addEventListener("click", clearHighlight);
+canvas.addEventListener("transitionend", ev => { if (ev.target === canvas) reveal(); });
 </script>
 </body>
 </html>

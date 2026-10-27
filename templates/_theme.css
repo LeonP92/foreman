@@ -1,20 +1,11 @@
 /* Shared foreman theme: dark by default, light via the OS or the toggle. */
 :root { color-scheme: dark;
-  --page: light-dark(#f9f9f7, #0d0d0d);
-  --surface-1: light-dark(#fcfcfb, #1a1a19);
-  --surface-2: light-dark(#ffffff, #222220);
-  --ink-1: light-dark(#0b0b0b, #f0efec);
-  --ink-2: light-dark(#52514e, #c3c2b7);
+  --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #222220;
+  --ink-1: #f0efec; --ink-2: #c3c2b7; --hairline: rgba(255,255,255,.10); --grid-dot: #2c2c2a;
+  --changed: #3987e5; --added: #199e70; --removed: #e66767;
+  --call: #9085e9; --impl: #d55181; --cycle: #c98500;
   --ink-muted: #898781;
-  --hairline: light-dark(rgba(11,11,11,.10), rgba(255,255,255,.10));
-  --grid-dot: light-dark(#e1e0d9, #2c2c2a);
-  --changed: light-dark(#2a78d6, #3987e5);
-  --added: light-dark(#1baf7a, #199e70);
-  --removed: light-dark(#e34948, #e66767);
   --affected: var(--ink-muted);
-  --call: light-dark(#6250d6, #9085e9);
-  --impl: light-dark(#e87ba4, #d55181);
-  --cycle: light-dark(#eda100, #c98500);
   --import: var(--ink-muted);
   --forbidden: #d03b3b;
   --sev-low: #fab219; --sev-medium: #ec835a; --sev-high: #d03b3b;
@@ -22,9 +13,17 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --ease: 200ms ease-out;
 }
-@media (prefers-color-scheme: light) { :root { color-scheme: light; } }
-:root[data-theme=light] { color-scheme: light; }
-:root[data-theme=dark] { color-scheme: dark; }
+/* Light twice: once for the OS preference (unless the toggle forced dark), once for the toggle. */
+@media (prefers-color-scheme: light) { :root:not([data-theme=dark]) { color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb; --surface-2: #ffffff;
+  --ink-1: #0b0b0b; --ink-2: #52514e; --hairline: rgba(11,11,11,.10); --grid-dot: #e1e0d9;
+  --changed: #2a78d6; --added: #1baf7a; --removed: #e34948;
+  --call: #6250d6; --impl: #e87ba4; --cycle: #eda100; } }
+:root[data-theme=light] { color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb; --surface-2: #ffffff;
+  --ink-1: #0b0b0b; --ink-2: #52514e; --hairline: rgba(11,11,11,.10); --grid-dot: #e1e0d9;
+  --changed: #2a78d6; --added: #1baf7a; --removed: #e34948;
+  --call: #6250d6; --impl: #e87ba4; --cycle: #eda100; }
 
 .r-added { --role: var(--added); } .r-changed { --role: var(--changed); }
 .r-removed { --role: var(--removed); } .r-affected { --role: var(--affected); }
