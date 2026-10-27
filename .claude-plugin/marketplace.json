@@ -1,6 +1,5 @@
 {
   "name": "foreman",
-  "version": "0.1.0",
   "owner": {"name": "Leon Pham", "url": "https://github.com/LeonP92"},
   "plugins": [
     {

@@ -14,7 +14,8 @@ markers = ["browser: needs a real browser (Node + Playwright)"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-preview = true
 
 [tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
 extend-select = ["PLW1514"]

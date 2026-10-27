@@ -4,7 +4,6 @@ from pathlib import Path
 
 PLUGIN_MANIFESTS = [
     ".claude-plugin/plugin.json",
-    ".claude-plugin/marketplace.json",
     ".codex-plugin/plugin.json",
 ]
 
