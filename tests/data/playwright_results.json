@@ -22,20 +22,20 @@
          "workerIndex": 0,
          "parallelIndex": 0,
          "status": "failed",
-         "duration": 1841,
+         "duration": 1826,
          "retry": 0,
-         "startTime": "2026-10-27T16:48:29.313Z",
+         "startTime": "2026-10-27T16:57:33.275Z",
          "annotations": [],
          "attachments": [
           {
            "name": "foreman",
            "contentType": "application/json",
-           "body": "eyJjb25zb2xlRXJyb3JzIjpbIkZhaWxlZCB0byBsb2FkIHJlc291cmNlOiB0aGUgc2VydmVyIHJlc3BvbmRlZCB3aXRoIGEgc3RhdHVzIG9mIDQwNCAoRmlsZSBub3QgZm91bmQpIl0sImJhZFJlc3BvbnNlcyI6WyI0MDQgaHR0cDovLzEyNy4wLjAuMTo1MDAwMS9taXNzaW5nLmpzIl0sInNjcmVlbnNob3RzIjpbIi9vdXQvdG90YWwtc2hvd3MtMy1iYXNlLnBuZyJdfQ=="
+           "body": "eyJjb25zb2xlRXJyb3JzIjpbIkZhaWxlZCB0byBsb2FkIHJlc291cmNlOiB0aGUgc2VydmVyIHJlc3BvbmRlZCB3aXRoIGEgc3RhdHVzIG9mIDQwNCAoRmlsZSBub3QgZm91bmQpIl0sImJhZFJlc3BvbnNlcyI6WyI0MDQgaHR0cDovLzEyNy4wLjAuMTo1MDAwMS9taXNzaW5nLmpzIl19"
           },
           {
-           "name": "error-context",
-           "contentType": "text/markdown",
-           "path": "/home/user/.cache/foreman/playwright/test-results/total-total-shows-3-base/error-context.md"
+           "name": "foreman-screenshot",
+           "contentType": "application/json",
+           "body": "Ii9vdXQvdG90YWwtc2hvd3MtMy1iYXNlLnBuZyI="
           }
          ]
         }
@@ -53,15 +53,20 @@
          "workerIndex": 1,
          "parallelIndex": 0,
          "status": "passed",
-         "duration": 68,
+         "duration": 838,
          "retry": 0,
-         "startTime": "2026-10-27T16:48:31.973Z",
+         "startTime": "2026-10-27T16:57:36.212Z",
          "annotations": [],
          "attachments": [
           {
            "name": "foreman",
            "contentType": "application/json",
-           "body": "eyJjb25zb2xlRXJyb3JzIjpbXSwiYmFkUmVzcG9uc2VzIjpbXSwic2NyZWVuc2hvdHMiOlsiL291dC90b3RhbC1zaG93cy0zLWJyYW5jaC5wbmciXX0="
+           "body": "eyJjb25zb2xlRXJyb3JzIjpbXSwiYmFkUmVzcG9uc2VzIjpbXX0="
+          },
+          {
+           "name": "foreman-screenshot",
+           "contentType": "application/json",
+           "body": "Ii9vdXQvdG90YWwtc2hvd3MtMy1icmFuY2gucG5nIg=="
           }
          ]
         }
@@ -78,8 +83,8 @@
   }
  ],
  "stats": {
-  "startTime": "2026-10-27T16:48:29.124Z",
-  "duration": 3034.6279999999997,
+  "startTime": "2026-10-27T16:57:32.757Z",
+  "duration": 4846.833,
   "expected": 1,
   "skipped": 0,
   "unexpected": 1,

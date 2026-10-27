@@ -18,8 +18,11 @@ MIN_NODE = 20
 FIXTURES = "foreman-fixtures.mjs"
 CONFIG = "playwright.config.mjs"
 RUN_MAX_AGE = 7 * 24 * 3600
+INSTALL_TIMEOUT = 600
+# globalTimeout in playwright.config.mjs is 10 minutes; this leaves room for startup and teardown.
+TEST_TIMEOUT = 660
 _DIRECT_IMPORT = re.compile(
-    r"""^\s*import .* from ['"]@playwright/test['"]"""
+    r"""^\s*(?:import|export)\s[^;]*?\bfrom\s*['"]@playwright/test['"]"""
     r"""|import\(['"]@playwright/test['"]\)"""
     r"""|require\(['"]@playwright/test['"]\)""",
     re.MULTILINE,
@@ -28,7 +31,8 @@ _DIRECT_IMPORT = re.compile(
 
 def cache_dir() -> Path:
     if os.name == "nt":
-        return Path(os.environ["LOCALAPPDATA"]) / "foreman" / "playwright"
+        root = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local"
+        return Path(root) / "foreman" / "playwright"
     root = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
     return Path(root) / "foreman" / "playwright"
 
@@ -40,28 +44,53 @@ def _tool(name: str) -> str:
     return path
 
 
-def _check(args: list[str], **kwargs) -> str:
-    proc = subprocess.run(
-        args, capture_output=True, text=True, encoding="utf-8", check=False, **kwargs
-    )
+def _run(args: list[str], timeout: int, **kwargs) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+            timeout=timeout,
+            **kwargs,
+        )
+    except subprocess.TimeoutExpired:
+        raise OSError(f"{' '.join(args)} timed out after {timeout} s") from None
+
+
+def _last_line(proc: subprocess.CompletedProcess) -> str:
+    return ((proc.stderr or proc.stdout).strip().splitlines() or [f"exit {proc.returncode}"])[-1]
+
+
+def _check(args: list[str], timeout: int = 30) -> str:
+    proc = _run(args, timeout)
     if proc.returncode:
-        tail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or [f"exit {proc.returncode}"]
-        raise OSError(f"{' '.join(args)} failed: {tail[0]}")
+        raise OSError(f"{' '.join(args)} failed: {_last_line(proc)}")
     return proc.stdout
+
+
+def _installed_version(pkg_json: Path) -> str | None:
+    try:
+        return json.loads(pkg_json.read_text(encoding="utf-8"))["version"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None  # missing or corrupt: reinstall
 
 
 def ensure() -> Path:
     node = _tool("node")
     version = _check([node, "--version"]).strip()
-    if int(version.lstrip("v").split(".")[0]) < MIN_NODE:
+    major = re.match(r"v?(\d+)\.", version)
+    if not major:
+        raise ValueError(f"cannot read the Node version from {version!r}")
+    if int(major[1]) < MIN_NODE:
         raise ValueError(f"Node >= {MIN_NODE} required, found {version}")
     cache = cache_dir()
     package = cache / "node_modules" / "@playwright" / "test"
-    pkg_json = package / "package.json"
-    installed = pkg_json.exists() and json.loads(pkg_json.read_text(encoding="utf-8"))["version"]
-    if installed != PLAYWRIGHT_VERSION:
+    if _installed_version(package / "package.json") != PLAYWRIGHT_VERSION:
         cache.mkdir(parents=True, exist_ok=True)
-        # --prefix stops npm from walking up to an ancestor project.
+        # --prefix stops npm from walking up to an ancestor project. npm may be a .cmd shim run by
+        # cmd.exe on Windows; that is safe here because every argument is fixed.
         _check(
             [
                 _tool("npm"),
@@ -71,23 +100,28 @@ def ensure() -> Path:
                 "--no-audit",
                 "--no-fund",
                 f"@playwright/test@{PLAYWRIGHT_VERSION}",
-            ]
+            ],
+            INSTALL_TIMEOUT,
         )
     cli = package / "cli.js"
     _check(
-        [node, str(cli), "install", "chromium", *(["--with-deps"] if os.environ.get("CI") else [])]
+        [node, str(cli), "install", "chromium", *(["--with-deps"] if os.environ.get("CI") else [])],
+        INSTALL_TIMEOUT,
     )
     return cli
 
 
-def _attachment(result: dict) -> dict:
-    for a in result.get("attachments", []):
-        if a["name"] == "foreman":
-            return json.loads(base64.b64decode(a["body"]))
-    return {}
+def _attachments(result: dict, name: str) -> list:
+    return [
+        json.loads(base64.b64decode(a["body"]))
+        for a in result.get("attachments", [])
+        if a["name"] == name
+    ]
 
 
 def parse_results(report: dict) -> list[dict]:
+    if report.get("errors"):
+        raise ValueError(f"spec failed to load: {report['errors'][0]['message'].splitlines()[0]}")
     tests = []
     suites = list(report.get("suites", []))
     while suites:
@@ -96,7 +130,7 @@ def parse_results(report: dict) -> list[dict]:
         for spec in suite.get("specs", []):
             for t in spec["tests"]:
                 result = t["results"][-1] if t["results"] else {"status": "skipped"}
-                extra = _attachment(result)
+                extra = (_attachments(result, "foreman") or [{}])[0]
                 tests.append(
                     {
                         "title": spec["title"],
@@ -104,9 +138,13 @@ def parse_results(report: dict) -> list[dict]:
                         "status": result["status"],
                         "console_errors": extra.get("consoleErrors", []),
                         "bad_responses": extra.get("badResponses", []),
-                        "screenshots": [Path(p).as_posix() for p in extra.get("screenshots", [])],
+                        "screenshots": [
+                            Path(p).as_posix() for p in _attachments(result, "foreman-screenshot")
+                        ],
                     }
                 )
+    if not tests:
+        raise ValueError("spec ran no tests")
     return sorted(tests, key=lambda t: (t["title"], t["project"]))
 
 
@@ -135,22 +173,15 @@ def run(spec: Path, out: Path, base_url: str, branch_url: str | None = None) -> 
         env = {**os.environ, "FOREMAN_BASE_URL": base_url, "FOREMAN_OUT": str(out)}
         if branch_url:
             env["FOREMAN_BRANCH_URL"] = branch_url
-        proc = subprocess.run(
-            [_tool("node"), str(cli), "test", "-c", CONFIG],
-            cwd=run_dir,
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=False,
+        proc = _run(
+            [_tool("node"), str(cli), "test", "-c", CONFIG], TEST_TIMEOUT, cwd=run_dir, env=env
         )
         if not results.exists():
-            tail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or [
-                f"exit {proc.returncode}"
-            ]
-            raise OSError(f"playwright produced no results: {tail[0]}")
+            raise OSError(f"playwright produced no results: {_last_line(proc)}")
         tests = parse_results(json.loads(results.read_text(encoding="utf-8")))
-        shutil.copy2(spec, out)
+        kept = out / spec.name
+        if not (kept.exists() and os.path.samefile(spec, kept)):
+            shutil.copy2(spec, out)
     finally:
         shutil.rmtree(run_dir, ignore_errors=True)
     for old in runs.iterdir():

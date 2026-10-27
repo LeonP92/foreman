@@ -9,6 +9,7 @@ export default defineConfig({
   // Relative to this file (the run dir), which is deleted; the default resolves to the cache root.
   outputDir: "test-results",
   workers: 1,
+  globalTimeout: 10 * 60_000,
   reporter: [["json", { outputFile: `${env.FOREMAN_OUT}/results.json` }]],
   projects: env.FOREMAN_BRANCH_URL
     ? [
