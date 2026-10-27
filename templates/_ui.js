@@ -31,6 +31,13 @@ function markerDefs(kinds, size) {
   }
   return defs;
 }
+// Edge emphasis: state(e) is "on", "dim" or "" for each {path, text?} (text: the edge's label, if any).
+function markEdges(list, state) {
+  for (const e of list) {
+    const st = state(e);
+    for (const node of [e.path, e.text]) if (node) { node.classList.toggle("on", st === "on"); node.classList.toggle("dim", st === "dim"); }
+  }
+}
 
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)");
 const THEME_KEY = "foreman-theme";

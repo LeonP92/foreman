@@ -175,7 +175,7 @@ def _map_data():
         "kind": "map",
         "title": "</script><script>alert(1)</script>",
         "notes": "",
-        "groups": [{"id": "src", "label": "src", "nodes": ["src/a.py"]}],
+        "groups": [{"id": "src", "label": "src", "layer": 0, "nodes": ["src/a.py"]}],
         "nodes": [
             {"id": "src/a.py", "label": "a.py", "group": "src", "lang": "python", "lines": 3}
         ],

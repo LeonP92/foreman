@@ -16,10 +16,11 @@ HUB_MIN_NEIGHBOURS = 5
 _MAP_STRING_FIELDS = {
     "groups": ("id", "label"),
     "nodes": ("id", "label", "group", "lang"),
-    "edges": ("from", "to", "kind"),
+    "edges": ("from", "to", "kind", "dir"),
     "smells": ("kind", "severity", "title", "evidence"),
 }
 MAP_EDGE_KINDS = {"import", "cycle", "forbidden"}
+MAP_EDGE_DIRS = {"down", "up"}
 MAP_SMELLS = {
     "cycle",
     "layering",
@@ -202,12 +203,19 @@ def _map(data: dict) -> list[str]:
         for g in data["groups"]
         if not g["nodes"] or not set(g["nodes"]) <= ids
     ]
+    errs += [
+        f"group {g['id']!r}: layer must be an integer >= 0"
+        for g in data["groups"]
+        if type(g.get("layer")) is not int or g["layer"] < 0
+    ]
     for e in data["edges"]:
         name = f"edge {e['from']}->{e['to']}"
         if e["from"] not in ids or e["to"] not in ids:
             errs.append(f"{name}: unknown node")
         if e["kind"] not in MAP_EDGE_KINDS:
             errs.append(f"{name}: kind must be one of {sorted(MAP_EDGE_KINDS)}")
+        if e["dir"] not in MAP_EDGE_DIRS:
+            errs.append(f"{name}: dir must be one of {sorted(MAP_EDGE_DIRS)}")
     for i, sm in enumerate(data["smells"]):
         name = f"smell #{i} ({sm['title']!r})"
         if sm["kind"] not in MAP_SMELLS:

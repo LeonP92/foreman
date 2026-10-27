@@ -18,6 +18,11 @@
 /* Many edges at rest read as noise; focus still lights them fully. */
 .stage.dense .edge:not(.on):not(.dim) { opacity: .3; }
 .drawer-body .actions { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
+.layer-label { fill: var(--ink-muted); font: 600 10px var(--sans); letter-spacing: .08em; }
+.edge-label { font: 600 11px var(--sans); text-anchor: middle; paint-order: stroke; stroke: var(--surface-1);
+  stroke-width: 4px; stroke-linejoin: round; transition: opacity var(--ease); }
+.edge-label.cycle { fill: var(--cycle); } .edge-label.forbidden { fill: var(--forbidden); }
+.edge-label.dim { opacity: .08; }
 </style>
 </head>
 <body>
@@ -39,8 +44,8 @@
 <div id="legend" class="legend" popover>
   <h4>Edges</h4>
   <ul>
-    <li><svg width="34" height="8"><line class="edge import" x1="0" y1="4" x2="34" y2="4"/></svg>imports (thicker = more)</li>
-    <li><svg width="34" height="8"><line class="edge cycle" x1="0" y1="4" x2="34" y2="4"/></svg>import cycle</li>
+    <li><svg width="34" height="8"><line class="edge import" x1="0" y1="4" x2="34" y2="4"/></svg>imports, flowing down (thicker = more)</li>
+    <li><svg width="34" height="8"><line class="edge cycle" x1="0" y1="4" x2="34" y2="4"/></svg>import cycle, flowing up</li>
     <li><svg width="34" height="8"><line class="edge forbidden" x1="0" y1="4" x2="34" y2="4"/></svg>forbidden layer crossing</li>
   </ul>
   <h4>Smells</h4>
@@ -49,7 +54,7 @@
     <li><span><span class="dot sev-medium"></span></span>medium</li>
     <li><span><span class="dot sev-high"></span></span>high</li>
   </ul>
-  <p>Click a box to focus it and its neighbours. Double-click or Enter opens a group; inside, dashed stubs stand for the other groups and open them. Esc or a click on empty space clears.</p>
+  <p>Groups are ordered by dependency: a group sits above the groups it imports, so imports flow down. Anything flowing up breaks that order and is labelled. Click a box to focus it and its neighbours. Double-click or Enter opens a group; inside, dashed stubs stand for the other groups and open them. Esc or a click on empty space clears.</p>
 </div>
 <div class="view">
   <main class="canvas" id="canvas"><div class="stage" id="stage"><svg id="g"></svg></div></main>
@@ -70,6 +75,10 @@ const DATA = /*__DATA__*/null;
 const SIZE = {group: [248, 64], module: [212, 48], stub: [180, 44]};
 // Groups get wider gaps so the few edges between them stay readable.
 const GAP = {group: [72, 44], module: [20, 14]}, PAD = 32, TOP = 58, STUB_GAP = 72;
+// Package view: a label column, then one row per dependency layer (wrapping when wide).
+const LAYER_LABEL = 160, LAYER_GAP = 72, ARC = 40;
+const LAYERS = [...new Set(DATA.groups.map(g => g.layer))].sort((a, b) => a - b);
+const layerName = i => `LAYER ${i + 1}` + (LAYERS.length < 2 ? "" : i === 0 ? " · entry points" : i === LAYERS.length - 1 ? " · foundations" : "");
 const STUB = "\u0000";
 const KIND = {import: "imports", cycle: "import cycle", forbidden: "forbidden layer crossing"};
 const SMELL_TEXT = {
@@ -110,14 +119,16 @@ function aggregate(viewOf) {
     const a = viewOf(e.from), b = viewOf(e.to);
     if (a === b || (a[0] === STUB && b[0] === STUB)) continue;
     const key = a + "\n" + b;
-    if (!agg.has(key)) agg.set(key, {a, b, count: 0, kinds: {}});
+    if (!agg.has(key)) agg.set(key, {a, b, count: 0, kinds: {}, up: e.dir === "up"});
     const x = agg.get(key);
     x.count++;
     x.kinds[e.kind] = (x.kinds[e.kind] || 0) + 1;
   }
   return [...agg.values()].map(x => ({...x, kind: x.kinds.forbidden ? "forbidden" : x.kinds.cycle ? "cycle" : "import"}));
 }
-const packageEdges = aggregate(id => byId[id].group);
+// Between groups, anything flowing up that isn't forbidden is a back edge inside a group cycle.
+const packageEdges = aggregate(id => byId[id].group)
+  .map(e => ({...e, kind: e.kinds.forbidden ? "forbidden" : e.up ? "cycle" : "import"}));
 
 let view = null, items = [], edges = [], focused = null, near = new Set(), boxW = 0;
 const cards = new Map();
@@ -173,8 +184,10 @@ function render(group) {
   edges.forEach(e => {
     e.path = el("path", {class: `edge ${e.kind}`, "marker-end": `url(#a-${e.kind})`});
     e.path.style.strokeWidth = Math.min(4.5, 1.5 + .75 * Math.log2(e.count));
-    const extra = Object.entries(e.kinds).filter(([k]) => k !== "import").map(([k, n]) => `${n} ${KIND[k]}`);
-    el("title", {}, e.path).textContent = `${name(e.a)} → ${name(e.b)}: ${plural(e.count, "import")}${extra.length ? " (" + extra.join(", ") + ")" : ""}`;
+    el("title", {}, e.path).textContent = `${name(e.a)} → ${name(e.b)} · ${KIND[e.kind]} · ${plural(e.count, "import")}`;
+    // Only the package view's upward edges carry a permanent label; counts otherwise live in tooltips and the drawer.
+    e.text = !view && e.kind !== "import" ? el("text", {class: `edge-label ${e.kind}`}) : null;
+    if (e.text) e.text.textContent = `${name(e.a)} → ${name(e.b)} · ${plural(e.count, "import")} · ${e.kind === "cycle" ? "cycle" : "forbidden"}`;
   });
   stage.className = edges.length > 40 ? "stage dense" : "stage";
   renderCrumbs();
@@ -195,43 +208,84 @@ function renderCrumbs() {
   if (view) document.getElementById("crumb-all").addEventListener("click", ev => { ev.stopPropagation(); render(null); });
 }
 
-// Grid order: selection, then its neighbours, then the rest; each keeps data order (sort is stable).
-function layout(instant = false) {
-  const rank = it => it.id === focused ? 0 : near.has(it.id) ? 1 : 2;
-  const stubs = items.filter(it => it.kind === "stub").sort((a, b) => rank(a) - rank(b));
-  const boxes = items.filter(it => it.kind !== "stub").sort((a, b) => rank(a) - rank(b));
-  const [bw, bh] = SIZE[boxes[0].kind], [GAP_X, GAP_Y] = GAP[boxes[0].kind], [sw, sh] = SIZE.stub;
+const rank = it => it.id === focused ? 0 : near.has(it.id) ? 1 : 2;
+const byRank = (a, b) => rank(a) - rank(b);
+
+// Module view grid: selection, then its neighbours, then the rest; each keeps data order (sort is stable).
+function gridPlace(to) {
+  const stubs = items.filter(it => it.kind === "stub").sort(byRank);
+  const boxes = items.filter(it => it.kind !== "stub").sort(byRank);
+  const [bw, bh] = SIZE.module, [GAP_X, GAP_Y] = GAP.module, [sw, sh] = SIZE.stub;
   const left = PAD + (stubs.length ? sw + STUB_GAP : 0);
   const room = availableWidth(canvas) - left - PAD, fit = Math.max(1, Math.floor((room + GAP_X) / (bw + GAP_X)));
   const cols = Math.min(boxes.length, fit);
   boxW = Math.max(bw, Math.floor((room - (fit - 1) * GAP_X) / fit));
-  boxes.forEach(it => { cards.get(it.id).style.width = boxW + "px"; });
-  const to = {};
   stubs.forEach((it, i) => to[it.id] = {x: PAD, y: TOP + i * (sh + GAP.module[1])});
   boxes.forEach((it, i) => to[it.id] = {x: left + (i % cols) * (boxW + GAP_X), y: TOP + Math.floor(i / cols) * (bh + GAP_Y)});
-  // The package view's last row keeps a gap below for same-row arcs.
-  const gridW = cols * (boxW + GAP_X) - GAP_X, gridH = Math.ceil(boxes.length / cols) * (bh + GAP_Y) - (view ? GAP_Y : 0);
+  const gridW = cols * (boxW + GAP_X) - GAP_X, gridH = Math.ceil(boxes.length / cols) * (bh + GAP_Y) - GAP_Y;
   const stubH = stubs.length * (sh + GAP.module[1]) - GAP.module[1];
-  const width = left + gridW + PAD, height = TOP + Math.max(gridH, stubH) + PAD;
-  stage.style.width = width + "px";
-  stage.style.height = height + "px";
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
-  regions.replaceChildren();
   const region = (x, w, h, label) => {
     el("rect", {class: "lane", x: x - 16, y: 16, width: w + 32, height: TOP + h - 16 + 16, rx: 14}, regions);
     el("text", {class: "lane-label", x, y: 40}, regions).textContent = label;
   };
-  region(left, gridW, gridH, view ? `${view} · ${plural(boxes.length, "module")}` : plural(boxes.length, "group"));
+  region(left, gridW, gridH, `${view} · ${plural(boxes.length, "module")}`);
   if (stubs.length) region(PAD, sw, stubH, "Linked groups");
+  return [left + gridW + PAD, TOP + Math.max(gridH, stubH) + PAD];
+}
+
+// Package view: one row per layer, centred; the selection and its neighbours lead their row.
+function layerPlace(to) {
+  const [bw, bh] = SIZE.group, [gx, gy] = GAP.group, left = PAD + LAYER_LABEL;
+  const rows = LAYERS.map(l => items.filter(it => groupById[it.id].layer === l).sort(byRank));
+  const fit = Math.max(1, Math.floor((availableWidth(canvas) - left - PAD + gx) / (bw + gx)));
+  const cols = Math.min(fit, Math.max(...rows.map(r => r.length))), gridW = cols * (bw + gx) - gx;
+  boxW = bw;
+  let y = TOP;
+  rows.forEach((row, i) => {
+    el("text", {class: "layer-label", x: PAD, y: y + bh / 2 + 4}, regions).textContent = layerName(i);
+    for (let k = 0; k < row.length; k += cols, y += bh + gy) {
+      const line = row.slice(k, k + cols), x0 = left + (gridW - line.length * (bw + gx) + gx) / 2;
+      line.forEach((it, j) => to[it.id] = {x: x0 + j * (bw + gx), y});
+    }
+    y += LAYER_GAP - gy;
+  });
+  return [left + gridW + PAD, y - LAYER_GAP + ARC + PAD];
+}
+
+function layout(instant = false) {
+  regions.replaceChildren();
+  const to = {}, [width, height] = view ? gridPlace(to) : layerPlace(to);
+  cards.forEach((card, id) => { if (id[0] !== STUB) card.style.width = boxW + "px"; });
+  stage.style.width = width + "px";
+  stage.style.height = height + "px";
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
   slide(to, instant, () => {
     const pairs = {};
-    edges.forEach(e => e.path.setAttribute("d", edgePath(e.a, e.b, pairs)));
+    edges.forEach(e => e.path.setAttribute("d", view ? edgePath(e.a, e.b, pairs) : layerPath(e)));
+    edges.forEach(e => { if (!e.text) return;
+      const at = e.labelAt || e.path.getPointAtLength(e.path.getTotalLength() / 2);
+      e.text.setAttribute("x", at.x); e.text.setAttribute("y", at.y - 6); });
     cards.forEach((card, id) => { card.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
   });
 }
 
-const sizeOf = id => id[0] === STUB ? SIZE.stub : [boxW, SIZE[view ? "module" : "group"][1]];
+// Down: bottom centre to top centre. Same row: an arc below (down) or above (up) the row.
+// Up across rows: out to the left of the grid, up, along the gap above the target row and down into it.
+function layerPath(e) {
+  const p = pos[e.a], q = pos[e.b], [w, h] = SIZE.group, px = p.x + w / 2, qx = q.x + w / 2;
+  if (Math.abs(p.y - q.y) < 1) {
+    const [y, dip] = p.x < q.x ? [p.y + h, ARC] : [p.y, -ARC];
+    return `M${px},${y} C${px},${y + dip} ${qx},${y + dip} ${qx},${y}`;
+  }
+  if (q.y > p.y) { const my = (p.y + h + q.y) / 2; return `M${px},${p.y + h} C${px},${my} ${qx},${my} ${qx},${q.y}`; }
+  const x = PAD + LAYER_LABEL - 24, y1 = p.y + h / 2, top = q.y - 22, r = 16;
+  e.labelAt = {x: (x + qx) / 2, y: top};
+  return `M${p.x},${y1} C${x},${y1} ${x},${y1} ${x},${y1 - r} L${x},${top + r} Q${x},${top} ${x + r},${top}`
+    + ` L${qx - r},${top} Q${qx},${top} ${qx},${q.y}`;
+}
+
+const sizeOf = id => id[0] === STUB ? SIZE.stub : [boxW, SIZE.module[1]];
 function edgePath(a, b, pairs) {
   const p = pos[a], q = pos[b], [pw, ph] = sizeOf(a), [qw, qh] = sizeOf(b);
   const key = [a, b].sort().join("\n"), k = pairs[key] = (pairs[key] || 0) + 1;
@@ -255,7 +309,7 @@ function clearHighlight() {
   near = new Set();
   if (moved) layout();
   cards.forEach(card => card.classList.remove("selected", "smelly", "dim"));
-  edges.forEach(e => e.path.classList.remove("dim", "on"));
+  markEdges(edges, () => "");
   stage.className = edges.length > 40 ? "stage dense" : "stage";
   document.querySelectorAll("#chips button.chip").forEach(b => b.classList.remove("active"));
   closeDrawer();
@@ -266,13 +320,13 @@ function focusItem(id) {
   focused = id;
   near = new Set(edges.flatMap(e => e.a === id ? [e.b] : e.b === id ? [e.a] : []));
   layout();
-  canvas.scrollTo({top: 0, left: 0});
+  // Package rows keep their layer, so only the module grid brings the selection to the top.
+  if (view) canvas.scrollTo({top: 0, left: 0});
   cards.forEach((card, cid) => {
     card.classList.toggle("selected", cid === id);
     card.classList.toggle("dim", cid !== id && !near.has(cid));
   });
-  edges.forEach(e => { const on = e.a === id || e.b === id;
-    e.path.classList.toggle("on", on); e.path.classList.toggle("dim", !on); });
+  markEdges(edges, e => e.a === id || e.b === id ? "on" : "dim");
   openDrawer(view ? moduleHtml(byId[id]) : groupHtml(groupById[id]), cards.get(id));
 }
 
@@ -326,8 +380,7 @@ function showSmells(kind, list, button) {
   stage.classList.add(`sev-${list[0].severity}`);
   const members = new Set(list.flatMap(s => view ? s.nodes : s.nodes.map(id => byId[id].group)));
   cards.forEach((card, id) => { card.classList.toggle("smelly", members.has(id)); card.classList.toggle("dim", !members.has(id)); });
-  edges.forEach(e => { const on = members.has(e.a) && members.has(e.b);
-    e.path.classList.toggle("on", on); e.path.classList.toggle("dim", !on); });
+  markEdges(edges, e => members.has(e.a) && members.has(e.b) ? "on" : "dim");
   openDrawer(`<h2 class="sans">${esc(kind)} · ${list.length}</h2><p>${esc(SMELL_TEXT[kind])}</p>`
     + list.map(s => `<h3>${sevWord(s)}</h3><p>${fmt(s.title)}<span class="evidence">${fmt(s.evidence)}</span></p>`
       + `<ul>${s.nodes.map(id => `<li>${moduleLink(id)}</li>`).join("")}</ul>`).join(""), button);
@@ -367,7 +420,7 @@ initUI({
     clearHighlight();
     if (!q) return;
     items.forEach(it => cards.get(it.id).classList.toggle("dim", !matches(it, q)));
-    edges.forEach(e => e.path.classList.add("dim"));
+    markEdges(edges, () => "dim");
   },
   // A group that matches only through one of its modules opens and focuses that module.
   onFilterEnter: q => {

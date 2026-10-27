@@ -48,8 +48,8 @@ def test_map_groups_descend_from_single_src_dir(make_repo):
     root = make_repo({"src/a/x.py": "import src.b.y\n", "src/b/y.py": "", "src/b/z.py": ""})
     data = codemap.build(root, _config())
     assert data["groups"] == [
-        {"id": "src/a", "label": "src/a", "nodes": ["src/a/x.py"]},
-        {"id": "src/b", "label": "src/b", "nodes": ["src/b/y.py", "src/b/z.py"]},
+        {"id": "src/a", "label": "src/a", "layer": 0, "nodes": ["src/a/x.py"]},
+        {"id": "src/b", "label": "src/b", "layer": 1, "nodes": ["src/b/y.py", "src/b/z.py"]},
     ]
     assert data["nodes"][0] == {
         "id": "src/a/x.py",
@@ -67,7 +67,7 @@ def test_map_validates_and_renders(make_repo, tmp_path):
     assert render.validate(data) == []
     html = render.write(data, tmp_path / "map.html").read_text(encoding="utf-8")
     assert "/*__DATA__*/null" not in html
-    bad = {**data, "edges": [{"from": "pkg/a.py", "to": "nope", "kind": "call"}]}
+    bad = {**data, "edges": [{"from": "pkg/a.py", "to": "nope", "kind": "call", "dir": "down"}]}
     assert len(render.validate(bad)) == 2
 
 
@@ -131,5 +131,81 @@ def test_go_package_layering(make_repo):
         }
     )
     data = codemap.build(root, _config(layers=[{"from": "core/**", "to": "app/**"}]))
-    assert data["edges"] == [{"from": "core", "to": "app", "kind": "forbidden"}]
+    assert data["edges"] == [{"from": "core", "to": "app", "kind": "forbidden", "dir": "up"}]
     assert [s["nodes"] for s in data["smells"] if s["kind"] == "layering"] == [["core", "app"]]
+
+
+def _layers(data):
+    return {g["id"]: g["layer"] for g in data["groups"]}
+
+
+def _dirs(data):
+    return {(e["from"], e["to"]): (e["kind"], e["dir"]) for e in data["edges"]}
+
+
+def test_groups_are_layered_by_longest_path_to_a_sink(make_repo):
+    root = make_repo(
+        {
+            "app/main.py": "import svc.orders\nimport core.db\n",
+            "svc/orders.py": "import core.db\n",
+            "tool/cli.py": "import core.db\n",
+            "core/db.py": "",
+        }
+    )
+    data = codemap.build(root, _config())
+    assert _layers(data) == {"app": 0, "core": 2, "svc": 1, "tool": 1}
+    # ties in a layer keep group id order
+    assert [g["id"] for g in data["groups"] if g["layer"] == 1] == ["svc", "tool"]
+    assert {d for _, d in _dirs(data).values()} == {"down"}
+
+
+def test_groups_in_a_cycle_share_a_layer_and_the_back_edge_is_up(make_repo):
+    root = make_repo(
+        {
+            "a/x.py": "import b.y\nimport c.z\n",
+            "b/y.py": "",
+            "b/w.py": "import a.v\n",
+            "a/v.py": "",
+            "c/z.py": "",
+        }
+    )
+    data = codemap.build(root, _config())
+    assert _layers(data) == {"a": 0, "b": 0, "c": 1}
+    assert _dirs(data) == {
+        ("a/x.py", "b/y.py"): ("import", "down"),
+        ("a/x.py", "c/z.py"): ("import", "down"),
+        ("b/w.py", "a/v.py"): ("import", "up"),
+    }
+
+
+def test_forbidden_edges_do_not_order_layers_and_flow_up(make_repo):
+    root = make_repo({"core/a.py": "import app.b\n", "app/b.py": "", "app/c.py": "import core.a\n"})
+    data = codemap.build(root, _config(layers=[{"from": "core/**", "to": "app/**"}]))
+    assert _layers(data) == {"app": 0, "core": 1}
+    assert _dirs(data) == {
+        ("core/a.py", "app/b.py"): ("forbidden", "up"),
+        ("app/c.py", "core/a.py"): ("import", "down"),
+    }
+
+
+def test_map_rejects_bad_layer_and_dir():
+    data = {
+        "kind": "map",
+        "title": "t",
+        "groups": [
+            {"id": "a", "label": "a", "nodes": ["a/x.py"], "layer": -1},
+            {"id": "b", "label": "b", "nodes": ["b/y.py"], "layer": True},
+        ],
+        "nodes": [
+            {"id": "a/x.py", "label": "x.py", "group": "a", "lang": "python", "lines": 1},
+            {"id": "b/y.py", "label": "y.py", "group": "b", "lang": "python", "lines": 1},
+        ],
+        "edges": [{"from": "a/x.py", "to": "b/y.py", "kind": "import", "dir": "sideways"}],
+        "smells": [],
+        "unsupported": {},
+    }
+    assert render.validate(data) == [
+        "group 'a': layer must be an integer >= 0",
+        "group 'b': layer must be an integer >= 0",
+        "edge a/x.py->b/y.py: dir must be one of ['down', 'up']",
+    ]

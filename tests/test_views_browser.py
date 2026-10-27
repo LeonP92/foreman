@@ -12,14 +12,14 @@ MAP = {
     "title": "Sample map",
     "notes": "",
     "groups": [
-        {"id": "app", "label": "app", "nodes": ["app/main.py"]},
-        {"id": "lib", "label": "lib", "nodes": ["lib/util.py"]},
+        {"id": "app", "label": "app", "layer": 0, "nodes": ["app/main.py"]},
+        {"id": "lib", "label": "lib", "layer": 1, "nodes": ["lib/util.py"]},
     ],
     "nodes": [
         {"id": "app/main.py", "label": "main.py", "group": "app", "lang": "python", "lines": 20},
         {"id": "lib/util.py", "label": "util.py", "group": "lib", "lang": "python", "lines": 8},
     ],
-    "edges": [{"from": "app/main.py", "to": "lib/util.py", "kind": "import"}],
+    "edges": [{"from": "app/main.py", "to": "lib/util.py", "kind": "import", "dir": "down"}],
     "smells": [],
     "unsupported": {},
 }

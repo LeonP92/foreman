@@ -2,6 +2,7 @@
 
 import posixpath
 from collections import Counter
+from graphlib import TopologicalSorter
 from pathlib import Path
 
 from foreman import dupes, graph, history, metrics, smells
@@ -25,6 +26,22 @@ def _edge_kind(edge: dict, cyclic: set[tuple[str, str]], layers: list[dict]) -> 
     if smells.forbidden_by(edge, layers):
         return "forbidden"
     return "cycle" if (edge["from"], edge["to"]) in cyclic else "import"
+
+
+def _layers(group_ids: list[str], links: set[tuple[str, str]]) -> dict[str, int]:
+    """Group -> layer: cycles condensed, then longest path down to a sink; 0 is the top row."""
+    comp = {g: g for g in group_ids}
+    for scc in graph.cycles([{"from": a, "to": b, "type_only": False} for a, b in sorted(links)]):
+        comp.update(dict.fromkeys(scc, scc[0]))
+    below: dict[str, set[str]] = {c: set() for c in comp.values()}
+    for a, b in links:
+        if comp[a] != comp[b]:
+            below[comp[a]].add(comp[b])
+    height: dict[str, int] = {}
+    for c in TopologicalSorter(below).static_order():
+        height[c] = 1 + max((height[d] for d in below[c]), default=-1)
+    top = max(height.values(), default=0)
+    return {g: top - height[comp[g]] for g in group_ids}
 
 
 def build(root: Path, config: dict) -> dict:
@@ -51,13 +68,30 @@ def build(root: Path, config: dict) -> dict:
         for e in g["edges"]
         if not e["type_only"] and member.get(e["from"], -1) == member.get(e["to"], -2)
     }
+    group_ids = sorted(set(group_of.values()))
+    kinds = [_edge_kind(e, cyclic, layers) for e in g["edges"]]
+    # Forbidden edges break the order by definition, so they don't shape it.
+    layer = _layers(
+        group_ids,
+        {
+            (group_of[e["from"]], group_of[e["to"]])
+            for e, kind in zip(g["edges"], kinds, strict=True)
+            if kind != "forbidden" and group_of[e["from"]] != group_of[e["to"]]
+        },
+    )
+    rank = {gid: (layer[gid], gid) for gid in group_ids}
     return {
         "kind": "map",
         "title": f"Codebase map: {root.resolve().name}",
         "notes": "Function sizes are measured for Python only.",
         "groups": [
-            {"id": gid, "label": gid, "nodes": [i for i in sorted(group_of) if group_of[i] == gid]}
-            for gid in sorted(set(group_of.values()))
+            {
+                "id": gid,
+                "label": gid,
+                "layer": layer[gid],
+                "nodes": [i for i in sorted(group_of) if group_of[i] == gid],
+            }
+            for gid in group_ids
         ],
         "nodes": [
             {
@@ -70,8 +104,14 @@ def build(root: Path, config: dict) -> dict:
             for i, lang in langs.items()
         ],
         "edges": [
-            {"from": e["from"], "to": e["to"], "kind": _edge_kind(e, cyclic, layers)}
-            for e in g["edges"]
+            {
+                "from": e["from"],
+                "to": e["to"],
+                "kind": kind,
+                # Against the (layer, id) order: a back edge inside a group cycle, or a forbidden one.
+                "dir": "up" if rank[group_of[e["from"]]] > rank[group_of[e["to"]]] else "down",
+            }
+            for e, kind in zip(g["edges"], kinds, strict=True)
         ],
         "smells": found,
         "unsupported": g["unsupported"],
