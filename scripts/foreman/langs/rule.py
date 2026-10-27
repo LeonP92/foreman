@@ -20,7 +20,13 @@ def validate(name: str, rule: dict) -> list[str]:
     errors = [f"missing key {key!r}" for key in KEYS if key not in rule]
     if name in BUILTINS:
         errors.append(f"{name!r} is a built-in language")
-    if "pattern" in rule:
+    for key in ("extensions", "resolve"):
+        value = rule.get(key, [""])
+        if not (isinstance(value, list) and value and all(isinstance(v, str) for v in value)):
+            errors.append(f"{key} must be a non-empty list of strings")
+    if not isinstance(rule.get("pattern", ""), str):
+        errors.append("pattern must be a string")
+    elif "pattern" in rule:
         try:
             if re.compile(rule["pattern"]).groups < 1:
                 errors.append("pattern has no group 1")

@@ -60,6 +60,11 @@ def test_validate_rejects_bad_regex_missing_group_and_builtin_name():
     assert rule.validate("ruby", {**RUBY, "pattern": "require"})
     assert rule.validate("python", RUBY)
     assert rule.validate("ruby", {"pattern": RUBY["pattern"]})
+    assert rule.validate("ruby", {**RUBY, "pattern": 1})
+    assert rule.validate("ruby", {**RUBY, "extensions": ".rb"})
+    assert rule.validate("ruby", {**RUBY, "extensions": []})
+    assert rule.validate("ruby", {**RUBY, "resolve": "x"})
+    assert rule.validate("ruby", {**RUBY, "resolve": [1]})
 
 
 def test_cli_rule_check_exit_codes(make_repo, capsys):
@@ -71,10 +76,12 @@ def test_cli_rule_check_exit_codes(make_repo, capsys):
                 "[graph.ruby]\nextensions = ['.rb']\n"
                 "pattern = '''^require_relative\\s+'(.+?)''''\nresolve = ['{dir}/{1}.rb']\n"
                 "[graph.broken]\nextensions = ['.rb']\npattern = '('\nresolve = []\n"
+                "[graph.typed]\nextensions = ['.rb']\npattern = 1\nresolve = ['{1}.rb']\n"
             ),
         }
     )
     assert cli.main(["graph-rule-check", "--name", "ruby", "--root", str(root)]) == 0
     assert json.loads(capsys.readouterr().out)["ok"] is True
-    assert cli.main(["graph-rule-check", "--name", "broken", "--root", str(root)]) == 1
-    assert capsys.readouterr().err.count("\n") == 1
+    for name in ("broken", "typed"):
+        assert cli.main(["graph-rule-check", "--name", name, "--root", str(root)]) == 1
+        assert capsys.readouterr().err.count("\n") == 1

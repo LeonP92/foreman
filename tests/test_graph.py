@@ -169,3 +169,11 @@ def test_cli_graph_applies_config_ignore(make_repo, capsys):
     assert cli.main(["graph", "--root", str(root)]) == 0
     graph = json.loads(capsys.readouterr().out)
     assert [n["id"] for n in graph["nodes"]] == ["a.py", "b.py"]
+
+
+def test_cli_files_scope_is_normalised(make_repo, capsys):
+    root = make_repo({"a.py": "import sub.b\n", "sub/__init__.py": "", "sub/b.py": ""})
+    for given in ("./sub/b.py", "sub\\b.py"):
+        assert cli.main(["graph", "--root", str(root), "--files", given]) == 0
+        edges = json.loads(capsys.readouterr().out)["edges"]
+        assert edges == [{"from": "a.py", "to": "sub/b.py", "type_only": False}]

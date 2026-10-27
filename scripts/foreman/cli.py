@@ -1,7 +1,8 @@
 import argparse
 import json
+import posixpath
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from foreman import config, graph
 from foreman.langs import rule
@@ -23,7 +24,9 @@ def _graph(args) -> tuple[dict, int]:
         errors = rule.validate(name, r)
         if errors:
             raise ValueError(f"rule {name!r}: {'; '.join(errors)}")
-    result = graph.build(args.root, args.files, cfg["repo"]["ignore"], rules)
+    # PureWindowsPath accepts both separators, so `src\a.py` and `./a.py` match repo ids
+    paths = args.files and [posixpath.normpath(PureWindowsPath(p).as_posix()) for p in args.files]
+    result = graph.build(args.root, paths, cfg["repo"]["ignore"], rules)
     return dict(result), 0
 
 
