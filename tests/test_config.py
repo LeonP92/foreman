@@ -9,8 +9,15 @@ from foreman.cli import main
 VALID = """
 [repo]
 base = "develop"
+copy = [".env"]
+[commands]
+build = "make assets"
+[env]
+APP_URL = "{url}"
+SECRET_KEY = "${SHOP_SECRET_KEY}"
 [server]
 start = "run --port {port}"
+env = { CACHE_DIR = "{dir}/cache", DB = "db-{name}-{port}" }
 [database]
 kind = "command"
 create = "mkdb {name}"
@@ -99,6 +106,10 @@ WRONG_TYPES = [
     ("[server]\nready_path = 1", "server.ready_path must be a string"),
     ("[server]\nenv = 1", "server.env must be a table of strings"),
     ("[server.env]\nA = 1", "server.env must be a table of strings"),
+    ("env = 1", "[env] must be a table of strings"),
+    ("[env]\nA = 1", "[env] must be a table of strings"),
+    ("[repo]\ncopy = 1", "repo.copy must be a list of strings"),
+    ("[commands]\nbuild = 1", "commands.build must be a string"),
     ("[repo]\nbase = 1", "repo.base must be a string"),
     ("[repo]\nignore = 1", "repo.ignore must be a list of strings"),
     ("[repo]\nignore = [1]", "repo.ignore must be a list of strings"),
@@ -129,3 +140,16 @@ def test_doc_examples_are_valid(tmp_path):
     blocks = re.findall(r"```toml\n(.*?)```", doc.read_text(encoding="utf-8"), re.DOTALL)
     assert len(blocks) == 2
     assert [check_toml(tmp_path, block) for block in blocks] == [[], []]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('[env]\nA = "{host}"', "env.A: unknown placeholder {host}"),
+        ('[server.env]\nA = "x{ports}"', "server.env.A: unknown placeholder {ports}"),
+        ('[env]\nA = "${1X}"', "env.A: ${1X} is not an environment variable name"),
+        ('[env]\nA = "${}"', "env.A: ${} is not an environment variable name"),
+    ],
+)
+def test_env_placeholder_problems(tmp_path, text, expected):
+    assert check_toml(tmp_path, text) == [expected]

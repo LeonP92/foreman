@@ -26,10 +26,12 @@ has committed against `BASE = git merge-base <repo.base> <branch>`, never the ti
 itself. If `BASE` equals the branch tip, the branch is already merged: say so in the
 report and use `BASE^` (the merge-base's first parent) as `BASE`. Diff with
 `git diff BASE <branch>`; anything run on the base (tests in step 4, verify, the diagram)
-uses a worktree at `BASE`. The report names both SHAs. If the branch isn't checked out, or the working tree has
-uncommitted changes, work in a temporary worktree of the branch (`git worktree add --detach
-<temp> <branch>`, with `<temp>` under the system temp directory, outside the repo; then
-`[commands] install`). Report:
+uses a worktree at `BASE`. The report names both SHAs. If the branch isn't checked out,
+or the working tree has uncommitted changes, work in a temporary worktree of the branch
+(`git worktree add --detach <temp> <branch>`, with `<temp>` under the system temp
+directory, outside the repo). Prepare every worktree you add (copy `[repo] copy` files,
+then `install`, `build`) and run every command in it through the launcher, as
+`<root>/skills/verify/references/servers.md` says. Report:
 `.foreman/reports/<branch>/review.md`, where `<branch>` has each `/` replaced by `-`.
 
 ## Steps

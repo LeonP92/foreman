@@ -42,12 +42,19 @@ it calls.
 
 Fill each table from what you read:
 
-- `[repo]` `base`, and `ignore` globs for generated or vendored code the file listing would
-  otherwise pick up.
+- `[repo]` `base`, `ignore` globs for generated or vendored code the file listing would
+  otherwise pick up, and `copy`: ignored files a fresh worktree needs from this checkout.
+  Check which candidates exist (`.env`, `.env.local`, local config files the run scripts
+  read) without opening them, and ask before listing each.
 - `[commands]` install, lint, typecheck, test, e2e, and `test_targeted` with `{paths}` where
-  the test runner accepts file paths. Leave a command empty when the repo has none.
+  the test runner accepts file paths; `build` for what a fresh checkout needs before it
+  runs or renders properly (an asset build CI runs before its tests). Leave a command
+  empty when the repo has none.
+- `[env]` variables every command needs (from `.env.example`, settings code, CI `env:`
+  blocks). Plain values as written; a secret only as `${NAME}`, a variable the user
+  exports, never its value. An app that needs its own address gets `{url}`.
 - `[server]` the dev-server command with `{port}` in place of the port, a `ready_path` that
-  answers once the app is up, and any `env` it needs (never secrets).
+  answers once the app is up, and any `env` only the server needs.
 - `[login]` plain steps a browser can follow to sign in locally: a dev-login link, a seeded
   user, a test account. Name where a password comes from; never write the password.
 - `[database]` see "Databases" below.

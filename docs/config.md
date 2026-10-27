@@ -10,11 +10,14 @@ is fine and means defaults). Unknown tables and keys are errors.
 |---|---|
 | `repo.base` | Branch to diff against. Default `"main"`. |
 | `repo.ignore` | Globs left out of every graph and report. |
+| `repo.copy` | Ignored files (`.env`, local settings) copied from your checkout into each worktree foreman makes. Never printed. |
 | `commands.install` / `lint` / `typecheck` / `test` / `e2e` | Shell commands; empty means skip. |
+| `commands.build` | Runs after `install` in each worktree: whatever a fresh checkout needs before it runs (an asset build). |
 | `commands.test_targeted` | Test command for a subset; `{paths}` is replaced by the test files. |
 | `server.start` | Command that starts the app; must contain `{port}`. |
 | `server.ready_path` | URL path polled until the server answers. Default `"/"`. |
-| `server.env` | Extra environment variables for the server, as a table. |
+| `env` | Environment variables for every command foreman runs in a worktree (`install`, `build`, tests, database commands, the server), as a table. |
+| `server.env` | Extra environment variables for the server only, applied on top of `env`. |
 | `login.steps` | Plain-language instructions for the agent to sign in. |
 | `database.kind` | `"none"`, `"file"` or `"command"`. Default `"none"`. |
 | `database.path` | The database file. Required for `file`. |
@@ -34,23 +37,42 @@ per server:
 - `{name}`: a unique database name, `foreman_<base|branch>_<6 lowercase hex>` (letters,
   digits and underscores only), for database servers (`postgresql:///{name}`).
 
+## Environment
+
+Foreman starts each command from your environment, removes every variable that names a
+database location, then applies `[env]`, then `[server] env` (server only), then the
+per-server database variable. Values in `[env]` and `[server] env` may use:
+
+- `{port}`: the server's port; `{url}`: `http://127.0.0.1:{port}`, for apps that need
+  to know their own address.
+- `{dir}` and `{name}`, as above.
+- `${NAME}`: the value of `NAME` in the environment foreman runs in, read when the
+  command starts; foreman never prints or stores it. Never put a secret's value in the
+  config: export it in your shell and reference it as `${NAME}`.
+
 ## Example: web app with a file database
 
 ```toml
 [repo]
 base = "main"
 ignore = ["dist/**"]
+copy = [".env"]
 
 [commands]
 install = "npm ci"
+build = "npm run build:css"
 lint = "npm run lint"
 test = "npm test"
 test_targeted = "npm test -- {paths}"
 
+[env]
+DATABASE_URL = "sqlite:///data/app.db"
+SECRET_KEY = "${SHOP_SECRET_KEY}"
+
 [server]
 start = "npm run dev -- --port {port}"
 ready_path = "/health"
-env = { APP_ENV = "test" }
+env = { APP_ENV = "test", APP_URL = "{url}" }
 
 [login]
 steps = "Open /login, sign in as demo@example.com with the password from the seed output."

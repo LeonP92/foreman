@@ -1,18 +1,21 @@
+import re
 import tomllib
 from pathlib import Path
 
 from foreman.langs import rule
 
 DEFAULTS = {
-    "repo": {"base": "main", "ignore": []},
+    "repo": {"base": "main", "ignore": [], "copy": []},
     "commands": {
         "install": "",
+        "build": "",
         "lint": "",
         "typecheck": "",
         "test": "",
         "test_targeted": "",
         "e2e": "",
     },
+    "env": {},
     "server": {"start": "", "ready_path": "/", "env": {}},
     "login": {"steps": ""},
     "database": {
@@ -30,6 +33,9 @@ DEFAULTS = {
 }
 DB_KINDS = ("none", "file", "command")
 DB_REQUIRED = {"file": ("path",), "command": ("create", "env_override", "url_template")}
+ENV_PLACEHOLDERS = ("port", "url", "dir", "name")
+# {placeholder} filled in per server, or ${NAME} read from the agent's environment at run time
+_ENV_REFERENCE = re.compile(r"(\$?)\{([^{}]*)\}")
 
 
 def load_or_default(path: Path) -> dict:
@@ -61,6 +67,9 @@ def check(data: dict) -> list[str]:
     for table, values in data.items():
         if table not in DEFAULTS:
             problems.append(f"unknown table [{table}]")
+        elif table == "env":
+            found = _type_problem("[env]", values, {})
+            problems += [found] if found else _env_problems("env", values)
         elif not isinstance(values, dict):
             problems.append(f"[{table}] must be a table")
         elif table == "graph":
@@ -72,8 +81,22 @@ def check(data: dict) -> list[str]:
                     problems.append(f"unknown key {table}.{key}")
                 elif (table, key) != ("rules", "layers"):
                     found = _type_problem(f"{table}.{key}", value, DEFAULTS[table][key])
-                    problems += [found] if found else []
+                    if found:
+                        problems.append(found)
+                    elif (table, key) == ("server", "env"):
+                        problems += _env_problems("server.env", value)
     problems += _semantic_problems(data)
+    return problems
+
+
+def _env_problems(prefix: str, env: dict) -> list[str]:
+    problems = []
+    for key, value in env.items():
+        for dollar, name in _ENV_REFERENCE.findall(value):
+            if dollar and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+                problems.append(f"{prefix}.{key}: ${{{name}}} is not an environment variable name")
+            elif not dollar and name not in ENV_PLACEHOLDERS:
+                problems.append(f"{prefix}.{key}: unknown placeholder {{{name}}}")
     return problems
 
 
