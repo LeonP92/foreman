@@ -1,4 +1,6 @@
+import re
 import shutil
+import subprocess
 
 from foreman.history import analyse
 
@@ -10,6 +12,24 @@ def test_cochange_pairs_and_conf(make_repo):
     h = analyse(root)
     assert h["churn"]["a.py"] == 3
     assert h["pairs"][0] == {"a": "a.py", "b": "b.py", "both": 2, "conf": 1.0}
+    shas = subprocess.run(
+        ["git", "rev-list", "HEAD"], cwd=root, capture_output=True, encoding="utf-8", check=True
+    ).stdout.split()
+    assert all(re.fullmatch(r"[0-9a-f]{40}", s) for s in shas)
+    assert h["window"] == {"commits": 4, "first": shas[-1], "last": shas[0]}
+
+
+def test_empty_commit_counted_without_churn(make_repo):
+    h = analyse(make_repo({"x": ""}, commits=[{}]))
+    assert h["window"]["commits"] == 2 and h["churn"] == {"x": 1}
+
+
+def test_subdirectory_root_uses_relative_paths(make_repo):
+    root = make_repo(
+        {"x": ""}, commits=[{"sub/a.py": "1", "sub/b.py": "1"}, {"sub/a.py": "2", "sub/b.py": "2"}]
+    )
+    h = analyse(root / "sub")
+    assert h["churn"] == {"a.py": 2, "b.py": 2} and h["pairs"][0]["a"] == "a.py"
 
 
 def test_bulk_commits_excluded(make_repo):

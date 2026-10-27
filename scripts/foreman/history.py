@@ -34,6 +34,7 @@ def _commits(root: Path) -> tuple[list[tuple[str, list[str]]], str | None]:
             "-z",
             "--format=%x01%H",
             "--name-only",
+            "--relative",
         ],
         check=False,
         cwd=root,
@@ -44,8 +45,8 @@ def _commits(root: Path) -> tuple[list[tuple[str, list[str]]], str | None]:
         return [], "not a git repository or no commits"
     commits = []
     for record in result.stdout.split("\x01")[1:]:
-        sha, _, rest = record.partition("\n")
-        commits.append((sha, [p for p in rest.split("\0") if p]))
+        sha, _, rest = record.partition("\0")
+        commits.append((sha, [p for p in rest.removeprefix("\n").split("\0") if p]))
     return commits, None
 
 
