@@ -1,6 +1,7 @@
 {
   "name": "foreman",
   "owner": {"name": "Leon Pham", "url": "https://github.com/LeonP92"},
+  "description": "Human-on-the-loop review for AI coding agents: hard-tests every change and maps architecture and code smells at a glance.",
   "plugins": [
     {
       "name": "foreman",

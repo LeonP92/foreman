@@ -32,8 +32,9 @@ Spread like this is where a change silently misses a spot.
 **twin** — exactly 2 implementations of one rule that must change together, such as server
 and client validation. Twins drift; the evidence says whether a parity test guards them.
 
-**hub** — one changed node with at least 5 neighbours (`HUB_MIN_NEIGHBOURS`) in the graph;
-`render` rejects fewer. Diagram `hub` is measured within the change; audit `hub` below is
+**hub** — one changed node with at least 5 neighbours (`HUB_MIN_NEIGHBOURS`) within the
+diagram's graph (changed nodes and their direct neighbours); `render` rejects fewer. Diagram
+`hub` is measured within the change; audit `hub` below is
 measured against the whole repo, so the two can disagree.
 
 ## Audit smells
