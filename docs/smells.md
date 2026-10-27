@@ -5,21 +5,21 @@ must carry evidence. Audit smells are computed by `python3 scripts/run.py map` f
 import graph, git history, file sizes and duplicate scan. Audit thresholds are relative to
 the repo's own spread (percentiles) with a fixed floor, so a small repo isn't flagged for
 being small. Each audit kind except `cycle` and `layering` lists at most 20 smells, ranked by
-severity then size; `map` reports how many more each kind had under `dropped`, and `counts`
-gives every smell by kind and severity. Test files (the paths `cochange` treats as tests,
+severity then size; `map` reports how many more each kind had under `dropped` (by
+severity), and `counts` gives every smell by kind and severity. Test files (the paths `cochange` treats as tests,
 below) are never `hub`, `hotspot`, `oversize` or `duplicate` smells and don't count as hub
 neighbours. Files with a config, data or infra extension (`.tf`, `.tfvars`, `.yml`, `.json`
 and the like) are never in any smell, even when a `[graph.*]` rule covers them.
 
 These smells are candidates. `map` prints `triage`, the order to read them in: one item per
-node set with all its smells, every high item first, then the rest round-robin across kinds
-(biggest first) up to 60 items, and `not_triaged`, what is left per kind. The audit skill
+node set with all its smells (for `layering`, one per group pair, `from` → `to`), every
+high item first, then the rest round-robin across kinds (items with more smells first,
+then biggest) up to 60 items, and `not_triaged`, what is left per kind. The audit skill
 reads the files behind each item, confirms or dismisses it against a checklist of known
 false positives
 (`skills/audit/references/triage.md`), and runs `map --out <run> --dismiss <triage.json>`
-to re-render the map without the dismissed ones; `dismissed` counts them per kind. The map
-also keeps `dropped_by_severity` and `dismissed_by_severity`, so each note sits on the chip
-of its own kind and severity.
+to re-render the map without the dismissed ones; `dismissed` counts them by kind and
+severity, so each note sits on the chip of its own kind and severity.
 
 ## Diagram smells
 
