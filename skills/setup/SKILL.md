@@ -74,32 +74,35 @@ Foreman only ever runs servers against databases it copied or created.
 If the database can't be isolated this way (a shared remote database, a hard-coded path
 outside the repo), say so: verify will refuse to run until it can.
 
-## 3. Languages without a built-in graph
-
-Run `python3 -I <root>/scripts/run.py graph`. Python, JavaScript/TypeScript and Go are
-built in. Each extension listed under `unsupported` needs an import rule; write one:
-
-1. Read 3–5 files with that extension and note how they import each other.
-2. Add `[graph.<language>]` with `extensions`, a `pattern` (regex; group 1 is the imported
-   name) and `resolve` (candidate paths using `{dir}`, `{1}`, `{1|path}`).
-3. Run `python3 -I <root>/scripts/run.py graph-rule-check --name <language>`. It reports how
-   many imports matched and resolved, with examples that didn't. Adjust and re-run.
-4. After 3 tries without a rule that resolves most imports, remove it and tell the user
-   these files need an import rule; the map will list them under "No import rule yet".
-
-Ignore extensions that aren't source code the repo owns (generated files, fixtures); add
-them to `repo.ignore` instead.
-
-## 4. Ask, then write
+## 3. Ask, then write
 
 Ask the user only for what you could not find, one question at a time, each with your best
-guess. Then write `.foreman/config.toml` and run
+guess. Then write `.foreman/config.toml` (without any `[graph.*]` rule yet) and run
 `python3 -I <root>/scripts/run.py config-check`. Fix each problem it lists and re-run until
 it reports `"ok": true`.
 
 Make sure `.foreman/reports/` is in the repo's `.gitignore`; add the line if it is missing
 and tell the user. Don't commit: the user decides whether to commit the config (committing
 it lets teammates share it).
+
+## 4. Languages without a built-in graph
+
+Only once `config-check` passes, run `python3 -I <root>/scripts/run.py graph`. Python,
+JavaScript/TypeScript and Go are built in. Each extension listed under `unsupported` needs
+an import rule; write one at a time:
+
+1. Read 3–5 files with that extension and note how they import each other.
+2. Append `[graph.<language>]` to `.foreman/config.toml` with `extensions`, a `pattern`
+   (regex; group 1 is the imported name) and `resolve` (candidate paths using `{dir}`,
+   `{1}`, `{1|path}`).
+3. Run `python3 -I <root>/scripts/run.py graph-rule-check --name <language>`. It reports how
+   many imports matched and resolved, with examples that didn't. Adjust and re-run.
+4. After 3 tries without a rule that resolves most imports, remove it and tell the user
+   these files need an import rule; the map will list them under "No import rule yet".
+
+Ignore extensions that aren't source code the repo owns (generated files, fixtures); add
+them to `repo.ignore` instead. When every extension is done, run `config-check` once more
+and fix anything it lists.
 
 ## When a config already exists
 

@@ -25,7 +25,8 @@ run the UI pass).
 ## Steps
 
 1. **Check out the base.** `git worktree add --detach <temp> <base>`, where `<base>` is
-   `repo.base`. Audit that, not the current checkout, so uncommitted work and the current
+   `repo.base` and `<temp>` is a new folder under the system temp directory, outside the
+   repo. Audit that, not the current checkout, so uncommitted work and the current
    branch don't leak in.
 2. **Map it.** Run
    `python3 -I <root>/scripts/run.py map --root <temp> --config <repo>/.foreman/config.toml --out .foreman/reports/audit`

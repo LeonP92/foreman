@@ -23,7 +23,8 @@ The branch is the one the user named, else the current one; the base is `repo.ba
 review what the branch has committed, against its merge-base with the base
 (`git diff <base>...<branch>`). If the branch isn't checked out, or the working tree has
 uncommitted changes, work in a temporary worktree of the branch (`git worktree add --detach
-<temp> <branch>`, then `[commands] install`). Report:
+<temp> <branch>`, with `<temp>` under the system temp directory, outside the repo; then
+`[commands] install`). Report:
 `.foreman/reports/<branch>/review.md`, where `<branch>` has each `/` replaced by `-`.
 
 ## Steps
@@ -50,15 +51,15 @@ uncommitted changes, work in a temporary worktree of the branch (`git worktree a
 6. **Diagram.** Follow the diagram skill.
 
 Then write the report as `references/report.md` describes, and show the user its top
-block and findings. Every finding from every step goes in one numbered list, so the user
-can say "fix 2 and 5". Do not fix anything.
+block and findings. Findings from all six steps share one numbered list, so a reply can
+pick them out by number. Do not fix anything.
 
 ## What makes a finding
 
 - A location (`file:line`, or page and steps).
 - The problem in one sentence.
-- A concrete case where it goes wrong: an input, a sequence of actions, a load. No
-  concrete case, no finding.
+- A concrete case where it goes wrong: an input, a sequence of actions, a load. If you
+  can't write one down, drop the finding.
 - The smallest fix, and what happens if it's skipped.
 
 Severity:
@@ -68,7 +69,8 @@ Severity:
   exist, a browser regression.
 - **Nice to have**: everything else worth a sentence.
 
-Style taste, vague worries and anything a linter already checks are not findings.
+Leave out personal preference, worries you can't back with a case, and anything the
+repo's linter already catches.
 
 ## Finish
 

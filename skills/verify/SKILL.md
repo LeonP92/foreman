@@ -45,10 +45,20 @@ Read `[database]`:
 Otherwise stop before starting anything. Say why, and what config would make it possible.
 Never point a server at a database you didn't copy or create.
 
+**Guard the real file.** For `file`, before any command runs, record the real database's
+path (`[database] path` in the repo), size and modification time. Check them again after
+migrate and seed, and after the browser run. If either changed, stop at once: clean up,
+and report a Must fix finding that foreman's isolation failed (what ran just before, and
+the old and new size and time). Do not continue the run.
+
+Every command you run for a server gets an explicit environment with database-location
+variables removed; see `references/servers.md`.
+
 ## 3. Worktrees and data
 
-1. Add two worktrees outside the repo: `git worktree add --detach <temp>/base <base>` and
-   the same for the branch. Run `[commands] install` in each.
+1. Make a temp folder under the system temp directory, outside the repo, and add two
+   worktrees there: `git worktree add --detach <temp>/base <base>` and the same for the
+   branch. Run `[commands] install` in each.
 2. Build both databases with the **base** code, so "existing data" is genuinely pre-change:
    - `file`: `python3 -I <root>/scripts/run.py db-copy <repo>/<path> <temp>/base/<path>`
      (if the original doesn't exist, start empty). In the base worktree run `migrate`,
@@ -67,10 +77,9 @@ Record what data you created; the report says what changed.
 ## 4. Servers
 
 For each worktree: pick a free port (for example, bind a socket to port 0 and read the
-port back), run `[server] start` with `{port}` filled in, `[server] env` and, for
-`command` databases, `env_override` set to that server's database. Start each server as
-the leader of its own process group (on Windows, note its PID) so you can stop the whole
-tree later. Poll `http://127.0.0.1:<port><ready_path>` until it answers; if it never
+port back) and start `[server] start` with `{port}` filled in, using the launcher in
+`references/servers.md`: it gives the server its own process group and the explicit
+environment, so the whole tree can be stopped later. Poll `http://127.0.0.1:<port><ready_path>` until it answers; if it never
 does, report the server's last output lines and stop.
 
 ## 5. One Playwright spec
@@ -125,8 +134,8 @@ paths. Look at the screenshots, not only the statuses: layout breaks don't fail 
 
 ## 7. Clean up
 
-Stop both servers and their whole process trees (POSIX: signal the process group; Windows:
-`taskkill /T /F /PID <pid>`) before removing anything. Then
+Stop both servers and their whole process trees as `references/servers.md` shows, before
+removing anything. Then
 `git worktree remove --force <worktree>` for each; on Windows, if a file is still locked,
 wait a few seconds and retry once. Remove temporary files and `{dir}` folders. For each
 `command` database you created, run `drop` with its `{name}`; if `drop` is empty, list

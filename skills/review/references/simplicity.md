@@ -1,48 +1,48 @@
 # Simplicity
 
-The cheapest code to review, run and maintain is code that doesn't exist. Look for what
-the change could do without.
+Every line a change adds is a line someone has to read, test and keep working. This pass
+looks for lines the change could have done without.
 
-## Read wider than the diff
+## Look past the changed lines
 
-A line is only simple or not in context. Before judging, read what the changed code calls
-and what calls it. A helper that looks fine in the diff may duplicate one two folders over;
-a check that looks missing may already happen in the caller.
+Judge new code against its surroundings, not on its own. Open the functions it calls and
+the places that call it. A new helper can look reasonable and still repeat one that lives
+elsewhere in the repo; a check that seems to be missing may already run one level up.
 
-## For every addition, ask in order
+## Three questions, in this order
 
-1. **Does it need to exist?** An option nobody sets, a branch for a case that can't
-   happen, a layer with one caller that only passes calls through, code kept "for later".
-   The fix is to delete it.
-2. **Does the repo already have it?** A helper, component or query that does the same job.
-   The fix is to use the existing one and delete the new one.
-3. **Does the standard library or an installed dependency do it?** Hand-written date
-   maths, retry loops, parsing, or validation the framework already provides. The fix is
-   to call the library.
+For each thing the change adds (a function, a class, an option, a branch, a file):
 
-Only when all three answers are no is the new code the right shape; then ask whether it
-could be shorter and still as clear.
+1. **Is anything using it?** Look for a setting no caller changes, a branch for input that
+   can't arrive, a wrapper whose only job is to forward a call, code parked for a future
+   feature. Suggest removing it.
+2. **Is it already in the repo?** Search for a helper, component or query doing the same
+   job. Suggest switching to that one and removing the new copy.
+3. **Is it already in the language or a dependency the repo installs?** Date arithmetic,
+   retries, parsing, form validation the framework handles. Suggest calling that instead.
 
-## Prefer fixes that delete
+If all three come back empty, the addition earns its place; the only remaining question is
+whether a shorter version would read just as well.
 
-Between two fixes, suggest the one that removes more code. Merging two near-identical
-functions, inlining a single-use wrapper, or dropping a parameter every caller passes the
-same value for usually beats adding a guard or an abstraction.
+## Smaller is the better fix
 
-## Not findings
+When two fixes would both work, recommend the one that leaves less code behind: fold two
+near-copies into one, inline a wrapper used once, drop a parameter every caller sets the
+same way. Adding a guard or a new layer is the last resort, not the first.
 
-- **A marked shortcut.** Code with a comment stating its limit and when to revisit it
-  (for example, "loads every order into memory; fine below 10k orders") is a decision,
-  not a finding. It becomes one only when the limit is already crossed, and the finding
-  shows that it is.
-- **Defensive code at a real boundary.** Validating user input, handling a network error,
-  or anything that prevents data loss stays.
-- **Taste.** Naming you'd do differently, a loop that could be a comprehension. If you
-  can't show what goes wrong, leave it.
+## Leave these alone
 
-## Writing the finding
+- **Limits the author wrote down.** If a comment names the shortcut and its ceiling
+  ("keeps all orders in memory; revisit past 10k orders"), the author chose it on
+  purpose. Raise it only when the repo is already past that ceiling, and show that it is.
+- **Checks where outside input enters.** Validating what users send, handling a failed
+  network call, protecting stored data: these stay even when they look verbose.
+- **Preferences.** A different name, a loop you'd write as a comprehension. Unless you can
+  point to something that breaks or misleads, skip it.
 
-Name what to delete or replace and what replaces it, in one line:
+## Writing it up
+
+One line says what goes and what takes its place:
 "`checkout/discounts.py:40` `percent_of()` repeats `money.percent()`; call that and delete
-40–58." The concrete case for a simplicity finding is the cost: the second copy that will
-drift, the option no caller passes, the lines a reader has to get through.
+40–58." For simplicity findings the concrete case is the cost you can point at: the copy
+that will fall out of step, the option nobody passes, the lines a reader must wade through.

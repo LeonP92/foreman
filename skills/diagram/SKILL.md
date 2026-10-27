@@ -26,8 +26,9 @@ has each `/` replaced by `-`.
 
 1. **Changed files.** The branch is the one the user named, else the current one; the base
    is `repo.base`. List files with `git diff --name-only <base>...<branch>`. If the branch
-   isn't checked out, add a temporary worktree (`git worktree add --detach <temp> <branch>`)
-   rather than switching branches.
+   isn't checked out, add a temporary worktree (`git worktree add --detach <temp> <branch>`,
+   with `<temp>` under the system temp directory, outside the repo) rather than switching
+   branches.
 2. **Import edges, from the code.** Run
    `python3 -I <root>/scripts/run.py graph --files <changed files>` (for a worktree add
    `--root <worktree> --config <repo>/.foreman/config.toml`). It returns the changed files

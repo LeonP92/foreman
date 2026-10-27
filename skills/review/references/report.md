@@ -19,8 +19,8 @@ Then 2–3 sentences on what the change does.
 ## Findings
 
 One numbered list across all steps, grouped **Must fix**, then **Should fix**, then
-**Nice to have**, most severe first within each group. Numbers run on across groups, so
-the user can answer "fix 1 and 3". Each finding has:
+**Nice to have**, most severe first within each group. Numbering continues across the
+groups, so every finding has its own number to reply with. Each finding has:
 
 - a bold title with its severity, and the location in brackets;
 - **Problem:** one sentence;
