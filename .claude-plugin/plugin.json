@@ -1,6 +1,6 @@
 {
   "name": "foreman",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Human-on-the-loop review for AI coding agents: hard-tests every change and maps architecture and code smells at a glance.",
   "author": {"name": "Leon Pham", "url": "https://github.com/LeonP92"},
   "homepage": "https://github.com/LeonP92/foreman",
