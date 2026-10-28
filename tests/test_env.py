@@ -35,9 +35,8 @@ def _show(code: str) -> str:
 
 def test_dotenv_lists_names_and_rewrites_lines(tmp_path):
     dotenv = tmp_path / ".env"
-    dotenv.write_text(
-        "SECRET_KEY=s3cret\r\nexport DATABASE_URL=sqlite:///real.db\r\n", encoding="utf-8"
-    )
+    # Bytes, so Windows text mode doesn't turn the CRLF fixture into CR CR LF.
+    dotenv.write_bytes(b"SECRET_KEY=s3cret\r\nexport DATABASE_URL=sqlite:///real.db\r\n")
     listed = _run("dotenv", dotenv)
     assert json.loads(listed.stdout) == {
         "database_locations": ["DATABASE_URL"],
@@ -87,7 +86,7 @@ def test_launch_starts_a_server_and_prints_its_pid(tmp_path):
 def test_launch_loads_env_files_but_never_a_database_location(tmp_path):
     settings = _settings(tmp_path, {"A": "${SHOP_KEY}"})
     secrets_file = tmp_path / "shop.env"
-    secrets_file.write_text("SHOP_KEY=from-file\r\n", encoding="utf-8")
+    secrets_file.write_bytes(b"SHOP_KEY=from-file\r\n")
     show = _show("print(os.environ.get('A'))")
     env = {k: v for k, v in os.environ.items() if k != "SHOP_KEY"}
     ran = _run("launch", "--env-file", secrets_file, settings, tmp_path, "-", show, env=env)
