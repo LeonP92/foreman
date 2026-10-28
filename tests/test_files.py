@@ -1,4 +1,5 @@
-from foreman.files import language, list_files, read_text
+import pytest
+from foreman.files import is_ignored, language, list_files, read_text
 
 
 def test_list_files_uses_git_and_respects_gitignore(make_repo):
@@ -16,6 +17,24 @@ def test_list_files_skips_vendored_without_git(tmp_path):
 def test_ignore_globs_match_top_level_and_nested(make_repo):
     root = make_repo({"migrations/1.py": "", "app/migrations/2.py": "", "app/a.py": ""})
     assert list_files(root, ignore=["**/migrations/**"]) == ["app/a.py"]
+
+
+@pytest.mark.parametrize(
+    ("path", "glob", "hit"),
+    [
+        ("core/main.py", "core/*.py", True),
+        ("core/cli/key.py", "core/*.py", False),  # `*` stays in one folder
+        ("core/cli/key.py", "core/**", True),
+        ("core", "core/**", True),
+        ("dist/a.js", "/dist/**", True),  # leading `/`: anchored at the root
+        ("web/dist/a.js", "/dist/**", False),
+        ("a/b/report.xlsx", "*.xlsx", True),  # no slash: any depth, like .gitignore
+        ("apps/x/commitment/t.py", "apps/*/commitment/*.py", True),
+        ("apps/x/y/commitment/t.py", "apps/*/commitment/*.py", False),
+    ],
+)
+def test_glob_star_stays_within_a_folder(path, glob, hit):
+    assert is_ignored(path, [glob]) is hit
 
 
 def test_read_text_normalises_crlf_and_rejects_binary(tmp_path):

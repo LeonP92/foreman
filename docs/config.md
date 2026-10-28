@@ -4,6 +4,10 @@
 `python3 scripts/run.py config-check` (exit 1 and a list of problems when invalid; a missing file
 is fine and means defaults). Unknown tables and keys are errors.
 
+Globs (`repo.ignore`, `audit.entry_points`, `rules.layers`) work like `.gitignore`: `*` and `?`
+stay within one folder, `**` crosses folders, a glob with no `/` matches at any depth
+(`*.min.js`), and a leading `/` anchors it at the repo root.
+
 ## Keys
 
 | Key | Meaning |

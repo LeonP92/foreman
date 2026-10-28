@@ -1,5 +1,6 @@
-import fnmatch
+import functools
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Sequence
@@ -101,8 +102,27 @@ def _walk_files(root: Path) -> list[str]:
     return found
 
 
+@functools.cache
+def _glob_re(glob: str) -> re.Pattern:
+    """Gitignore-style: `*` and `?` stay in one folder, `**` crosses folders, no `/` = any depth."""
+    out = "" if "/" in glob else "(?:.*/)?"
+    for tok in re.findall(
+        r"/\*\*$|\*\*/|\*\*|\*|\?|\[!?[^]]*\]|.", glob.removeprefix("/"), re.DOTALL
+    ):
+        out += {
+            "/**": "(?:/.*)?",
+            "**/": "(?:.*/)?",
+            "**": ".*",
+            "*": "[^/]*",
+            "?": "[^/]",
+        }.get(tok) or (
+            "[" + tok[1:-1].replace("!", "^", 1) + "]" if tok[:1] == "[" else re.escape(tok)
+        )
+    return re.compile(out)
+
+
 def is_ignored(path: str, ignore: Sequence[str]) -> bool:
-    return any(fnmatch.fnmatchcase(path, g) or fnmatch.fnmatchcase("/" + path, g) for g in ignore)
+    return any(_glob_re(g).fullmatch(path) for g in ignore)
 
 
 def is_utf8(path: str) -> bool:
