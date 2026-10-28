@@ -57,9 +57,7 @@ const byId = Object.fromEntries(DATA.nodes.map(n => [n.id, n]));
 const labelOf = id => byId[id].label;
 const smellsOf = id => SMELLS.filter(s => s.nodes.includes(id));
 
-document.title = DATA.title;
-document.getElementById("title").innerHTML = fmt(DATA.title);
-document.getElementById("notes").innerHTML = fmt(DATA.notes || "");
+setHeader(DATA.title, DATA.notes || "");
 
 const canvas = document.getElementById("canvas"), stage = document.getElementById("stage");
 
@@ -276,7 +274,7 @@ DATA.nodes.forEach(n => {
   card.setAttribute("aria-label", `${n.label}, ${BADGE[n.status]}`);
   card.style.height = H + "px";
   card.innerHTML = `<div class="card-top"><span class="card-label" title="${esc(n.label)}">${esc(n.label)}</span>`
-    + `<span class="badge">${BADGE[n.status]}</span></div><div class="card-sub">${esc(n.sub || "")}</div>`;
+    + `<span class="badge">${BADGE[n.status]}</span></div><div class="card-sub" title="${esc(n.sub || "")}">${esc(n.sub || "")}</div>`;
   card.insertAdjacentHTML("beforeend", smellBadge(smellsOf(n.id)));
   card.addEventListener("click", ev => { ev.stopPropagation(); focusNode(n); });
   card.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); focusNode(n); } });

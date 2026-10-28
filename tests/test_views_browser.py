@@ -124,6 +124,7 @@ def test_views_in_a_browser(tmp_path, serve):
     assert [(t["title"], t["status"]) for t in r["tests"]] == [
         ("diagram filter enter focuses the first match", "passed"),
         ("diagram focus pulls neighbours up and fades the rest", "passed"),
+        ("diagram header and card sub-lines keep their full text on hover", "passed"),
         ("diagram neighbourhood puts dependents left and dependencies right", "passed"),
         ("diagram switch toggles to matrix and back", "passed"),
         ("diagram with more than 30 edges opens as a matrix", "passed"),

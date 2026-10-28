@@ -89,9 +89,7 @@ const mainLang = g => { const c = {}; g.nodes.forEach(id => c[byId[id].lang] = (
   return Object.keys(c).sort((a, b) => c[b] - c[a])[0]; };
 const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
-document.title = DATA.title;
-document.getElementById("title").innerHTML = fmt(DATA.title);
-document.getElementById("notes").innerHTML = fmt(DATA.notes || "");
+setHeader(DATA.title, DATA.notes || "");
 
 const canvas = document.getElementById("canvas"), stage = document.getElementById("stage");
 const defs = markerDefs(["import", "cycle", "forbidden", "out", "in"], 11), regions = el("g", {});
@@ -164,7 +162,7 @@ function render(group, keepEgo = false) {
     card.style.height = h + "px";
     card.innerHTML = `<div class="card-top"><span class="card-label">${esc(it.label)}</span>`
       + (it.badge ? `<span class="badge lang">${esc(it.badge)}</span>` : "")
-      + `</div><div class="card-sub">${esc(it.sub)}</div>${smellBadge(it.smells)}`;
+      + `</div><div class="card-sub" title="${esc(it.sub)}">${esc(it.sub)}</div>${smellBadge(it.smells)}`;
     card.addEventListener("click", ev => {
       ev.stopPropagation();
       if (it.kind === "group") clickedGroup = open;

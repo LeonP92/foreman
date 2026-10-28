@@ -16,6 +16,12 @@ test("diagram focus pulls neighbours up and fades the rest", async ({ page }) =>
   await expect.poll(() => opacity(page, "cart_view")).toBe(1);
 });
 
+test("diagram header and card sub-lines keep their full text on hover", async ({ page }) => {
+  await page.goto("/diagram.html");
+  await expect(page.locator("#notes")).toHaveAttribute("title", "Import edges from the Python import graph; cart.js imports read directly.");
+  await expect(card(page, "cart").locator(".card-sub")).toHaveAttribute("title", "Cart");
+});
+
 test("diagram filter enter focuses the first match", async ({ page }) => {
   await page.goto("/diagram.html");
   await page.locator("#filter").fill("checkout/");

@@ -4,6 +4,15 @@
 // #theme, #seg.
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+// The header lines truncate, so each keeps its full text as a hover tooltip.
+const setHeader = (title, notes) => {
+  document.title = title;
+  for (const [id, text] of [["title", title], ["notes", notes]]) {
+    const e = document.getElementById(id);
+    e.innerHTML = fmt(text);
+    e.title = e.textContent;
+  }
+};
 const SEV_RANK = {low: 1, medium: 2, high: 3};
 const sevWord = s => `<span class="sev-word sev-${esc(s.severity)}"><span class="dot"></span>${esc(s.severity)}</span>`;
 // Card corner badge: worst severity's colour, "!" or the count, every smell in the tooltip.
