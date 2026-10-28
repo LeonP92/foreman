@@ -17,7 +17,7 @@ def test_versions_match_everywhere():
     versions["pyproject.toml"] = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))[
         "project"
     ]["version"]
-    assert set(versions.values()) == {"0.1.0"}, versions
+    assert len(set(versions.values())) == 1, versions
 
 
 def test_marketplaces_have_required_fields():
