@@ -261,7 +261,7 @@ function layout(instant = false) {
   setStage(width, height);
   slide(to, instant, () => {
     const pairs = {};
-    edges.forEach(e => e.path.setAttribute("d", view ? edgePath(e.a, e.b, sizeOf, pairs) : layerPath(e)));
+    edges.forEach(e => e.path.setAttribute("d", view ? edgePath(e.a, e.b, sizeOf, pairs, true) : layerPath(e)));
     edges.forEach(e => { if (!e.text) return;
       const at = e.labelAt || e.path.getPointAtLength(e.path.getTotalLength() / 2);
       e.text.setAttribute("x", at.x); e.text.setAttribute("y", at.y - 6); });

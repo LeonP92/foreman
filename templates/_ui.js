@@ -88,7 +88,8 @@ const flowPath = (p, [pw, ph], q, [, qh]) => {
 };
 // Card-to-card edge; `pairs` counts edges per node pair so repeats fan out. Same row: an arc under it, so
 // the edge doesn't run behind the cards in between. Same column: a loop out to the right.
-function edgePath(a, b, sizeOf, pairs) {
+// arc: same-row edges dip below the row (only views with room between rows pass it).
+function edgePath(a, b, sizeOf, pairs, arc) {
   const p = pos[a], q = pos[b], [pw, ph] = sizeOf(a), [qw, qh] = sizeOf(b);
   const key = [a, b].sort().join("\n"), k = pairs[key] = (pairs[key] || 0) + 1;
   const bend = (k - 1) * 18 * (a < b ? 1 : -1), y1 = p.y + ph / 2, y2 = q.y + qh / 2;
@@ -96,7 +97,7 @@ function edgePath(a, b, sizeOf, pairs) {
     const x = p.x + pw;
     return `M${x},${y1} C${x + 40 + bend},${y1} ${x + 40 + bend},${y2} ${x},${y2}`;
   }
-  if (Math.abs(p.y - q.y) < 1) {
+  if (arc && Math.abs(p.y - q.y) < 1) {
     const x1 = p.x + pw / 2, x2 = q.x + qw / 2, y = p.y + ph, dip = 40 + bend;
     return `M${x1},${y} C${x1},${y + dip} ${x2},${y + dip} ${x2},${q.y + qh}`;
   }
