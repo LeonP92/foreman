@@ -1,0 +1,80 @@
+{
+ "title": "Discount codes at checkout",
+ "branch": "order-discounts",
+ "base": "3f2a9c1",
+ "head": "b81d4e7",
+ "stats": {"commits": 6, "added": 412, "removed": 58},
+ "summary": "Shoppers can enter a discount code in the cart. The shop checks the code against its rules, shows the reduced total before checkout, and charges the card for the discounted amount. Every amount is rounded half-even in one place, so the cart, the order and the charge always agree to the cent.",
+ "bullets": [
+  "New `checkout/discounts.py` holds the discount rules: percent off, fixed amount off, minimum spend.",
+  "`Cart.total()` takes the discount, so the cart page and the placed order use the same sum.",
+  "The charge sent to the payments provider uses the discounted total, rounded half-even.",
+  "Partial refunds give back a fair share of the discount instead of the full line price.",
+  "Codes live in the existing database; an admin creates them in the back office."
+ ],
+ "network": {
+  "caption": "Solid lines are calls the shop makes; the dashed line is the card form the provider serves straight into the shopper's browser.",
+  "zones": [
+   {"id": "device", "label": "Shopper's device", "role": "neutral"},
+   {"id": "cloud", "label": "Our cloud", "role": "blue"},
+   {"id": "provider", "label": "Payments provider", "role": "purple"}
+  ],
+  "nodes": [
+   {"id": "browser", "zone": "device", "title": "Browser", "subtitle": "shop.example.test", "lines": ["cart page previews the discount"]},
+   {"id": "web", "zone": "cloud", "title": "Shop web app", "subtitle": "cart, checkout, refunds", "lines": ["checks codes", "rounds half-even"]},
+   {"id": "db", "zone": "cloud", "title": "Database", "subtitle": "orders, discount codes", "lines": ["new `discount_codes` table"]},
+   {"id": "cardform", "zone": "provider", "title": "Card form", "subtitle": "pay.example.test", "lines": ["hosted card fields"]},
+   {"id": "charges", "zone": "provider", "title": "Charges API", "subtitle": "pay.example.test", "lines": ["charges and refunds"]}
+  ],
+  "edges": [
+   {"from": "browser", "to": "web", "label": "HTTPS", "sublabel": "cart, apply code, checkout", "both": true},
+   {"from": "browser", "to": "cardform", "label": "card details", "sublabel": "never reach our servers", "style": "dashed", "both": true},
+   {"from": "web", "to": "charges", "label": "charge / refund", "sublabel": "discounted amount"},
+   {"from": "web", "to": "db", "label": "codes, orders"},
+   {"from": "charges", "to": "web", "label": "payment result", "sublabel": "webhook"}
+  ]
+ },
+ "sequence": {
+  "caption": "One checkout with a discount code. Steps 4 to 6 happen before the card is charged.",
+  "participants": [
+   {"id": "browser", "label": "Browser"},
+   {"id": "web", "label": "Shop web app"},
+   {"id": "db", "label": "Database"},
+   {"id": "pay", "label": "Payments provider"}
+  ],
+  "messages": [
+   {"from": "browser", "to": "web", "label": "POST `/cart/discount` with `SPRING10`"},
+   {"from": "web", "to": "db", "label": "look up the code"},
+   {"from": "db", "to": "web", "label": "10% off, min spend 30.00"},
+   {"from": "web", "to": "web", "label": "apply the rule, round half-even", "role": "green"},
+   {"from": "web", "to": "browser", "label": "cart with the new total", "notes": ["49.99 becomes 44.99"]},
+   {"from": "browser", "to": "web", "label": "POST `/checkout`"},
+   {"from": "web", "to": "pay", "label": "charge 44.99", "role": "blue"},
+   {"from": "pay", "to": "web", "label": "paid", "role": "blue"},
+   {"from": "web", "to": "db", "label": "save the order with its discount", "notes": ["one transaction"]}
+  ]
+ },
+ "decisions": [
+  {"decision": "One rounding function, half-even", "why": "The cart, the order and the charge each rounded on their own and could differ by a cent; one function makes them agree."},
+  {"decision": "Discount passed into `Cart.total()`", "why": "Keeps a single sum for the cart page and the order instead of a second total that can drift."},
+  {"decision": "Rules in their own module", "why": "Cart, order and refunds all need them; a module of its own avoids three copies."},
+  {"decision": "Refunds reverse a share of the discount", "why": "Refunding the full line price after a discount would pay back more than the shopper paid."}
+ ],
+ "cards": [
+  {"title": "Checks on every code", "bullets": ["code exists and has not expired", "cart meets the minimum spend", "one code per order", "the total never goes below 0.00"]},
+  {"title": "Tested", "bullets": ["unit tests for each rule and for rounding", "refund tests with partial returns", "browser: apply, remove and expired code"]}
+ ],
+ "changes": [
+  {"area": "`checkout/discounts.py`", "change": "New: discount rules and `apply_discount()`."},
+  {"area": "`checkout/cart.py`", "change": "`Cart.total()` takes an optional discount and rounds half-even."},
+  {"area": "`payments/gateway.py`", "change": "Charges the discounted total; rounding is passed explicitly."},
+  {"area": "`payments/refunds.py`", "change": "Partial refunds call `reverse_discount()`."},
+  {"area": "`migrations/`", "change": "Adds the `discount_codes` table."}
+ ],
+ "limits": [
+  "Only one code per order; stacking codes is out of scope.",
+  "Codes are created by an admin only; there is no bulk import.",
+  "Receipts emailed before this change keep their old totals.",
+  "Browser check covered desktop Chrome only."
+ ]
+}

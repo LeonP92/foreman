@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>/*__TITLE__*/</title>
+<style>
+/*__THEME__*/
+.card { --role: var(--ink-muted); }
+.card.selected { --role: var(--ink-2); }
+.card.stub { border-style: dashed; background: var(--page); }
+.card.stub .card-label { color: var(--ink-2); }
+.badge.lang { --role: var(--ink-2); }
+.drawer-body .evidence { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-muted); }
+/* Many edges at rest read as noise; focus still lights them fully. */
+.stage.dense .edge:not(.on):not(.dim) { opacity: .3; }
+.layer-label { fill: var(--ink-muted); font: 600 10px var(--sans); letter-spacing: .08em; }
+.edge-label { font: 600 11px var(--sans); text-anchor: middle; paint-order: stroke; stroke: var(--surface-1);
+  stroke-width: 4px; stroke-linejoin: round; transition: opacity var(--ease); }
+.edge-label.import { fill: var(--ink-2); } .edge-label.cycle { fill: var(--cycle); } .edge-label.forbidden { fill: var(--forbidden); }
+.edge-label.dim { opacity: .08; }
+.drawer-body .pair-list li { flex-wrap: wrap; gap: 4px 8px; }
+</style>
+</head>
+<body>
+/*__FRAME__*/
+<div id="legend" class="legend" popover>
+  <h4>Edges</h4>
+  <ul>
+    <li><svg width="34" height="8"><line class="edge import" x1="0" y1="4" x2="34" y2="4"/></svg>imports, flowing down (thicker = more)</li>
+    <li><svg width="34" height="8"><line class="edge cycle" x1="0" y1="4" x2="34" y2="4"/></svg>import cycle, flowing up</li>
+    <li><svg width="34" height="8"><line class="edge forbidden" x1="0" y1="4" x2="34" y2="4"/></svg>forbidden layer crossing</li>
+  </ul>
+  <h4>Matrix</h4>
+  <ul>
+    <li><span><span class="cell" style="width:30px;height:14px;background:color-mix(in srgb, var(--changed) 30%, transparent)"></span></span>few imports</li>
+    <li><span><span class="cell" style="width:30px;height:14px;background:color-mix(in srgb, var(--changed) 90%, transparent)"></span></span>many imports</li>
+    <li><span><span class="cell forbidden" style="width:30px;height:14px"></span></span>forbidden layer crossing</li>
+    <li><span><span class="cell cycle" style="width:30px;height:14px"></span></span>import cycle</li>
+  </ul>
+  <h4>Smells</h4>
+  <ul>
+    <li><span><span class="dot sev-low"></span></span>low</li>
+    <li><span><span class="dot sev-medium"></span></span>medium</li>
+    <li><span><span class="dot sev-high"></span></span>high</li>
+  </ul>
+  <p>Groups are ordered by dependency: a group sits above the groups it imports, so imports flow down. Anything flowing up breaks that order and is labelled. Click a box to focus it and its neighbours. While one is focused, what it imports is drawn in blue and what imports it in grey; cycles, forbidden crossings and twins keep their colour. Double-click or Enter opens a group; inside, dashed stubs stand for the other groups and open them. Esc or a click on empty space clears.</p>
+</div>
+
+<script>
+/*__UI__*/
+const DATA = /*__DATA__*/null;
+document.getElementById("chips").innerHTML = `<nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav><span class="sep"></span>`;
+
+// [min width, height] per card kind; group and module cards stretch to fill their row. Stubs (other
+// groups) sit in a fixed-width column left of the module grid.
+const SIZE = {group: [248, 64], module: [212, 48], stub: [180, 44]};
+// Groups get wider gaps so the few edges between them stay readable.
+const GAP = {group: [72, 44], module: [20, 14]}, PAD = 32, TOP = 58, STUB_GAP = 72;
+// Package view: a label column, then one row per dependency layer (wrapping when wide).
+const LAYER_LABEL = 160, LAYER_GAP = 72, ARC = 40;
+const ORDER = [...DATA.groups].sort((a, b) => a.layer - b.layer || (a.id < b.id ? -1 : 1)).map(g => g.id);
+const LAYERS = [...new Set(DATA.groups.map(g => g.layer))].sort((a, b) => a - b);
+const layerName = i => `LAYER ${i + 1}` + (LAYERS.length < 2 ? "" : i === 0 ? " · entry points" : i === LAYERS.length - 1 ? " · foundations" : "");
+const STUB = "\u0000";
+const KIND = {import: "imports", cycle: "import cycle", forbidden: "forbidden layer crossing"};
+const SMELL_TEXT = {
+  cycle: "Modules that import each other at runtime; none can change or load alone.",
+  layering: "Imports that cross a layer boundary the rules forbid.",
+  hub: "Many modules meet here; a change to it ripples to all of them.",
+  cochange: "Files that keep changing together without importing each other: a hidden coupling.",
+  hotspot: "Large files that change often; most bugs and merge conflicts land here.",
+  oversize: "Files or functions far larger than the rest of the repo.",
+  duplicate: "The same block of code in several places; a fix to one misses the others.",
+  deadcode: "Nothing imports these and they are not entry points; they may be unused.",
+};
+const byId = Object.fromEntries(DATA.nodes.map(n => [n.id, n]));
+const groupById = Object.fromEntries(DATA.groups.map(g => [g.id, g]));
+const bySeverity = (x, y) => SEV_RANK[y.severity] - SEV_RANK[x.severity];
+const nodeSmells = {}, groupSmells = {};
+DATA.smells.forEach(s => {
+  s.nodes.forEach(id => (nodeSmells[id] ||= []).push(s));
+  new Set(s.nodes.map(id => byId[id].group)).forEach(g => (groupSmells[g] ||= []).push(s));
+});
+[nodeSmells, groupSmells].forEach(m => Object.values(m).forEach(list => list.sort(bySeverity)));
+const groupLines = g => g.nodes.reduce((sum, id) => sum + byId[id].lines, 0);
+const mainLang = g => { const c = {}; g.nodes.forEach(id => c[byId[id].lang] = (c[byId[id].lang] || 0) + 1);
+  return Object.keys(c).sort((a, b) => c[b] - c[a])[0]; };
+const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+
+setHeader(DATA.title, DATA.notes || "");
+
+const canvas = document.getElementById("canvas"), stage = document.getElementById("stage");
+const defs = markerDefs(["import", "cycle", "forbidden", "out", "in"], 11), regions = el("g", {});
+
+// Collapses module edges onto what the view shows: groups in the package view, modules + stubs inside a group.
+function aggregate(viewOf) {
+  const agg = new Map();
+  for (const e of DATA.edges) {
+    const a = viewOf(e.from), b = viewOf(e.to);
+    if (a === b || (a[0] === STUB && b[0] === STUB)) continue;
+    const key = a + "\n" + b;
+    if (!agg.has(key)) agg.set(key, {a, b, count: 0, kinds: {}});
+    const x = agg.get(key);
+    x.count++;
+    x.kinds[e.kind] = (x.kinds[e.kind] || 0) + 1;
+  }
+  return [...agg.values()].map(x => ({...x, kind: x.kinds.forbidden ? "forbidden" : x.kinds.cycle ? "cycle" : "import"}));
+}
+// Classified by codemap: the most severe kind behind each group pair, and whether it flows up.
+const packageEdges = DATA.packages.map(p => ({a: p.from, b: p.to, count: p.imports, kind: p.kind, up: p.dir === "up"}));
+
+// How the package view shows (graph or matrix).
+const viewMode = viewSwitch("map", packageEdges.length, () => render(null));
+const matrixShown = () => !view && viewMode() === "matrix" && !ego;
+const seg = document.getElementById("seg");
+
+// ego: the neighbourhood view ({id, hops}) while it is up.
+let ego = null, view = null, items = [], edges = [], focused = null, near = new Set(), boxW = 0;
+const cards = new Map();
+
+function itemsFor(group) {
+  if (!group) return DATA.groups.map(g => ({id: g.id, kind: "group", label: g.label,
+    sub: `${plural(g.nodes.length, "module")} · ${plural(groupLines(g), "line")}`, badge: mainLang(g), smells: groupSmells[g.id]}));
+  const prefix = group === "." ? "" : group + "/";
+  const modules = groupById[group].nodes.map(id => { const n = byId[id], dir = id.slice(prefix.length, -n.label.length);
+    return {id, kind: "module", label: n.label, sub: plural(n.lines, "line") + (dir ? " · " + dir : ""), smells: nodeSmells[id]}; });
+  const stubs = DATA.groups.filter(g => g.id !== group).map(g => {
+    const links = edges.filter(e => e.a === STUB + g.id || e.b === STUB + g.id).reduce((n, e) => n + e.count, 0);
+    return {id: STUB + g.id, kind: "stub", group: g.id, label: g.label, sub: plural(links, "import")};
+  }).filter(s => !s.sub.startsWith("0 "));
+  return [...stubs, ...modules];
+}
+
+// keepEgo: re-render the same view for the neighbourhood (which needs cards, so not a matrix).
+function render(group, keepEgo = false) {
+  const from = view, first = !items.length;
+  if (!keepEgo) { ego = null; hideEgoBar(); }
+  document.body.classList.remove("directed");
+  view = group;
+  focused = null;
+  near = new Set();
+  edges = group ? aggregate(id => byId[id].group === group ? id : STUB + byId[id].group) : packageEdges;
+  items = itemsFor(group);
+  cards.forEach(card => card.remove());
+  cards.clear();
+  svg.replaceChildren(defs, regions);
+  for (const k in pos) delete pos[k];
+  document.getElementById("matrix")?.remove();
+  seg.hidden = !!group;
+  if (matrixShown()) stage.appendChild(buildMatrix(ORDER, id => groupById[id].label, packageEdges, pairText, focusPair));
+  else for (const it of items) {
+    const [w, h] = SIZE[it.kind], card = document.createElement("div");
+    const open = it.kind === "stub" ? () => render(it.group) : it.kind === "group" ? () => render(it.id) : null;
+    card.className = `card ${it.kind}`;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.title = it.kind === "stub" ? `Open group ${it.label}` : it.kind === "group" ? `${it.label}: double-click or Enter to open` : it.id;
+    card.setAttribute("aria-label", it.kind === "module" ? it.id : card.title);
+    card.style.width = w + "px";  // stubs keep this; layout() stretches the rest
+    card.style.height = h + "px";
+    card.innerHTML = `<div class="card-top"><span class="card-label">${esc(it.label)}</span>`
+      + (it.badge ? `<span class="badge lang">${esc(it.badge)}</span>` : "")
+      + `</div><div class="card-sub" title="${esc(it.sub)}">${esc(it.sub)}</div>${smellBadge(it.smells)}`;
+    card.addEventListener("click", ev => {
+      ev.stopPropagation();
+      if (it.kind === "group") clickedGroup = open;
+      it.kind === "stub" ? open() : focusItem(it.id);
+    });
+    card.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      (ev.key === "Enter" || it.kind === "stub") && open ? open() : focusItem(it.id);
+    });
+    cards.set(it.id, card);
+    stage.appendChild(card);
+  }
+  if (!matrixShown()) edges.forEach(e => {
+    e.path = el("path", {class: `edge ${e.kind}`, "marker-end": `url(#a-${e.kind})`});
+    e.path.style.strokeWidth = Math.min(4.5, 1.5 + .75 * Math.log2(e.count));
+    el("title", {}, e.path).textContent = `${nameOf(e.a)} → ${nameOf(e.b)} · ${KIND[e.kind]} · ${plural(e.count, "import")}`;
+    // Only the package view's problems and upward edges carry a permanent label; counts otherwise live in
+    // tooltips and the drawer.
+    e.text = !view && (e.kind !== "import" || e.up) ? el("text", {class: `edge-label ${e.kind}`}) : null;
+    if (e.text) e.text.textContent = `${nameOf(e.a)} → ${nameOf(e.b)} · ${plural(e.count, "import")} · ${e.kind === "import" ? "up" : e.kind}`;
+    // An upward plain import can only be type-only (codemap makes runtime ones cycles).
+    if (e.text && e.kind === "import") el("title", {}, e.text).textContent = "type-only import against the dependency order";
+  });
+  stage.className = edges.length > 40 ? "stage dense" : "stage";
+  renderCrumbs();
+  layout(true);
+  canvas.scrollTo({top: 0, left: 0});
+  closeDrawer();
+  // Switching views removes the focused card (or drawer link); keep keyboard users in the new view.
+  const active = document.activeElement;
+  if (!first && (active === document.body || !active.isConnected || drawer.contains(active)))
+    (view ? document.getElementById("crumb-all") : cards.get(from) || cards.values().next().value || seg.querySelector("[aria-pressed=true]")).focus();
+}
+
+function renderCrumbs() {
+  const crumbs = document.getElementById("crumbs");
+  crumbs.innerHTML = view
+    ? `<button type="button" class="link" id="crumb-all">All groups</button><span class="quiet">/</span><span>${esc(view)}</span>`
+    : `<span>All groups</span><span class="quiet">double-click a group to open it</span>`;
+  if (view) document.getElementById("crumb-all").addEventListener("click", ev => { ev.stopPropagation(); render(null); });
+}
+
+const rank = it => it.id === focused ? 0 : near.has(it.id) ? 1 : 2;
+const byRank = (a, b) => rank(a) - rank(b);
+
+// Module view grid: selection, then its neighbours, then the rest; each keeps data order (sort is stable).
+function gridPlace(to) {
+  const stubs = items.filter(it => it.kind === "stub").sort(byRank);
+  const boxes = items.filter(it => it.kind !== "stub").sort(byRank);
+  const [bw, bh] = SIZE.module, [GAP_X, GAP_Y] = GAP.module, [sw, sh] = SIZE.stub;
+  const left = PAD + (stubs.length ? sw + STUB_GAP : 0);
+  const room = availableWidth(canvas) - left - PAD, fit = Math.max(1, Math.floor((room + GAP_X) / (bw + GAP_X)));
+  const cols = Math.min(boxes.length, fit);
+  boxW = Math.max(bw, Math.floor((room - (fit - 1) * GAP_X) / fit));
+  stubs.forEach((it, i) => to[it.id] = {x: PAD, y: TOP + i * (sh + GAP.module[1])});
+  boxes.forEach((it, i) => to[it.id] = {x: left + (i % cols) * (boxW + GAP_X), y: TOP + Math.floor(i / cols) * (bh + GAP_Y)});
+  const gridW = cols * (boxW + GAP_X) - GAP_X, gridH = Math.ceil(boxes.length / cols) * (bh + GAP_Y) - GAP_Y;
+  const stubH = stubs.length * (sh + GAP.module[1]) - GAP.module[1];
+  const region = (x, w, h, label) => {
+    el("rect", {class: "lane", x: x - 16, y: 16, width: w + 32, height: TOP + h - 16 + 16, rx: 14}, regions);
+    el("text", {class: "lane-label", x, y: 40}, regions).textContent = label;
+  };
+  region(left, gridW, gridH, `${view} · ${plural(boxes.length, "module")}`);
+  if (stubs.length) region(PAD, sw, stubH, "Linked groups");
+  return [left + gridW + PAD, TOP + Math.max(gridH, stubH) + PAD];
+}
+
+// Package view: one row per layer, centred; the selection and its neighbours lead their row.
+function layerPlace(to) {
+  const [bw, bh] = SIZE.group, [gx, gy] = GAP.group, left = PAD + LAYER_LABEL;
+  const rows = LAYERS.map(l => items.filter(it => groupById[it.id].layer === l).sort(byRank));
+  const fit = Math.max(1, Math.floor((availableWidth(canvas) - left - PAD + gx) / (bw + gx)));
+  const cols = Math.min(fit, Math.max(...rows.map(r => r.length))), gridW = cols * (bw + gx) - gx;
+  boxW = bw;
+  let y = TOP;
+  rows.forEach((row, i) => {
+    el("text", {class: "layer-label", x: PAD, y: y + bh / 2 + 4}, regions).textContent = layerName(i);
+    for (let k = 0; k < row.length; k += cols, y += bh + gy) {
+      const line = row.slice(k, k + cols), x0 = left + (gridW - line.length * (bw + gx) + gx) / 2;
+      line.forEach((it, j) => to[it.id] = {x: x0 + j * (bw + gx), y});
+    }
+    y += LAYER_GAP - gy;
+  });
+  return [left + gridW + PAD, y - LAYER_GAP + ARC + PAD];
+}
+
+function layout(instant = false) {
+  regions.replaceChildren();
+  if (matrixShown()) return layoutMatrix(PAD);
+  if (ego) return egoPlace(instant);
+  const to = {}, [width, height] = view ? gridPlace(to) : layerPlace(to);
+  cards.forEach((card, id) => { if (id[0] !== STUB) card.style.width = boxW + "px"; });
+  setStage(width, height);
+  slide(to, instant, () => {
+    const pairs = {};
+    edges.forEach(e => e.path.setAttribute("d", view ? edgePath(e.a, e.b, sizeOf, pairs, true) : layerPath(e)));
+    edges.forEach(e => { if (!e.text) return;
+      const at = e.labelAt || e.path.getPointAtLength(e.path.getTotalLength() / 2);
+      e.text.setAttribute("x", at.x); e.text.setAttribute("y", at.y - 6); });
+    cards.forEach((card, id) => { card.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
+  });
+}
+
+// Down: bottom centre to top centre. Same row: an arc below (down) or above (up) the row.
+// Up across rows: out to the left of the grid, up, along the gap above the target row and down into it.
+function layerPath(e) {
+  const p = pos[e.a], q = pos[e.b], [w, h] = SIZE.group, px = p.x + w / 2, qx = q.x + w / 2;
+  e.labelAt = null;  // set again below only while the edge takes the gutter route
+  if (Math.abs(p.y - q.y) < 1) {
+    const [y, dip] = p.x < q.x ? [p.y + h, ARC] : [p.y, -ARC];
+    return `M${px},${y} C${px},${y + dip} ${qx},${y + dip} ${qx},${y}`;
+  }
+  if (q.y > p.y) { const my = (p.y + h + q.y) / 2; return `M${px},${p.y + h} C${px},${my} ${qx},${my} ${qx},${q.y}`; }
+  const x = PAD + LAYER_LABEL - 24, y1 = p.y + h / 2, top = q.y - 22, r = 16;
+  e.labelAt = {x: (x + qx) / 2, y: top};
+  return `M${p.x},${y1} C${x},${y1} ${x},${y1} ${x},${y1 - r} L${x},${top + r} Q${x},${top} ${x + r},${top}`
+    + ` L${qx - r},${top} Q${qx},${top} ${qx},${q.y}`;
+}
+
+const sizeOf = id => id[0] === STUB ? SIZE.stub : [boxW, SIZE[view ? "module" : "group"][1]];
+const nameOf = id => id[0] === STUB ? id.slice(1) : id;
+
+// Neighbourhood: only the centre's columns and the edges between neighbouring columns stay.
+function egoPlace(instant) {
+  const size = SIZE[view ? "module" : "group"], {to, col, width, height} = egoLayout(ego.id, edges, ego.hops, nameOf,
+    {size, gap: [GAP.group[0], GAP.module[1] + 8], pad: PAD, top: TOP + 16});
+  boxW = size[0];
+  cards.forEach((card, id) => { card.classList.toggle("gone", !col.has(id)); if (id[0] !== STUB) card.style.width = boxW + "px"; });
+  edges.forEach(e => { e.path.classList.toggle("gone", !egoEdge(col, e)); e.text?.classList.add("gone"); });
+  setStage(width, height);
+  slide(to, instant, () => {
+    edges.forEach(e => { if (col.has(e.a) && col.has(e.b)) e.path.setAttribute("d", flowPath(pos[e.a], sizeOf(e.a), pos[e.b], sizeOf(e.b))); });
+    col.forEach((_, id) => { cards.get(id).style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
+  });
+}
+function enterEgo(id, hops) {
+  ego = {id, hops};
+  if (!cards.size) render(view, true);
+  showEgoBar(view || "All groups", nameOf(id), hops, exitEgo, h => enterEgo(ego.id, h));
+  focusItem(id);
+}
+// Back to the view the neighbourhood was opened from, with its centre selected.
+function exitEgo() {
+  const id = ego.id;
+  render(view);
+  focusItem(id);
+}
+const countText = e => plural(e.count, "import") + (e.kind === "import" ? "" : " · " + KIND[e.kind]);
+const pairText = e => `${e.a} → ${e.b} · ${countText(e)}`;
+function focusPair(e, cell) {
+  clearHighlight();
+  markMatrix((a, b) => a === e.a && b === e.b, new Set([e.a, e.b]));
+  const list = DATA.edges.filter(x => byId[x.from].group === e.a && byId[x.to].group === e.b);
+  openDrawer(`<h2>${esc(e.a)} → ${esc(e.b)}</h2><div class="meta"><span class="quiet">${countText(e)}</span></div>`
+    + `<h3>Module imports (${list.length})</h3><ul class="edge-list pair-list">`
+    + list.map(x => `<li>${moduleLink(x.from)}<span class="kind">→</span>${moduleLink(x.to)}</li>`).join("") + `</ul>`, cell);
+}
+
+function clearHighlight() {
+  const moved = focused;
+  focused = null;
+  near = new Set();
+  if (moved) layout();
+  cards.forEach(card => card.classList.remove("selected", "smelly", "dim"));
+  markEdges(edges, () => "");
+  if (matrixShown()) markMatrix(null);
+  stage.className = edges.length > 40 ? "stage dense" : "stage";
+  document.querySelectorAll("#chips button.chip").forEach(b => b.classList.remove("active"));
+  closeDrawer();
+}
+
+function focusItem(id) {
+  if (ego && cards.get(id).classList.contains("gone")) return enterEgo(id, ego.hops);
+  clearHighlight();
+  focused = id;
+  near = new Set(edges.flatMap(e => e.a === id ? [e.b] : e.b === id ? [e.a] : []));
+  if (matrixShown()) {
+    markMatrix((a, b) => a === id || b === id, new Set([id]));
+    return openDrawer(groupHtml(groupById[id]), null);
+  }
+  layout();
+  // Package rows keep their layer, so only the module grid brings the selection to the top.
+  if (view) canvas.scrollTo({top: 0, left: 0});
+  cards.forEach((card, cid) => {
+    card.classList.toggle("selected", cid === id);
+    card.classList.toggle("dim", cid !== id && !near.has(cid));
+  });
+  markEdges(edges, towards(id));
+  openDrawer(view ? moduleHtml(byId[id]) : groupHtml(groupById[id]), cards.get(id));
+}
+
+const moduleLink = id => `<button type="button" class="link" data-module="${esc(id)}">${esc(id)}</button>`;
+const groupLink = id => `<button type="button" class="link" data-group="${esc(id)}">${esc(groupById[id].label)}</button>`;
+const smellList = list => `<ul>${list.map(s => `<li>${sevWord(s)} ${esc(s.kind)}: ${fmt(s.title)}<span class="evidence">${fmt(s.evidence)}</span></li>`).join("")}</ul>`;
+const linkList = (list, link, note) => list.length
+  ? `<ul class="edge-list">${list.map(x => `<li>${link(x)}<span class="kind">${esc(note(x))}</span></li>`).join("")}</ul>`
+  : `<p class="quiet">None</p>`;
+const edgeNote = e => e.kind === "import" ? "" : KIND[e.kind];
+
+function moduleHtml(n) {
+  const out = DATA.edges.filter(e => e.from === n.id), into = DATA.edges.filter(e => e.to === n.id), mine = nodeSmells[n.id] || [];
+  return `<h2>${esc(n.id)}</h2><div class="meta"><span class="badge lang">${esc(n.lang)}</span><span class="quiet">${plural(n.lines, "line")}</span></div>`
+    + EGO_BUTTON + `<h3>Group</h3><p>${groupLink(n.group)}</p>`
+    + (mine.length ? `<h3>Smells (${mine.length})</h3>${smellList(mine)}` : "")
+    + `<h3>Imports (${out.length})</h3>${linkList(out, e => moduleLink(e.to), edgeNote)}`
+    + `<h3>Imported by (${into.length})</h3>${linkList(into, e => moduleLink(e.from), edgeNote)}`;
+}
+
+function groupHtml(g) {
+  const mine = groupSmells[g.id] || [], shown = mine.slice(0, 5);
+  const out = packageEdges.filter(e => e.a === g.id), into = packageEdges.filter(e => e.b === g.id);
+  return `<h2>${esc(g.label)}</h2><div class="meta"><span class="badge lang">${esc(mainLang(g))}</span>`
+    + `<span class="quiet">${plural(g.nodes.length, "module")} · ${plural(groupLines(g), "line")}</span></div>`
+    + `<div class="actions"><button type="button" class="icon-btn" data-open="${esc(g.id)}">Open group</button><span class="quiet">or double-click / Enter</span></div>` + EGO_BUTTON
+    + `<h3>Worst smells${mine.length ? ` (${mine.length})` : ""}</h3>`
+    + (mine.length ? smellList(shown) + (mine.length > shown.length ? `<p class="quiet">and ${mine.length - shown.length} more</p>` : "") : `<p class="quiet">None</p>`)
+    + `<h3>Depends on (${out.length})</h3>${linkList(out, e => groupLink(e.b), countText)}`
+    + `<h3>Depended on by (${into.length})</h3>${linkList(into, e => groupLink(e.a), countText)}`;
+}
+
+function showModule(id) {
+  if (byId[id].group !== view) render(byId[id].group);
+  focusItem(id);
+}
+document.getElementById("drawer").addEventListener("click", ev => {
+  const t = ev.target.closest("[data-module],[data-group],[data-open]");
+  if (!t) return;
+  if (t.dataset.module) return showModule(t.dataset.module);
+  if (t.dataset.open) return render(t.dataset.open);
+  if (view) render(null);
+  focusItem(t.dataset.group);
+});
+
+// One chip per kind and severity: up to 20 smells of each kind would flood the bar.
+function showSmells(list, button, more, gone) {
+  const kind = list[0].kind;
+  if (ego) render(view);
+  clearHighlight();
+  button.classList.add("active");
+  stage.classList.add(`sev-${list[0].severity}`);
+  const members = new Set(list.flatMap(s => view ? s.nodes : s.nodes.map(id => byId[id].group)));
+  cards.forEach((card, id) => { card.classList.toggle("smelly", members.has(id)); card.classList.toggle("dim", !members.has(id)); });
+  markEdges(edges, e => members.has(e.a) && members.has(e.b) ? "on" : "dim");
+  if (matrixShown()) markMatrix((a, b) => members.has(a) && members.has(b), members);
+  openDrawer(`<h2 class="sans">${esc(list[0].severity)} · ${esc(kind)} · ${list.length}</h2><p>${esc(SMELL_TEXT[kind])}</p>`
+    + (more ? `<p class="quiet">+${more} more ${esc(kind)} not listed here; the audit report counts them all.</p>` : "")
+    + (gone ? `<p class="quiet">+${gone} ${esc(kind)} dismissed by triage; the audit report says why.</p>` : "")
+    + list.map(s => `<h3>${sevWord(s)}</h3><p>${fmt(s.title)}<span class="evidence">${fmt(s.evidence)}</span></p>`
+      + `<ul>${s.nodes.map(id => `<li>${moduleLink(id)}</li>`).join("")}</ul>`).join(""), button);
+}
+
+const chips = document.getElementById("chips");
+const bySev = (counts, kind, severity) => ((counts || {})[kind] || {})[severity] || 0;
+// Smells past the per-kind cap: counted by codemap, not listed.
+const dropped = (kind, severity) => bySev(DATA.dropped, kind, severity);
+// Smells triage read and dismissed as false positives: counted, not listed.
+const dismissed = (kind, severity) => bySev(DATA.dismissed, kind, severity);
+// counts are per kind and severity; the chips show totals
+const total = counts => Object.values(counts || {}).flatMap(Object.values).reduce((a, n) => a + n, 0);
+const smellTotal = DATA.smells.length + total(DATA.dropped);
+const dismissedNote = n => n ? `<span class="quiet">(+${n} dismissed)</span>` : "";
+const forbidden = DATA.edges.filter(e => e.kind === "forbidden").length;
+const unsupported = Object.entries(DATA.unsupported).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1));
+const NO_RULE_TEXT = "Files in these languages are still on the map and checked for size, duplication and churn; they have no import edges until a rule exists.";
+chips.insertAdjacentHTML("beforeend", `<span class="chip"><b>${DATA.groups.length}</b> groups</span>`
+  + `<span class="chip"><b>${DATA.nodes.length.toLocaleString()}</b> modules</span>`
+  + `<span class="chip"><b>${DATA.edges.length.toLocaleString()}</b> imports</span>`
+  + (smellTotal || total(DATA.dismissed) ? `<span class="chip"><b>${smellTotal}</b> smells${dismissedNote(total(DATA.dismissed))}</span>` : "")
+  + forbiddenChip(forbidden)
+  + (unsupported.length ? `<span class="quiet" title="${NO_RULE_TEXT}">No import rule yet: ${unsupported.map(([ext, n]) => `${esc(ext)} (${esc(n)})`).join(", ")} — run setup to graph them</span>` : "")
+  + `<span class="sep"></span>` + (DATA.smells.length ? "" : NO_SMELLS));
+const chipLists = {};
+const chipList = (kind, severity) => chipLists[`${kind} ${severity}`] ||= {kind, severity, list: []};
+DATA.smells.forEach(s => chipList(s.kind, s.severity).list.push(s));
+// A kind and severity whose smells were all past the cap or dismissed still gets a chip, with nothing to show.
+[DATA.dropped, DATA.dismissed].forEach(counts =>
+  Object.entries(counts || {}).forEach(([kind, sevs]) => Object.keys(sevs).forEach(sev => chipList(kind, sev))));
+Object.values(chipLists).sort((x, y) => bySeverity(x, y) || (x.kind < y.kind ? -1 : 1)).forEach(({kind, severity, list}) => {
+  const more = dropped(kind, severity), gone = dismissed(kind, severity);
+  const notes = (more ? `<span class="quiet">(+${more} more)</span>` : "") + dismissedNote(gone);
+  const label = `<span class="dot"></span><span class="ellipsis">${esc(severity)} · ${esc(kind)}</span><b>${list.length}</b>`;
+  const title = `${list.length} ${severity} ${kind} listed`
+    + (more ? `; ${more} more past the cap are not listed` : "")
+    + (gone ? `; ${gone} dismissed by triage` : "");
+  if (!list.length) {
+    chips.insertAdjacentHTML("beforeend", `<span class="chip sev-${esc(severity)}" title="${esc(title)}">${label}${notes}</span>`);
+    return;
+  }
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = `chip sev-${severity}`;
+  b.title = title;
+  b.innerHTML = label + notes;
+  b.addEventListener("click", ev => { ev.stopPropagation(); showSmells(list, b, more, gone); });
+  chips.appendChild(b);
+});
+
+const hit = (id, q) => id.toLowerCase().includes(q);
+const matches = (it, q) => it.kind === "module" ? hit(it.id, q)
+  : it.kind === "group" && (hit(it.id, q) || groupById[it.id].nodes.some(id => hit(id, q)));
+initUI({
+  noun: "modules",
+  layout,
+  dismiss: () => ego ? exitEgo() : clearHighlight(),
+  neighbourhood: () => { const id = focused || ego?.id; if (id) enterEgo(id, ego ? ego.hops : 1); },
+  onFilter: q => {
+    if (ego && q) render(view);
+    clearHighlight();
+    if (!q) return;
+    const found = new Set(items.filter(it => matches(it, q)).map(it => it.id));
+    if (matrixShown()) return markMatrix((a, b) => found.has(a) || found.has(b), found);
+    cards.forEach((card, id) => card.classList.toggle("dim", !found.has(id)));
+    markEdges(edges, () => "dim");
+  },
+  // A group that matches only through one of its modules opens and focuses that module.
+  onFilterEnter: q => {
+    const it = q && items.find(x => matches(x, q));
+    if (!it) return null;
+    const id = it.kind === "module" || hit(it.id, q) ? it.id : groupById[it.id].nodes.find(m => hit(m, q));
+    id === it.id ? focusItem(id) : showModule(id);
+    return matrixShown() ? drawer.querySelector("[data-ego]") : cards.get(id);
+  },
+});
+// Menu counts are module imports under the kind of the group pair they belong to.
+const kindCounts = {};
+packageEdges.forEach(e => kindCounts[e.kind] = (kindCounts[e.kind] || 0) + e.count);
+edgeMenu(kindCounts);
+render(null);
+canvas.addEventListener("click", clearHighlight);
+// The drawer the first click opens can cover the card, so the second click of a double-click may land elsewhere:
+// open the group the first click hit, wherever the second one lands.
+let clickedGroup = null;
+document.addEventListener("click", ev => { if (ev.detail < 2) clickedGroup = null; }, true);
+document.addEventListener("dblclick", () => clickedGroup?.());
+canvas.addEventListener("scroll", hideTip);
+</script>
+</body>
+</html>

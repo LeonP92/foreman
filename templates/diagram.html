@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>/*__TITLE__*/</title>
+<style>
+/*__THEME__*/
+body:not(.as-matrix) #matrix, .as-matrix .stage > .card, .as-matrix #g { display: none; }
+.card-label.tight { font-size: 11px; }
+.card-label.wrap { white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+</style>
+</head>
+<body>
+/*__FRAME__*/
+<div id="legend" class="legend" popover>
+  <h4>Nodes</h4>
+  <ul>
+    <li><span><span class="badge r-added">new</span></span>added in this change</li>
+    <li><span><span class="badge r-changed">changed</span></span>public interface changed</li>
+    <li><span><span class="badge r-removed">removed</span></span>removed (dashed ring)</li>
+    <li><span><span class="badge r-affected">affected</span></span>unchanged, one hop away (dashed ring)</li>
+  </ul>
+  <h4>Edges</h4>
+  <ul>
+    <li><svg width="34" height="8"><line class="edge import" x1="0" y1="4" x2="34" y2="4"/></svg>imports</li>
+    <li><svg width="34" height="8"><line class="edge call" x1="0" y1="4" x2="34" y2="4"/></svg>calls / renders</li>
+    <li><svg width="34" height="8"><line class="edge impl" x1="0" y1="4" x2="34" y2="4"/></svg>implements / subclasses</li>
+    <li><svg width="34" height="8"><line class="edge cycle" x1="0" y1="4" x2="34" y2="4"/></svg>import cycle</li>
+    <li><svg width="34" height="8"><line class="edge forbidden" x1="0" y1="4" x2="34" y2="4"/></svg>forbidden layer crossing</li>
+    <li><svg width="34" height="8" class="sev-medium"><line class="edge twin" x1="2" y1="4" x2="34" y2="4"/></svg>twin (must stay in sync)</li>
+  </ul>
+  <h4>Smells</h4>
+  <ul>
+    <li><span><span class="dot sev-low"></span></span>low</li>
+    <li><span><span class="dot sev-medium"></span></span>medium</li>
+    <li><span><span class="dot sev-high"></span></span>high</li>
+  </ul>
+  <p>Click a node to focus it and its neighbours, or a smell chip for its evidence. While one is focused, what it imports is drawn in blue and what imports it in grey; cycles, forbidden crossings and twins keep their colour. Esc or a click on empty space clears.</p>
+</div>
+
+<script>
+/*__UI__*/
+const DATA = /*__DATA__*/null;
+
+const H = 58, PITCH = 86, GAP = 64, PAD = 48, TOP = 58, MIN_W = 220, MAX_W = 340;
+let W = 272;
+const BADGE = {added:"new", changed:"changed", removed:"removed", affected:"affected"};
+const KIND = {import:"imports", call:"calls / renders", impl:"implements / subclasses",
+  cycle:"import cycle", forbidden:"forbidden layer crossing"};
+const SMELL_TEXT = {
+  scatter: "One concept is spread across these modules; the next change to it touches all of them.",
+  twin: "Two implementations of the same rule that must change together.",
+  hub: "Many modules meet here; a change to it ripples to all of them.",
+};
+const SMELLS = DATA.smells || [];
+const byId = Object.fromEntries(DATA.nodes.map(n => [n.id, n]));
+const labelOf = id => byId[id].label;
+const smellsOf = id => SMELLS.filter(s => s.nodes.includes(id));
+
+setHeader(DATA.title, DATA.notes || "");
+
+const canvas = document.getElementById("canvas"), stage = document.getElementById("stage");
+
+const perLane = DATA.lanes.map(l => DATA.nodes.filter(n => n.lane === l).length);
+const height = TOP + Math.max(...perLane) * PITCH - (PITCH - H) + 32;
+
+const defs = markerDefs(["import", "call", "cycle", "forbidden", "out", "in"], 8);
+const mi = el("marker", {id:"a-impl", viewBox:"0 0 12 12", refX:11, refY:6, markerWidth:10, markerHeight:10,
+  markerUnits:"userSpaceOnUse", orient:"auto"}, defs);
+el("path", {d:"M1,1 L11,6 L1,11 z", class:"ah-impl"}, mi);
+
+const lanes = el("g", {});
+
+const edgeEls = [], nodeEls = new Map();
+DATA.edges.forEach(({from: a, to: b, kind, label}) => {
+  const path = el("path", {class:`edge ${kind}`, "marker-end":`url(#a-${kind})`, "data-a": a, "data-b": b});
+  el("title", {}, path).textContent = `${labelOf(a)} → ${labelOf(b)} · ${KIND[kind]}${label ? " · " + label : ""}`;
+  edgeEls.push({a, b, kind, label, path});
+});
+// Twins get an arrowless dotted line; it is not a dependency, so it is not in edgeEls.
+const twinEls = SMELLS.filter(s => s.kind === "twin").map(s => {
+  const path = el("path", {class:`edge twin sev-${s.severity}`, "data-a": s.nodes[0], "data-b": s.nodes[1]});
+  el("title", {}, path).textContent = `twin (must stay in sync): ${s.title}`;
+  return {s, path};
+});
+
+// Matrix cells: one per ordered pair, holding every edge (and twin) between them, outlined by the worst kind.
+const PAIR_KINDS = ["forbidden", "cycle", "twin", "import", "call", "impl"];
+const pairMap = new Map();
+function addPair(a, b, kind, text) {
+  const key = a + "\n" + b;
+  if (!pairMap.has(key)) pairMap.set(key, {a, b, count: 0, kinds: [], lines: []});
+  const p = pairMap.get(key);
+  p.count++;
+  p.kinds.push(kind);
+  p.lines.push(text);
+}
+DATA.edges.forEach(e => addPair(e.from, e.to, e.kind, KIND[e.kind] + (e.label ? " · " + e.label : "")));
+twinEls.forEach(({s}) => addPair(...s.nodes, "twin", "twin (must stay in sync): " + s.title));
+const pairs = [...pairMap.values()].map(p => ({...p, kind: PAIR_KINDS.find(k => p.kinds.includes(k))}));
+const pairText = p => `${labelOf(p.a)} → ${labelOf(p.b)} · ${p.lines.join(" · ")}`;
+// Matrix order: by lane, then dependency depth (importers before what they import, cycles ignored), then data order.
+const depth = Object.fromEntries(DATA.nodes.map(n => [n.id, 0]));
+for (let i = 0; i < DATA.nodes.length; i++)
+  for (const e of DATA.edges) if (e.kind !== "cycle") depth[e.to] = Math.max(depth[e.to], depth[e.from] + 1);
+const ORDER = DATA.nodes.map((n, i) => ({n, i})).sort((x, y) => DATA.lanes.indexOf(x.n.lane) - DATA.lanes.indexOf(y.n.lane)
+  || depth[x.n.id] - depth[y.n.id] || x.i - y.i).map(x => x.n.id);
+stage.appendChild(buildMatrix(ORDER, labelOf, pairs, pairText, focusPair));
+const viewMode = viewSwitch("diagram", DATA.edges.length, () => { if (ego) leaveEgo(); clearHighlight(); });
+const matrixShown = () => viewMode() === "matrix" && !ego;
+
+// Lanes share the available width (clamped); rows go selection first, then its neighbours, then the
+// rest, each keeping data order (sort is stable). Nodes and edges move in one frame loop so edges stay
+// attached while nodes slide.
+// ego: the neighbourhood view ({id, hops}) while it is up.
+let focused = null, near = new Set(), ego = null;
+function layout(instant = false) {
+  document.body.classList.toggle("as-matrix", matrixShown());
+  if (ego) return egoPlace(instant);
+  if (matrixShown()) return layoutMatrix(PAD);
+  const n = DATA.lanes.length;
+  W = Math.max(MIN_W, Math.min(MAX_W, Math.floor((availableWidth(canvas) - 2 * PAD - (n - 1) * GAP) / n)));
+  const width = 2 * PAD + (n - 1) * (W + GAP) + W;
+  setStage(width, height);
+  lanes.replaceChildren();
+  DATA.lanes.forEach((name, i) => {
+    el("rect", {class:"lane", x:PAD + i * (W + GAP) - 16, y:16, width:W + 32, height:height - 32, rx:14}, lanes);
+    el("text", {class:"lane-label", x:PAD + i * (W + GAP), y:40}, lanes).textContent = name;
+  });
+  nodeEls.forEach(card => { card.style.width = W + "px"; });
+  fitLabels();
+  const rank = n => n.id === focused ? 0 : near.has(n.id) ? 1 : 2, rows = DATA.lanes.map(() => 0);
+  const to = {};
+  [...DATA.nodes].sort((a, b) => rank(a) - rank(b)).forEach(n => { const lane = DATA.lanes.indexOf(n.lane);
+    to[n.id] = {x: PAD + lane * (W + GAP), y: TOP + rows[lane]++ * PITCH}; });
+  slide(to, instant, () => {
+    const pairs = {}, size = () => [W, H];
+    edgeEls.forEach((e, i) => e.path.setAttribute("d", lanePath(e.a, e.b, size, pairs, i)));
+    twinEls.forEach((w, i) => w.path.setAttribute("d", lanePath(...w.s.nodes, size, pairs, edgeEls.length + i)));
+    nodeEls.forEach((card, id) => { card.style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
+  });
+}
+// A label too long for its card loses leading folders (`…/pricing/discounts.py`), never what names it: the
+// file name, or a group's last folder and count (`…/services/ — 7 modules`). If even that is too long it
+// shrinks, then wraps to a second line. The title keeps the full label.
+function fitLabels() {
+  nodeEls.forEach((card, id) => {
+    const span = card.querySelector(".card-label"), label = byId[id].label, over = () => span.scrollWidth > span.clientWidth;
+    const cut = label.indexOf(" — "), path = cut < 0 ? label : label.slice(0, cut), count = cut < 0 ? "" : label.slice(cut);
+    const slash = path.endsWith("/") ? "/" : "", parts = path.slice(0, path.length - slash.length).split("/");
+    span.classList.remove("tight", "wrap");
+    for (let i = 0; i < parts.length; i++) {
+      span.textContent = (i ? "…/" : "") + parts.slice(i).join("/") + slash + count;
+      if (!over()) return;
+    }
+    span.classList.add("tight");
+    if (over()) span.classList.add("wrap");
+  });
+}
+// An edge that skips a lane would pass behind the cards between, so it leaves through the gap beside its own
+// lane, crosses in the corridor between two rows, and comes in through the gap beside the target's lane.
+// k spreads edges sharing a gap or corridor a few px apart.
+const ROWS = Math.max(...perLane);
+function lanePath(a, b, size, pairs, k) {
+  const p = pos[a], q = pos[b];
+  if (Math.round(Math.abs(p.x - q.x) / (W + GAP)) < 2) return edgePath(a, b, size, pairs);
+  const dir = q.x > p.x ? 1 : -1, x1 = dir > 0 ? p.x + W : p.x, x2 = dir > 0 ? q.x : q.x + W;
+  const run = GAP / 2 + ((k % 5) - 2) * 4, y1 = p.y + H / 2, y2 = q.y + H / 2;
+  // corridor above row r (r = ROWS: below the last row), the one nearest the edge's middle
+  const r = Math.min(ROWS, Math.max(1, Math.round(((y1 + y2) / 2 - TOP + (PITCH - H) / 2) / PITCH)));
+  const c = TOP + r * PITCH - (PITCH - H) / 2 + ((k % 3) - 1) * 6;
+  return roundedPath([[x1, y1], [x1 + dir * run, y1], [x1 + dir * run, c], [x2 - dir * run, c], [x2 - dir * run, y2], [x2, y2]]);
+}
+function roundedPath(pts, r = 6) {
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [a, b, c] = [pts[i - 1], pts[i], pts[i + 1]];
+    const k = Math.min(r, (Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1])) / 2, (Math.abs(c[0] - b[0]) + Math.abs(c[1] - b[1])) / 2);
+    const s = (u, v) => Math.sign(v - u) * k;
+    d += ` L${b[0] - s(a[0], b[0])},${b[1] - s(a[1], b[1])} Q${b[0]},${b[1]} ${b[0] + s(b[0], c[0])},${b[1] + s(b[1], c[1])}`;
+  }
+  return d + ` L${pts.at(-1)[0]},${pts.at(-1)[1]}`;
+}
+// Neighbourhood: only the centre's columns and the edges between neighbouring columns stay.
+function egoPlace(instant) {
+  const {to, col, width, height: h} = egoLayout(ego.id, edgeEls, ego.hops, labelOf, {size: [W, H], gap: [GAP + 24, PITCH - H], pad: PAD, top: TOP + 16});
+  setStage(width, h);
+  lanes.replaceChildren();
+  nodeEls.forEach((card, id) => card.classList.toggle("gone", !col.has(id)));
+  edgeEls.forEach(e => e.path.classList.toggle("gone", !egoEdge(col, e)));
+  twinEls.forEach(t => t.path.classList.add("gone"));
+  slide(to, instant, () => {
+    edgeEls.forEach(e => { if (col.has(e.a) && col.has(e.b)) e.path.setAttribute("d", flowPath(pos[e.a], [W, H], pos[e.b], [W, H])); });
+    col.forEach((_, id) => { nodeEls.get(id).style.transform = `translate(${pos[id].x}px,${pos[id].y}px)`; });
+  });
+}
+function enterEgo(id, hops) {
+  ego = {id, hops};
+  showEgoBar("Diagram", labelOf(id), hops, exitEgo, h => enterEgo(ego.id, h));
+  focusNode(byId[id]);
+}
+function leaveEgo() {
+  ego = null;
+  hideEgoBar();
+  document.querySelectorAll(".gone").forEach(x => x.classList.remove("gone"));
+}
+// Back to the lanes with the neighbourhood's centre selected.
+function exitEgo() {
+  const id = ego.id;
+  leaveEgo();
+  focusNode(byId[id]);
+}
+// Also runs when the drawer's padding transition ends; before that the scroll range can't reach the last lane.
+function reveal() {
+  if (!focused || matrixShown()) return;
+  const x = stage.offsetLeft + pos[focused].x, room = canvas.clientWidth - drawer.offsetWidth;
+  if (x < canvas.scrollLeft || x + W > canvas.scrollLeft + room) canvas.scrollTo({left: x - (room - W) / 2});
+}
+function clearHighlight() {
+  focused = null;
+  near = new Set();
+  layout();
+  stage.className = "stage";
+  nodeEls.forEach(card => card.classList.remove("selected", "smelly", "dim"));
+  markEdges(edgeEls, () => "");
+  markMatrix(null);
+  twinEls.forEach(t => t.path.classList.remove("dim", "on"));
+  document.querySelectorAll("#chips button").forEach(b => b.classList.remove("active"));
+  closeDrawer();
+}
+const linkTo = id => `<button type="button" class="link" data-focus="${esc(id)}">${esc(labelOf(id))}</button>`;
+const edgeList = (list, arrow, end) => list.length
+  ? `<ul class="edge-list">${list.map(e => `<li>${arrow} ${linkTo(e[end])}<span class="kind">${esc(KIND[e.kind])}${e.label ? " · " + esc(e.label) : ""}</span></li>`).join("")}</ul>`
+  : `<p class="quiet">None</p>`;
+const entry = e => typeof e === "string" ? `<li>${fmt(e)}</li>`
+  : `<li class="diff"><code class="old">${esc(e.old)}</code><code class="new">${esc(e.new)}</code>${e.note ? `<div class="note">${fmt(e.note)}</div>` : ""}</li>`;
+const SECTIONS = [["added","Added"],["changed","Changed"],["removed","Removed"],["affected","Role in this change"]];
+function focusNode(n) {
+  if (ego && nodeEls.get(n.id).classList.contains("gone")) return enterEgo(n.id, ego.hops);
+  clearHighlight();
+  focused = n.id;
+  near = new Set(edgeEls.flatMap(e => e.a === n.id ? [e.b] : e.b === n.id ? [e.a] : []));
+  layout();
+  canvas.scrollTo({top: 0});
+  nodeEls.forEach((card, id) => {
+    card.classList.toggle("selected", id === n.id);
+    card.classList.toggle("dim", id !== n.id && !near.has(id));
+  });
+  markEdges(edgeEls, towards(n.id));
+  markMatrix((a, b) => a === n.id || b === n.id, new Set([n.id]));
+  twinEls.forEach(t => { const on = t.s.nodes.includes(n.id);
+    t.path.classList.toggle("on", on); t.path.classList.toggle("dim", !on); });
+  let html = `<h2>${esc(n.label)}</h2><div class="meta"><span class="badge r-${n.status}">${BADGE[n.status]}</span>`
+    + (n.sub ? `<code class="quiet">${esc(n.sub)}</code>` : "") + `</div>` + EGO_BUTTON
+    + (n.renamed_from ? `<h3>Renamed</h3><div class="diff"><code class="old">${esc(n.renamed_from)}</code>`
+      + `<code class="new">${esc(n.label)}</code></div>` : "");
+  for (const [k, title] of SECTIONS) {
+    const items = (n.summary || {})[k];
+    if (items && items.length) html += `<h3>${title}</h3><ul>${items.map(entry).join("")}</ul>`;
+  }
+  const mine = smellsOf(n.id);
+  if (mine.length) html += `<h3>Smells</h3><ul>${mine.map(s => `<li>${sevWord(s)} ${esc(s.kind)}: ${fmt(s.title)}</li>`).join("")}</ul>`;
+  html += `<h3>Edges out</h3>${edgeList(edgeEls.filter(e => e.a === n.id), "→", "b")}`
+    + `<h3>Edges in</h3>${edgeList(edgeEls.filter(e => e.b === n.id), "←", "a")}`;
+  openDrawer(html, matrixShown() ? null : nodeEls.get(n.id));
+  reveal();
+}
+function focusPair(p, cell) {
+  clearHighlight();
+  markMatrix((a, b) => a === p.a && b === p.b, new Set([p.a, p.b]));
+  openDrawer(`<h2>${esc(labelOf(p.a))} → ${esc(labelOf(p.b))}</h2>`
+    + `<h3>Edges (${p.count})</h3><ul>${p.lines.map(l => `<li>${fmt(l)}</li>`).join("")}</ul>`
+    + `<h3>Nodes</h3><ul><li>${linkTo(p.a)}</li><li>${linkTo(p.b)}</li></ul>`, cell);
+}
+function showSmell(s, button) {
+  if (ego) leaveEgo();
+  clearHighlight();
+  button.classList.add("active");
+  stage.className = `stage sev-${s.severity}`;
+  const members = new Set(s.nodes);
+  nodeEls.forEach((card, id) => {
+    card.classList.toggle("smelly", members.has(id));
+    card.classList.toggle("dim", !members.has(id));
+  });
+  markEdges(edgeEls, e => members.has(e.a) && members.has(e.b) ? "on" : "dim");
+  markMatrix((a, b) => members.has(a) && members.has(b), members);
+  twinEls.forEach(t => { t.path.classList.toggle("on", t.s === s); t.path.classList.toggle("dim", t.s !== s); });
+  openDrawer(`<h2 class="sans">${fmt(s.title)}</h2><div class="meta">${sevWord(s)}<span class="quiet">${esc(s.kind)}</span></div>`
+    + `<h3>What it means</h3><p>${esc(SMELL_TEXT[s.kind])}</p><h3>Evidence</h3><p>${fmt(s.evidence)}</p>`
+    + (s.suggestion ? `<h3>Suggestion</h3><p>${fmt(s.suggestion)}</p>` : "")
+    + `<h3>Nodes (${s.nodes.length})</h3><ul>${s.nodes.map(id => `<li>${linkTo(id)}</li>`).join("")}</ul>`, button);
+}
+
+const chips = document.getElementById("chips");
+const forbidden = DATA.edges.filter(e => e.kind === "forbidden").length;
+chips.innerHTML = `<span class="chip"><b>${DATA.nodes.length}</b> nodes</span>`
+  + `<span class="chip"><b>${DATA.edges.length}</b> edges</span>`
+  + (SMELLS.length ? `<span class="chip"><b>${SMELLS.length}</b> smells</span>` : "")
+  + forbiddenChip(forbidden)
+  + `<span class="sep"></span>`
+  + (SMELLS.length ? "" : NO_SMELLS);
+[...SMELLS].sort((x, y) => SEV_RANK[y.severity] - SEV_RANK[x.severity]).forEach(s => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = `chip sev-${s.severity}`;
+  b.title = `${s.severity} · ${s.kind}: ${s.title}`;
+  b.innerHTML = `<span class="dot"></span><span class="ellipsis">${esc(s.severity)} · ${esc(s.kind)}: ${fmt(s.title)}</span>`;
+  b.addEventListener("click", ev => { ev.stopPropagation(); showSmell(s, b); });
+  chips.appendChild(b);
+});
+
+DATA.nodes.forEach(n => {
+  const card = document.createElement("div");
+  card.className = `card r-${n.status}`;
+  card.tabIndex = 0;
+  card.dataset.id = n.id;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `${n.label}, ${BADGE[n.status]}`);
+  card.style.height = H + "px";
+  card.innerHTML = `<div class="card-top"><span class="card-label" title="${esc(n.label)}">${esc(n.label)}</span>`
+    + `<span class="badge">${BADGE[n.status]}</span></div><div class="card-sub" title="${esc(n.sub || "")}">${esc(n.sub || "")}</div>`;
+  card.insertAdjacentHTML("beforeend", smellBadge(smellsOf(n.id)));
+  card.addEventListener("click", ev => { ev.stopPropagation(); focusNode(n); });
+  card.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); focusNode(n); } });
+  nodeEls.set(n.id, card);
+  stage.appendChild(card);
+});
+document.getElementById("drawer").addEventListener("click", ev => {
+  const link = ev.target.closest("[data-focus]");
+  if (link) focusNode(byId[link.dataset.focus]);
+});
+
+const matches = q => DATA.nodes.filter(n => n.label.toLowerCase().includes(q));
+initUI({
+  noun: "nodes",
+  layout,
+  dismiss: () => ego ? exitEgo() : clearHighlight(),
+  neighbourhood: () => { const id = focused || (ego && ego.id); if (id) enterEgo(id, ego ? ego.hops : 1); },
+  onFilter: q => {
+    if (ego && q) leaveEgo();
+    clearHighlight();
+    if (!q) return;
+    const ids = new Set(matches(q).map(n => n.id));
+    nodeEls.forEach((card, id) => card.classList.toggle("dim", !ids.has(id)));
+    markEdges(edgeEls, () => "dim");
+    markMatrix((a, b) => ids.has(a) || ids.has(b), ids);
+    twinEls.forEach(t => t.path.classList.add("dim"));
+  },
+  onFilterEnter: q => {
+    const found = q && matches(q);
+    if (!found || !found.length) return null;
+    focusNode(found[0]);
+    return matrixShown() ? drawer.querySelector("[data-ego]") : nodeEls.get(found[0].id);
+  },
+});
+const kindCounts = {twin: twinEls.length};
+DATA.edges.forEach(e => kindCounts[e.kind] = (kindCounts[e.kind] || 0) + 1);
+edgeMenu(kindCounts);
+layout();
+// The whole pane, not just the SVG, so a click below a short graph also clears.
+canvas.addEventListener("click", clearHighlight);
+canvas.addEventListener("transitionend", ev => { if (ev.target === canvas) reveal(); });
+canvas.addEventListener("scroll", hideTip);
+</script>
+</body>
+</html>

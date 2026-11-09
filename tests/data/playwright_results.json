@@ -1,0 +1,107 @@
+{
+ "suites": [
+  {
+   "title": "total.spec.mjs",
+   "file": "total.spec.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "total shows 3",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 30000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "base",
+       "projectName": "base",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1826,
+         "retry": 0,
+         "startTime": "2026-10-27T16:57:33.275Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "foreman",
+           "contentType": "application/json",
+           "body": "eyJjb25zb2xlRXJyb3JzIjpbIkZhaWxlZCB0byBsb2FkIHJlc291cmNlOiB0aGUgc2VydmVyIHJlc3BvbmRlZCB3aXRoIGEgc3RhdHVzIG9mIDQwNCAoRmlsZSBub3QgZm91bmQpIl0sImJhZFJlc3BvbnNlcyI6WyI0MDQgaHR0cDovLzEyNy4wLjAuMTo1MDAwMS9taXNzaW5nLmpzIl19"
+          },
+          {
+           "name": "foreman-screenshot",
+           "contentType": "application/json",
+           "body": "Ii9vdXQvdG90YWwtc2hvd3MtMy1iYXNlLnBuZyI="
+          }
+         ],
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('#total')\nExpected: \u001b[32m\"3\"\u001b[39m\nReceived: \u001b[31m\"2\"\u001b[39m\nTimeout:  1000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" locator('#total') with timeout 1000ms\u001b[22m\n\u001b[2m  - waiting for locator('#total')\u001b[22m\n\u001b[2m    11 \u00d7 locator resolved to <p id=\"total\">2</p>\u001b[22m\n\u001b[2m       - unexpected value \"2\"\u001b[22m\n",
+          "location": {
+           "file": "/cache/runs/20260101T000000Z-1-abcd/total.spec.mjs",
+           "column": 40,
+           "line": 5
+          }
+         },
+         "stdout": [
+          {
+           "text": "rows: 3\n\u001b[2mlast row\u001b[22m: total\n"
+          }
+         ]
+        }
+       ],
+       "status": "unexpected"
+      },
+      {
+       "timeout": 30000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "branch",
+       "projectName": "branch",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 838,
+         "retry": 0,
+         "startTime": "2026-10-27T16:57:36.212Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "foreman",
+           "contentType": "application/json",
+           "body": "eyJjb25zb2xlRXJyb3JzIjpbXSwiYmFkUmVzcG9uc2VzIjpbXX0="
+          },
+          {
+           "name": "foreman-screenshot",
+           "contentType": "application/json",
+           "body": "Ii9vdXQvdG90YWwtc2hvd3MtMy1icmFuY2gucG5nIg=="
+          }
+         ],
+         "stdout": []
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3401af419ba348dc931a-fe6ceedd5abc71840994",
+     "file": "total.spec.mjs",
+     "line": 3,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "stats": {
+  "startTime": "2026-10-27T16:57:32.757Z",
+  "duration": 4846.833,
+  "expected": 1,
+  "skipped": 0,
+  "unexpected": 1,
+  "flaky": 0
+ }
+}

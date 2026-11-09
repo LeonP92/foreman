@@ -1,0 +1,126 @@
+---
+name: review
+description: The pre-merge gate for a branch: simplicity and design findings, the repo's tests, a real-browser check of user-facing changes, and a dependency diagram, in one ranked report a person can absorb in a minute. Use before merging, or when asked to review a branch or PR.
+---
+
+# Review
+
+A person should not need to read the diff. They read the top of your report, see whether
+the change works and what needs their judgement, and drill in only if they want to.
+
+## Before you start
+
+- Run foreman's scripts as `python3 -I <root>/scripts/run.py <command>` (`python` or `py` on
+  Windows), where `<root>` is two directories above this file. Run them from the repo's top
+  folder; every command prints JSON.
+- If `.foreman/config.toml` is missing or `config-check` fails, run the setup skill first.
+- Rules: never commit, push, or edit product code; never point anything at real data; pass
+  credentials only through files or environment variables and never print them; clean up
+  every worktree, server (whole process tree), and temp file you create. Never delete or
+  modify anything you didn't create in this run — including ignored files and folders —
+  and never run repo-wide git maintenance (`git worktree prune`, `git gc`, branch
+  deletion). End with "Not checked:" and why.
+
+The branch is the one the user named, else the current one. You review what the branch
+has committed against `BASE = git merge-base <repo.base> <branch>`, never the tip of
+`repo.base`: a branch already merged (or squash-merged) would otherwise be compared with
+itself. If `BASE` equals the branch tip, check `git rev-list --first-parent <repo.base>`:
+if the tip is on it, the branch has no commits of its own and there is nothing to review
+(say so and stop); otherwise it was already merged (say so in the report and use `BASE^`,
+the merge-base's first parent, as `BASE`). If there is no usable `BASE` (no common commit,
+`repo.base` has no commits, or `BASE^` is needed but `BASE` is a root commit), say so in the
+report and skip every base comparison: no failing-on-base run, no base side in verify, no
+base graph in the diagram; review the branch alone. Then check whether the branch is gone or
+already landed, using only refs already present (never fetch: a `--prune` deletes
+remote-tracking refs):
+- "branch deleted on remote" only when the branch had a remote counterpart
+  (`git rev-parse --abbrev-ref <branch>@{upstream}` succeeds, or
+  `refs/remotes/<remote>/<branch>` exists) and `git ls-remote --heads <remote> <branch>`
+  prints nothing. A branch that was never pushed gets no header.
+- "appears squash-merged as <sha>" only when every line of
+  `git cherry <repo.base> <branch>` starts with `-`, or
+  `git log --format='%h %s' BASE..<repo.base>` contains one of the branch's commit
+  subjects or its `#N` PR number (`<sha>` is that base commit; without one, say "appears
+  squash-merged"). If `gh` is installed and signed in, also run the read-only
+  `gh pr list --head <branch> --state merged --json number,mergeCommit`: a merged PR's
+  number is the `#N`, and its `mergeCommit`, if on `<repo.base>`, is `<sha>`.
+
+Either way the review continues on the given tip. Diff with
+`git diff BASE <branch>`; anything run on the base (tests in step 4, verify, the diagram)
+uses a worktree at `BASE`. The report names both SHAs. If the branch isn't checked out,
+or the working tree has uncommitted changes, work in a temporary worktree of the branch
+(`git worktree add --detach <temp> <branch>`, with `<temp>` under the system temp
+directory, outside the repo). Prepare every worktree you add (copy `[repo] copy` files,
+then `install`, `build`) and run every command in it through the launcher, as
+`<root>/skills/verify/references/servers.md` says.
+
+Each run writes to its own folder, `<run> = .foreman/reports/<branch>/<stamp>/`, where
+`<branch>` is the name without a remote prefix (`origin/foo` → `foo`), each `/` replaced by
+`-`, and `<stamp>` is the UTC start time as
+`%Y%m%dT%H%M%SZ`. Never write into an earlier run's folder; when done, write the stamp
+alone to `.foreman/reports/<branch>/latest`. Report: `<run>/review.md`; verify and the
+diagram write into the same `<run>`, and the diagram page opens on an overview of the change.
+
+## Steps
+
+1. **Understand.** Start from the diff, then open what it reaches: whoever calls the
+   changed functions, the tests that exercise them, the interfaces they implement. Read
+   the repo's instructions (`AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING*`) and every doc they
+   or `[rules] docs` say applies to the touched areas. Write 2–3 sentences on what the change does.
+2. **Simplicity.** Apply `references/simplicity.md`.
+3. **Design.** Check the change against the repo's stated rules: layering, what a package
+   may export, compliance rules (audit logging, data retention), security rules (CSRF,
+   permission checks), naming. Each finding names the rule and where it is written
+   (`docs/architecture.md`, "Layers"). A repo with no stated rules gets only checks that
+   hold everywhere: no new import cycle, no secret in code, no user input reaching SQL,
+   HTML or a shell unescaped, no new route without the access check its neighbours have.
+4. **Tests.** First the tests that cover the changed code, separately per suite: never mix
+   suites that need different setup (browser e2e tests and unit tests, say) in one
+   command. Unit-test files go to `test_targeted` with `{paths}` filled in; fill
+   `{paths}` only into a command that has it. A suite whose command has none (`test` when
+   `test_targeted` is empty, `e2e`) runs once, in full, and the report says so. Then the
+   full checks not yet run: `lint`, `typecheck`, `test`, `e2e`, skipping empty ones.
+   Record each command and its result, one row per command. On a failure, keep the
+   lines that show why, and run that test on the base too: a failure on both is
+   pre-existing; report it, but not as this change's fault.
+5. **Verify.** If the diff touches anything a user sees (templates, components, styles,
+   routes that return HTML or redirect, form handling), or changes what a user can see or
+   do through the UI even if no template or route file changed (backend data a page
+   lists, a permission a page checks), follow the verify skill. A flow that needs an
+   external service uses a local stub the repo provides, or a tiny local fake server for
+   that call; otherwise list it under "Not checked:" with the reason. With no such change,
+   write "n/a, no user-facing change".
+6. **Diagram.** Follow the diagram skill.
+7. **Overview.** Write `<run>/diagram/overview.json` as `references/overview.md` describes,
+   then render the diagram again with it: `python3 -I <root>/scripts/run.py render
+   <run>/diagram/data.json <run>/diagram/diagram.html --overview <run>/diagram/overview.json`.
+   The page then opens on Overview, with Graph and Matrix one click away. It lists every
+   problem in both files at once; fix them all and re-run until it prints the path.
+
+Then write the report as `references/report.md` describes, and show the user its top
+block and findings. Findings from steps 1–6 share one numbered list, so a reply can
+pick them out by number. Do not fix anything.
+
+## What makes a finding
+
+- A location (`file:line`, or page and steps).
+- The problem in one sentence.
+- A concrete case where it goes wrong: an input, a sequence of actions, a load. If you
+  can't write one down, drop the finding.
+- The smallest fix, and what happens if it's skipped.
+
+Severity:
+- **Must fix**: wrong results, an opening for an attacker, lost or corrupted data, or a
+  failure under the traffic the repo is built for.
+- **Should fix**: a page that works on base and breaks on the branch, untested logic that
+  can break, logic repeated in two places, code nothing needs, a slowdown someone will
+  notice.
+- **Nice to have**: everything else worth a sentence.
+
+Leave out personal preference, worries you can't back with a case, and anything the
+repo's linter already catches.
+
+## Finish
+
+Remove any worktree you added, and confirm verify cleaned up its servers. End the report
+with "Not checked:" and why.
